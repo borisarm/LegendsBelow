@@ -141,14 +141,23 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Common\Types.h" />
+    <ClInclude Include="Entities\Armor.h" />
     <ClInclude Include="Entities\Character.h" />
     <ClInclude Include="Entities\Entity.h" />
+    <ClInclude Include="Entities\Item.h" />
+    <ClInclude Include="Entities\Spell.h" />
+    <ClInclude Include="Entities\Weapon.h" />
+    <ClInclude Include="Enums\ArmorCategory.h" />
     <ClInclude Include="Enums\CharacterClass.h" />
     <ClInclude Include="Enums\DamageType.h" />
+    <ClInclude Include="Enums\EquipmentSlot.h" />
+    <ClInclude Include="Enums\SpellCategory.h" />
     <ClInclude Include="Enums\SpellSchool.h" />
     <ClInclude Include="Enums\WeaponType.h" />
+    <ClInclude Include="Interfaces\IArmorRepository.h" />
     <ClInclude Include="Interfaces\IAssetLoader.h" />
     <ClInclude Include="Interfaces\ICharacterRepository.h" />
+    <ClInclude Include="Interfaces\IItemRepository.h" />
     <ClInclude Include="Interfaces\ISpellRepository.h" />
     <ClInclude Include="Interfaces\IWeaponRepository.h" />
     <ClInclude Include="ValueObjects\Attributes.h" />

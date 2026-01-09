@@ -63,5 +63,32 @@
     <ClInclude Include="Common\Types.h">
       <Filter>Common</Filter>
     </ClInclude>
+    <ClInclude Include="Entities\Armor.h">
+      <Filter>Entities</Filter>
+    </ClInclude>
+    <ClInclude Include="Entities\Spell.h">
+      <Filter>Entities</Filter>
+    </ClInclude>
+    <ClInclude Include="Entities\Weapon.h">
+      <Filter>Entities</Filter>
+    </ClInclude>
+    <ClInclude Include="Entities\Item.h">
+      <Filter>Entities</Filter>
+    </ClInclude>
+    <ClInclude Include="Enums\ArmorCategory.h">
+      <Filter>Enums</Filter>
+    </ClInclude>
+    <ClInclude Include="Enums\EquipmentSlot.h">
+      <Filter>Enums</Filter>
+    </ClInclude>
+    <ClInclude Include="Enums\SpellCategory.h">
+      <Filter>Enums</Filter>
+    </ClInclude>
+    <ClInclude Include="Interfaces\IArmorRepository.h">
+      <Filter>Interfaces</Filter>
+    </ClInclude>
+    <ClInclude Include="Interfaces\IItemRepository.h">
+      <Filter>Interfaces</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

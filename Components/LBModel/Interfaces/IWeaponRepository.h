@@ -11,7 +11,7 @@ namespace Domain {
 
     // Forward declarations for weapon-related types
     class Weapon;
-    enum class WeaponId : Id;
+    using WeaponId = Id;
 
     /// <summary>
     /// Repository interface for weapon data access
