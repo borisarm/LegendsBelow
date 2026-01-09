@@ -90,5 +90,6 @@
     <ClInclude Include="Interfaces\IItemRepository.h">
       <Filter>Interfaces</Filter>
     </ClInclude>
+    <ClInclude Include="Interfaces\IEntityRepository.h" />
   </ItemGroup>
 </Project>

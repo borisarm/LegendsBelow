@@ -23,6 +23,10 @@
     </Project>
   </Folder>
   <Folder Name="/Components/Services/">
+    <Project Path="Components/Services/LBAssetPersistenceService/LBAssetPersistenceService.vcxproj" Id="cc3058fb-9cf7-4f26-b020-5d8ee70368a3">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
     <Project Path="Components/Services/LBCharacterService/LBCharacterService.vcxproj" Id="54cb0c98-89a4-472b-b184-98bc3c368f4e">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
@@ -77,6 +81,10 @@
     </Project>
   </Folder>
   <Folder Name="/Components/Tests/Services/">
+    <Project Path="Components/Tests/Services/LBAssetPersistenceServiceTests/LBAssetPersistenceServiceTests.vcxproj" Id="e9941c61-f8e9-4845-93ef-f97819628c01">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
     <Project Path="Components/Tests/Services/LBCharacterServiceTests/LBCharacterServiceTests.vcxproj" Id="df3f60b3-963e-4c88-92d3-3dc073af43d1">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />

@@ -22,9 +22,9 @@ namespace Domain {
         /// </summary>
         Entity() noexcept : id_(GenerateId()) {}
 
-        // Make entities non-copyable but movable
-        Entity(const Entity&) = delete;
-        Entity& operator=(const Entity&) = delete;
+        // Make entities copyable and movable for repository storage
+        Entity(const Entity&) = default;
+        Entity& operator=(const Entity&) = default;
         Entity(Entity&&) = default;
         Entity& operator=(Entity&&) = default;
 
