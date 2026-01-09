@@ -25,7 +25,8 @@ namespace Domain {
         // Spiritual damage types
         Radiant = 8,        // Holy/divine damage
         Necrotic = 9,       // Death/decay damage
-        Psychic = 10        // Mental/mind damage
+        Psychic = 10,       // Mental/mind damage
+        Arcane = 11         // Pure magical damage
     };
 
     /// <summary>
@@ -44,6 +45,7 @@ namespace Domain {
             case DamageType::Radiant: return "Radiant";
             case DamageType::Necrotic: return "Necrotic";
             case DamageType::Psychic: return "Psychic";
+            case DamageType::Arcane: return "Arcane";
             default: return "Unknown";
         }
     }
