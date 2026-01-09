@@ -1,0 +1,130 @@
+Package: vcpkg-cmake-config
+Version: 2024-05-23
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 11ed77c7da8e9b04746ba3eca29d4d8e79f5fb50557be12e73902731af804d22
+Status: install ok installed
+
+Package: vcpkg-cmake
+Version: 2024-04-23
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 04a567424178c537734b1830788ef958705935e39ba406ba60a31b65256e7ec6
+Status: install ok installed
+
+Package: directx-dxc
+Version: 2025-10-10
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 281ca80a0ad805f48f9595330931aa076fc1c7a20e537f90d901c3f8c6d76e4f
+Description: DirectX Shader Compiler (LLVM/Clang)
+Status: install ok installed
+
+Package: directx-headers
+Version: 1.618.2
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: f5b12fca6f6b8208b5df885b1a6c73ac55a3df91c8c436b96a463c8161e241c6
+Description: Official DirectX 12 Headers
+Status: install ok installed
+
+Package: directx12-agility
+Version: 1.618.5
+Depends: directx-headers, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 3dcb6f3bd38eb56612146c481263c85efc353c5552942b624fecf92c9c591cc7
+Description: DirectX 12 Agility SDK
+Status: install ok installed
+
+Package: directxmath
+Version: 2025-04-03
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 9ad28ec6a79d28347d94d3e55378cec666d01bcf356216a229abb36c5ad2fbf7
+Description: DirectXMath SIMD C++ math library
+Status: install ok installed
+
+Package: dstorage
+Version: 1.3.0
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 7df1f9647af9771a97d9b0d5fcb0bdc5cd7473b64e93937762b255bcb6213441
+Description: DirectStorage for Windows
+Status: install ok installed
+
+Package: gameinput
+Version: 3.1.26100.6879
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 08c7a8ebe4243909ca3f7f92ec7d05c93f663ddbc253650943889942936aacaa
+Description: GameInput
+Status: install ok installed
+
+Package: zlib
+Version: 1.3.1
+Depends: vcpkg-cmake
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 863aa31bfd0edff4c1e8ac5e8b34b7eba179848f3f7b478b31f3782305154319
+Description: A compression library
+Status: install ok installed
+
+Package: brotli
+Version: 1.2.0
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: e60c353884bf7d83edeb2d5272b75d83e9ac50aac902023539f08d4c6dcd8797
+Description: a generic-purpose lossless compression algorithm that compresses data using a combination of a modern variant of the LZ77 algorithm, Huffman coding and 2nd order context modeling.
+Status: install ok installed
+
+Package: cpprestsdk
+Version: 2.10.19
+Port-Version: 3
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 2eaff1a27cfd9bb708dd321ef5476191e10183a7f8fce08aebdc02397ff6c6ef
+Description: C++11 JSON, REST, and OAuth library
+    The C++ REST SDK is a Microsoft project for cloud-based client-server communication in native code using a modern asynchronous C++ API design. This project aims to help C++ developers connect to and interact with services.
+Default-Features: brotli, compression
+Status: install ok installed
+
+Package: cpprestsdk
+Feature: brotli
+Depends: brotli
+Architecture: x64-windows
+Multi-Arch: same
+Description: Brotli compression support
+Status: install ok installed
+
+Package: cpprestsdk
+Feature: compression
+Depends: zlib
+Architecture: x64-windows
+Multi-Arch: same
+Description: HTTP Compression support
+Status: install ok installed
+
+Package: ms-gdk
+Version: 2510.1.6224
+Depends: cpprestsdk
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 73a3e4a2d995fdccdb3c18b3dc541d76e69b35d7ab61a6364eb8f5fa5f88bf98
+Description: Microsoft Game Development Kit (GDK)
+Status: install ok installed
+
+Package: winpixevent
+Version: 1.0.240308001
+Architecture: x64-windows
+Multi-Arch: same
+Abi: c38d7f7183042325f2cda4746e491443e6b9e3a226b0f2b17408ee801c9fc2b4
+Description: Allows applications to be instrumented with marker events, for use with Microsoft PIX.
+Status: install ok installed
+
