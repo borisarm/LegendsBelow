@@ -10,7 +10,7 @@ namespace Domain {
 
     // Forward declarations for spell-related types
     class Spell;
-    enum class SpellId : Id;
+    using SpellId = Id;
 
     /// <summary>
     /// Repository interface for spell data access
