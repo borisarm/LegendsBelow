@@ -1,5 +1,7 @@
 #pragma once
-#include "pch.h"
+#include <random>
+#include <algorithm>
+#include "../Common/Types.h"
 #include "../Enums/DamageType.h"
 
 namespace LB {
