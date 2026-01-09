@@ -157,6 +157,7 @@
     <ClInclude Include="Interfaces\IArmorRepository.h" />
     <ClInclude Include="Interfaces\IAssetLoader.h" />
     <ClInclude Include="Interfaces\ICharacterRepository.h" />
+    <ClInclude Include="Interfaces\IEntityRepository.h" />
     <ClInclude Include="Interfaces\IItemRepository.h" />
     <ClInclude Include="Interfaces\ISpellRepository.h" />
     <ClInclude Include="Interfaces\IWeaponRepository.h" />
