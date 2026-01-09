@@ -1,0 +1,68 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Profile" />
+    <BuildType Name="Release" />
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Assets/" />
+  <Folder Name="/Assets/Data/">
+    <File Path="Assets/Data/armour.json" />
+    <File Path="Assets/Data/spells.json" />
+    <File Path="Assets/Data/weapons.json" />
+  </Folder>
+  <Folder Name="/Components/">
+    <Project Path="Components/LBAssetSystem/LBAssetSystem.vcxproj" Id="0ff082cc-529b-4105-9a04-8d4a109e3de5">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/LBEngineCore/LBEngineCore.vcxproj" Id="7e9219b4-cd0b-4186-bfac-1b60d55e1678">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/LBModel/LBModel.vcxproj" Id="6dc099fe-2d65-40e1-ac81-9ea734b30ba1">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/Components/Tests/">
+    <Project Path="Components/Tests/LBEngineTests/LBEngineTests.vcxproj" Id="3f9224e1-ce12-4b7a-9e4a-0b0a1fe7937d">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/LBModelTests/LBModelTests.vcxproj" Id="a406bb42-df25-4233-aa86-fa0c2c2ef70e">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/Documentation/">
+    <File Path=".github/asset-preprocesing-strategy-instructions.md" />
+    <File Path=".github/copilot-instructions.md" />
+    <File Path=".github/design-architecture.md" />
+    <File Path=".github/design-armour-list.md" />
+    <File Path=".github/design-armour-system.md" />
+    <File Path=".github/design-character-system.md" />
+    <File Path=".github/design-combat-system.md" />
+    <File Path=".github/design-dungeon-and-world.md" />
+    <File Path=".github/design-loot-and-progression.md" />
+    <File Path=".github/design-spell-list.md" />
+    <File Path=".github/design-spells-system.md" />
+    <File Path=".github/design-technical-directx12.md" />
+    <File Path=".github/design-ui-ux-and-audio.md" />
+    <File Path=".github/design-weapons-list.md" />
+    <File Path=".github/design-weapons-system.md" />
+    <File Path=".github/game-design.md" />
+  </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="Tools/LBAssetProcessor/LBAssetProcessor.vcxproj" Id="6155f5eb-661e-4330-9915-b2c14a27122d">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Tools/LBGameEditor/LBGameEditor.vcxproj" Id="c2d6ff8e-94a8-4ba8-a2fd-d56a5ae0a05e">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Deploy />
+    </Project>
+  </Folder>
+  <Project Path="LegendsBelow/LegendsBelow.vcxproj" Id="abe57a69-a3db-41e9-b46a-9901f0e25738" />
+</Solution>
