@@ -1,5 +1,7 @@
 #pragma once
-#include "pch.h"
+#include <vector>
+#include <optional>
+#include <string>
 #include "../Entities/Character.h"
 #include "../Enums/CharacterClass.h"
 

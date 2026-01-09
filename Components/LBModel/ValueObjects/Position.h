@@ -1,6 +1,7 @@
 #pragma once
-#include "pch.h"
 #include <cmath>
+#include <functional>
+#include "../Common/Types.h"
 
 namespace LB {
 namespace Domain {

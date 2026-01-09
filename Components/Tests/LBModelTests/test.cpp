@@ -1,14 +1,18 @@
 #include "pch.h"
+
+// Include the complete LBModel framework for testing
+#include "../../LBModel/Common/Types.h"
+
 #include "../../LBModel/Enums/CharacterClass.h"
 #include "../../LBModel/Enums/DamageType.h"
 #include "../../LBModel/Enums/SpellSchool.h"
-#include "../../LBModel/Enums/WeaponType.h"
 #include "../../LBModel/ValueObjects/Attributes.h"
 #include "../../LBModel/ValueObjects/Dice.h"
 #include "../../LBModel/ValueObjects/Position.h"
 #include "../../LBModel/ValueObjects/StatusEffect.h"
 #include "../../LBModel/Entities/Entity.h"
 #include "../../LBModel/Entities/Character.h"
+
 
 using namespace LB::Domain;
 

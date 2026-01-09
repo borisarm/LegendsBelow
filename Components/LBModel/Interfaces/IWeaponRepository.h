@@ -1,7 +1,10 @@
 #pragma once
-#include "pch.h"
+#include <vector>
+#include <optional>
+#include "../Common/Types.h"
 #include "../Enums/WeaponType.h"
 #include "../Enums/DamageType.h"
+#include "../Enums/CharacterClass.h"
 
 namespace LB {
 namespace Domain {

@@ -1,5 +1,6 @@
 #pragma once
-#include "pch.h"
+#include <cstdint>
+#include <algorithm>
 
 namespace LB {
 namespace Domain {
