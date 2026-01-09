@@ -13,15 +13,55 @@
     <File Path="Assets/Data/weapons.json" />
   </Folder>
   <Folder Name="/Components/">
-    <Project Path="Components/LBAssetSystem/LBAssetSystem.vcxproj" Id="0ff082cc-529b-4105-9a04-8d4a109e3de5">
-      <BuildType Solution="Profile|*" Project="Release" />
-      <Platform Project="x64" />
-    </Project>
     <Project Path="Components/LBEngineCore/LBEngineCore.vcxproj" Id="7e9219b4-cd0b-4186-bfac-1b60d55e1678">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
     </Project>
     <Project Path="Components/LBModel/LBModel.vcxproj" Id="6dc099fe-2d65-40e1-ac81-9ea734b30ba1">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/Components/Services/">
+    <Project Path="Components/Services/LBCharacterService/LBCharacterService.vcxproj" Id="54cb0c98-89a4-472b-b184-98bc3c368f4e">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Services/LBCombatService/LBCombatService.vcxproj" Id="6404607a-1507-4842-a231-e7761a80b19d">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Services/LBDungeonService/LBDungeonService.vcxproj" Id="dc0d706c-8aec-44d1-a396-c1e82dfbabe6">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Services/LBInventoryService/LBInventoryService.vcxproj" Id="0660e29a-5d0d-4024-bca2-70d97491cf45">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Services/LBProgressionService/LBProgressionService.vcxproj" Id="2b639d8e-e937-4271-b15a-3de571899be1">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/Components/Systems/">
+    <Project Path="Components/Systems/LBAssetSystem/LBAssetSystem.vcxproj" Id="0ff082cc-529b-4105-9a04-8d4a109e3de5">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Systems/LBAudioSystem/LBAudioSystem.vcxproj" Id="280d6694-757a-485e-b410-9b4a4301aac8">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Systems/LBInputSystem/LBInputSystem.vcxproj" Id="a9e225ac-4060-4f56-b359-0eacddb08670">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Systems/LBPersistenceSystem/LBPersistenceSystem.vcxproj" Id="69fecce1-3522-4e3b-ae96-8af3e92b23bb">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Systems/LBRenderingSystem/LBRenderingSystem.vcxproj" Id="f1adc28a-d281-4796-a358-c4005d37160b">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
     </Project>
@@ -32,6 +72,50 @@
       <Platform Project="x64" />
     </Project>
     <Project Path="Components/Tests/LBModelTests/LBModelTests.vcxproj" Id="a406bb42-df25-4233-aa86-fa0c2c2ef70e">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/Components/Tests/Services/">
+    <Project Path="Components/Tests/Services/LBCharacterServiceTests/LBCharacterServiceTests.vcxproj" Id="df3f60b3-963e-4c88-92d3-3dc073af43d1">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Services/LBCombatServiceTests/LBCombatServiceTests.vcxproj" Id="baab2218-4dfe-427f-a36a-70a1bcf6eb73">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Services/LBDungeonServiceTests/LBDungeonServiceTests.vcxproj" Id="3fa3de71-c5c8-4cc1-b8a9-085ab175ceaf">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Services/LBInventoryServiceTests/LBInventoryServiceTests.vcxproj" Id="d1266a58-6265-4787-8227-4636b78065a8">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Services/LBProgressionServiceTests/LBProgressionServiceTests.vcxproj" Id="a87e00b5-4975-478a-bda9-4ff3c20ad115">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/Components/Tests/Systems/">
+    <Project Path="Components/Tests/System/LBAssetSystemTests/LBAssetSystemTests.vcxproj" Id="b6b7e88e-96bf-40d5-bb2f-62fc79b0ca4b">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/System/LBAudioSystemTests/LBAudioSystemTests.vcxproj" Id="1bab7fd6-03ff-4f2c-9483-7230d92833aa">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/System/LBInputSystemTests/LBInputSystemTests.vcxproj" Id="010f3b4f-23e5-4049-ae0b-1adacc99c5d3">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/System/LBPersistenceSystemTests/LBPersistenceSystemTests.vcxproj" Id="b40b4d60-a44f-406d-941b-1fffd3f3ede2">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/System/LBRenderingSystemTests/LBRenderingSystemTests.vcxproj" Id="da095919-3cbf-4142-9108-c72670b0cc0b">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
     </Project>
