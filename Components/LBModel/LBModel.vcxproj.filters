@@ -1,87 +1,67 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
-    <Filter Include="Header Files\Entities">
+    <Filter Include="Entities">
       <UniqueIdentifier>{9d242280-ddf0-4771-b499-6593b5d005da}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\Enums">
+    <Filter Include="Enums">
       <UniqueIdentifier>{c211d87a-fc44-4124-acec-6276201f9390}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\Interfaces">
+    <Filter Include="Interfaces">
       <UniqueIdentifier>{6ae457d2-e6aa-4aa4-9b3e-b7f37bc487c8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\ValueObjects">
+    <Filter Include="Common">
+      <UniqueIdentifier>{358a62a9-18bb-4ab2-b58a-eff3b5214119}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ValueObjects">
       <UniqueIdentifier>{4d373a28-c3aa-49fb-bf06-ce688b59a4fb}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Entities\Character.h">
-      <Filter>Header Files\Entities</Filter>
+      <Filter>Entities</Filter>
     </ClInclude>
     <ClInclude Include="Entities\Entity.h">
-      <Filter>Header Files\Entities</Filter>
+      <Filter>Entities</Filter>
     </ClInclude>
     <ClInclude Include="Enums\CharacterClass.h">
-      <Filter>Header Files\Enums</Filter>
+      <Filter>Enums</Filter>
     </ClInclude>
     <ClInclude Include="Enums\DamageType.h">
-      <Filter>Header Files\Enums</Filter>
+      <Filter>Enums</Filter>
     </ClInclude>
     <ClInclude Include="Enums\SpellSchool.h">
-      <Filter>Header Files\Enums</Filter>
+      <Filter>Enums</Filter>
     </ClInclude>
     <ClInclude Include="Enums\WeaponType.h">
-      <Filter>Header Files\Enums</Filter>
+      <Filter>Enums</Filter>
     </ClInclude>
     <ClInclude Include="Interfaces\IAssetLoader.h">
-      <Filter>Header Files\Interfaces</Filter>
+      <Filter>Interfaces</Filter>
     </ClInclude>
     <ClInclude Include="Interfaces\ICharacterRepository.h">
-      <Filter>Header Files\Interfaces</Filter>
+      <Filter>Interfaces</Filter>
     </ClInclude>
     <ClInclude Include="Interfaces\ISpellRepository.h">
-      <Filter>Header Files\Interfaces</Filter>
+      <Filter>Interfaces</Filter>
     </ClInclude>
     <ClInclude Include="Interfaces\IWeaponRepository.h">
-      <Filter>Header Files\Interfaces</Filter>
+      <Filter>Interfaces</Filter>
     </ClInclude>
     <ClInclude Include="ValueObjects\Attributes.h">
-      <Filter>Header Files\ValueObjects</Filter>
+      <Filter>ValueObjects</Filter>
     </ClInclude>
     <ClInclude Include="ValueObjects\Dice.h">
-      <Filter>Header Files\ValueObjects</Filter>
+      <Filter>ValueObjects</Filter>
     </ClInclude>
     <ClInclude Include="ValueObjects\Position.h">
-      <Filter>Header Files\ValueObjects</Filter>
+      <Filter>ValueObjects</Filter>
     </ClInclude>
     <ClInclude Include="ValueObjects\StatusEffect.h">
-      <Filter>Header Files\ValueObjects</Filter>
+      <Filter>ValueObjects</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="LBModel.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="pch.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+    <ClInclude Include="Common\Types.h">
+      <Filter>Common</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

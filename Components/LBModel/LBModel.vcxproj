@@ -111,8 +111,9 @@
       <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <PrecompiledHeader>Use</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -139,31 +140,21 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Common\Types.h" />
     <ClInclude Include="Entities\Character.h" />
     <ClInclude Include="Entities\Entity.h" />
     <ClInclude Include="Enums\CharacterClass.h" />
     <ClInclude Include="Enums\DamageType.h" />
     <ClInclude Include="Enums\SpellSchool.h" />
     <ClInclude Include="Enums\WeaponType.h" />
-    <ClInclude Include="framework.h" />
     <ClInclude Include="Interfaces\IAssetLoader.h" />
     <ClInclude Include="Interfaces\ICharacterRepository.h" />
     <ClInclude Include="Interfaces\ISpellRepository.h" />
     <ClInclude Include="Interfaces\IWeaponRepository.h" />
-    <ClInclude Include="pch.h" />
     <ClInclude Include="ValueObjects\Attributes.h" />
     <ClInclude Include="ValueObjects\Dice.h" />
     <ClInclude Include="ValueObjects\Position.h" />
     <ClInclude Include="ValueObjects\StatusEffect.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="LBModel.cpp" />
-    <ClCompile Include="pch.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
-    </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

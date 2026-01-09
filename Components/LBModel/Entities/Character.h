@@ -1,5 +1,8 @@
 #pragma once
-#include "pch.h"
+#include <vector>
+#include <algorithm>
+#include <limits>
+#include "../Common/Types.h"
 #include "Entity.h"
 #include "../Enums/CharacterClass.h"
 #include "../ValueObjects/Attributes.h"
