@@ -147,16 +147,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="C++20-Module-Partitions-Success.md" />
     <None Include="C++20-Module-Phase1-Complete.md" />
     <None Include="README.md" />
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Character.ixx" />
+    <ClCompile Include="Entity.ixx" />
     <ClCompile Include="LB.Common.ixx" />
     <ClCompile Include="LB.Domain.ixx" />
     <ClCompile Include="LB.Entities.ixx" />
     <ClCompile Include="LB.Enums.ixx" />
     <ClCompile Include="LB.ValueObjects.ixx" />
+    <ClCompile Include="Spell.ixx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

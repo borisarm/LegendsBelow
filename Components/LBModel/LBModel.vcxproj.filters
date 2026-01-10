@@ -4,6 +4,7 @@
     <None Include="vcpkg.json" />
     <None Include="C++20-Module-Phase1-Complete.md" />
     <None Include="README.md" />
+    <None Include="C++20-Module-Partitions-Success.md" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LB.Common.ixx" />
@@ -11,5 +12,8 @@
     <ClCompile Include="LB.Domain.ixx" />
     <ClCompile Include="LB.ValueObjects.ixx" />
     <ClCompile Include="LB.Entities.ixx" />
+    <ClCompile Include="Entity.ixx" />
+    <ClCompile Include="Spell.ixx" />
+    <ClCompile Include="Character.ixx" />
   </ItemGroup>
 </Project>
