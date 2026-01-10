@@ -70,6 +70,12 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -114,6 +120,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
+      <BuildStlModules>false</BuildStlModules>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -140,31 +147,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Common\Types.h" />
-    <ClInclude Include="Entities\Armor.h" />
-    <ClInclude Include="Entities\Character.h" />
-    <ClInclude Include="Entities\Entity.h" />
-    <ClInclude Include="Entities\Item.h" />
-    <ClInclude Include="Entities\Spell.h" />
-    <ClInclude Include="Entities\Weapon.h" />
-    <ClInclude Include="Enums\ArmorCategory.h" />
-    <ClInclude Include="Enums\CharacterClass.h" />
-    <ClInclude Include="Enums\DamageType.h" />
-    <ClInclude Include="Enums\EquipmentSlot.h" />
-    <ClInclude Include="Enums\SpellCategory.h" />
-    <ClInclude Include="Enums\SpellSchool.h" />
-    <ClInclude Include="Enums\WeaponType.h" />
-    <ClInclude Include="Interfaces\IArmorRepository.h" />
-    <ClInclude Include="Interfaces\IAssetLoader.h" />
-    <ClInclude Include="Interfaces\ICharacterRepository.h" />
-    <ClInclude Include="Interfaces\IEntityRepository.h" />
-    <ClInclude Include="Interfaces\IItemRepository.h" />
-    <ClInclude Include="Interfaces\ISpellRepository.h" />
-    <ClInclude Include="Interfaces\IWeaponRepository.h" />
-    <ClInclude Include="ValueObjects\Attributes.h" />
-    <ClInclude Include="ValueObjects\Dice.h" />
-    <ClInclude Include="ValueObjects\Position.h" />
-    <ClInclude Include="ValueObjects\StatusEffect.h" />
+    <None Include="C++20-Module-Phase1-Complete.md" />
+    <None Include="README.md" />
+    <None Include="vcpkg.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="LB.Common.ixx" />
+    <ClCompile Include="LB.Domain.ixx" />
+    <ClCompile Include="LB.Entities.ixx" />
+    <ClCompile Include="LB.Enums.ixx" />
+    <ClCompile Include="LB.ValueObjects.ixx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

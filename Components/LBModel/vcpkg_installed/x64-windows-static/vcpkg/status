@@ -1,0 +1,23 @@
+Package: vcpkg-cmake-config
+Version: 2024-05-23
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 11ed77c7da8e9b04746ba3eca29d4d8e79f5fb50557be12e73902731af804d22
+Status: purge ok not-installed
+
+Package: vcpkg-cmake
+Version: 2024-04-23
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 0e249365458f6c3908af1df99500916ecd7bcc9753a9ab61efdc86606e1db633
+Status: purge ok not-installed
+
+Package: proxy
+Version: 4.0.1
+Depends: vcpkg-cmake:x64-windows, vcpkg-cmake-config:x64-windows
+Architecture: x64-windows-static
+Multi-Arch: same
+Abi: 6aef4508fddc1141e956f3a93061f76c59c9c0af41d425dd9fc6fed5761ac839
+Description: A single-header C++20 library that facilitates runtime polymorphism.
+Status: purge ok not-installed
+
