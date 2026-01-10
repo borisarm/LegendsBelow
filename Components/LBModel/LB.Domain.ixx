@@ -7,6 +7,8 @@ export import LB.Enums;
 export import LB.ValueObjects;
 export import LB.Entities;
 
+import std;
+
 export namespace LB::Domain {
     // Module version information
     constexpr int MajorVersion = 1;

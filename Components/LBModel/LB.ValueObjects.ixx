@@ -138,13 +138,81 @@ export namespace LB::Domain {
             return Position(x_ + other.x_, y_ + other.y_);
         }
 
-        constexpr Position operator-(const Position& other) const noexcept {
-            return Position(x_ - other.x_, y_ - other.y_);
-        }
+                constexpr Position operator-(const Position& other) const noexcept {
+                    return Position(x_ - other.x_, y_ - other.y_);
+                }
 
-        // Equality operators
-        constexpr bool operator==(const Position& other) const noexcept = default;
-        constexpr bool operator!=(const Position& other) const noexcept = default;
-    };
+                // Equality operators
+                constexpr bool operator==(const Position& other) const noexcept = default;
+                constexpr bool operator!=(const Position& other) const noexcept = default;
+            };
 
-} // namespace LB::Domain
+            /// <summary>
+            /// Dice roller utility for generating random dice roll results
+            /// Separates random number generation logic from the Dice value object
+            /// </summary>
+            class DiceRoller {
+            private:
+                static std::mt19937& GetRandomEngine() {
+                    static thread_local std::mt19937 engine{std::random_device{}()};
+                    return engine;
+                }
+
+            public:
+                /// <summary>
+                /// Roll dice and return the result
+                /// </summary>
+                [[nodiscard]] static int32_t Roll(const Dice& dice) {
+                    if (dice.Count() == 0 || dice.Sides() == 0) {
+                        return dice.Bonus();
+                    }
+
+                    std::uniform_int_distribution<int32_t> distribution(1, dice.Sides());
+                    int32_t total = dice.Bonus();
+
+                    for (int32_t i = 0; i < dice.Count(); ++i) {
+                        total += distribution(GetRandomEngine());
+                    }
+
+                    return total;
+                }
+
+                /// <summary>
+                /// Roll a simple d20 (common for attack rolls)
+                /// </summary>
+                [[nodiscard]] static int32_t RollD20() {
+                    static const Dice d20(1, 20, 0);
+                    return Roll(d20);
+                }
+
+                /// <summary>
+                /// Roll with advantage (roll twice, take higher)
+                /// </summary>
+                [[nodiscard]] static int32_t RollWithAdvantage(const Dice& dice) {
+                    int32_t roll1 = Roll(dice);
+                    int32_t roll2 = Roll(dice);
+                    return std::max(roll1, roll2);
+                }
+
+                /// <summary>
+                /// Roll with disadvantage (roll twice, take lower)
+                /// </summary>
+                [[nodiscard]] static int32_t RollWithDisadvantage(const Dice& dice) {
+                    int32_t roll1 = Roll(dice);
+                    int32_t roll2 = Roll(dice);
+                    return std::min(roll1, roll2);
+                }
+
+                /// <summary>
+                /// Roll multiple times and sum (useful for critical hits)
+                /// </summary>
+                [[nodiscard]] static int32_t RollMultiple(const Dice& dice, int32_t times) {
+                    int32_t total = 0;
+                    for (int32_t i = 0; i < times; ++i) {
+                        total += Roll(dice);
+                    }
+                    return total;
+                }
+            };
+
+        } // namespace LB::Domain
