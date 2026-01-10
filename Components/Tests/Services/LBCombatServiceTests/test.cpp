@@ -120,8 +120,11 @@ TEST(CombatServiceTests, CalculateDamage_WithReduction_ReducesDamage) {
 
     auto result = service.CalculateDamage(20, 5, DamageType::Slashing, false, 0.5f);
 
-    EXPECT_EQ(result.totalDamage, 12); // 25 * 0.5 = 12.5, rounds to 12
-    EXPECT_EQ(result.mitigatedDamage, 13); // 25 * 0.5 = 12.5, mitigated 13
+    // 20 + 5 = 25 total before mitigation
+    // 25 * 0.5 = 12.5 mitigated, rounds down to 12
+    // 25 - 12 = 13 total damage dealt
+    EXPECT_EQ(result.totalDamage, 13);
+    EXPECT_EQ(result.mitigatedDamage, 12);
 }
 
 TEST(CombatServiceTests, CalculateDamage_MaxReduction_MinimalDamage) {
