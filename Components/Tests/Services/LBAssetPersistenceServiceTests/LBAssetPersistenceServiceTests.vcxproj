@@ -98,6 +98,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="RepositoryTestHelpers.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="test.cpp" />
@@ -112,6 +113,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\LBModel\LBModel.vcxproj">
+      <Project>{6dc099fe-2d65-40e1-ac81-9ea734b30ba1}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\..\Services\LBAssetPersistenceService\LBAssetPersistenceService.vcxproj">
       <Project>{cc3058fb-9cf7-4f26-b020-5d8ee70368a3}</Project>
     </ProjectReference>
