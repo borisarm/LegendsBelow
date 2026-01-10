@@ -300,6 +300,231 @@ export namespace LB::Services::Character {
             return ids;
         }
 
+        /// <summary>
+        /// Get character entity by ID
+        /// Returns const reference to character for read-only operations
+        /// </summary>
+        std::optional<std::reference_wrapper<const LB::Domain::Character>> GetCharacter(LB::Domain::CharacterId id) const {
+            auto it = characters_.find(id);
+            if (it == characters_.end()) {
+                return std::nullopt;
+            }
+            return std::cref(it->second);
+        }
+
+        /// <summary>
+        /// Rest character to restore health and mana
+        /// Simulates short or long rest mechanics
+        /// </summary>
+        bool RestCharacter(LB::Domain::CharacterId id, bool fullRest = true) {
+            auto it = characters_.find(id);
+            if (it == characters_.end()) {
+                return false;
+            }
+
+            auto& character = it->second;
+            if (!character.IsAlive()) {
+                return false; // Cannot rest if dead
+            }
+
+            if (fullRest) {
+                // Long rest: full recovery
+                character.RestoreToMaxHealth();
+                character.RestoreToMaxMana();
+            } else {
+                // Short rest: partial recovery
+                auto healAmount = character.GetMaxHitPoints() / 2;
+                auto manaAmount = character.GetMaxManaPoints() / 2;
+                character.Heal(healAmount);
+                character.RestoreMana(manaAmount);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Consume mana for spell casting or abilities
+        /// Returns true if character had sufficient mana
+        /// </summary>
+        bool ConsumeMana(LB::Domain::CharacterId id, int32_t manaCost) {
+            auto it = characters_.find(id);
+            if (it == characters_.end() || manaCost <= 0) {
+                return false;
+            }
+
+            auto& character = it->second;
+            if (character.GetCurrentManaPoints() < manaCost) {
+                return false; // Insufficient mana
+            }
+
+            character.ConsumeMana(manaCost);
+            return true;
+        }
+
+        /// <summary>
+        /// Restore mana to character
+        /// Returns actual amount restored
+        /// </summary>
+        int32_t RestoreMana(LB::Domain::CharacterId id, int32_t manaAmount) {
+            auto it = characters_.find(id);
+            if (it == characters_.end() || manaAmount <= 0) {
+                return 0;
+            }
+
+            auto& character = it->second;
+            auto currentMP = character.GetCurrentManaPoints();
+            auto maxMP = character.GetMaxManaPoints();
+            auto actualRestore = std::min(manaAmount, maxMP - currentMP);
+
+            if (actualRestore > 0) {
+                character.RestoreMana(actualRestore);
+            }
+
+            return actualRestore;
+        }
+
+        /// <summary>
+        /// Remove character from service management
+        /// Returns true if character was found and removed
+        /// </summary>
+        bool RemoveCharacter(LB::Domain::CharacterId id) {
+            return characters_.erase(id) > 0;
+        }
+
+        /// <summary>
+        /// Check if character exists in service
+        /// </summary>
+        bool HasCharacter(LB::Domain::CharacterId id) const {
+            return characters_.contains(id);
+        }
+
+        /// <summary>
+        /// Get count of managed characters
+        /// </summary>
+        size_t GetCharacterCount() const noexcept {
+            return characters_.size();
+        }
+
+        /// <summary>
+        /// Get all characters of a specific class
+        /// </summary>
+        std::vector<LB::Domain::CharacterId> GetCharactersByClass(LB::Domain::CharacterClass charClass) const {
+            std::vector<LB::Domain::CharacterId> ids;
+
+            for (const auto& [id, character] : characters_) {
+                if (character.GetCharacterClass() == charClass) {
+                    ids.push_back(id);
+                }
+            }
+
+            return ids;
+        }
+
+        /// <summary>
+        /// Get all alive characters
+        /// </summary>
+        std::vector<LB::Domain::CharacterId> GetAliveCharacters() const {
+            std::vector<LB::Domain::CharacterId> ids;
+
+            for (const auto& [id, character] : characters_) {
+                if (character.IsAlive()) {
+                    ids.push_back(id);
+                }
+            }
+
+            return ids;
+        }
+
+        /// <summary>
+        /// Get all characters in a level range
+        /// </summary>
+        std::vector<LB::Domain::CharacterId> GetCharactersByLevelRange(int32_t minLevel, int32_t maxLevel) const {
+            std::vector<LB::Domain::CharacterId> ids;
+
+            for (const auto& [id, character] : characters_) {
+                auto level = character.GetLevel();
+                if (level >= minLevel && level <= maxLevel) {
+                    ids.push_back(id);
+                }
+            }
+
+            return ids;
+        }
+
+        /// <summary>
+        /// Equip weapon to character
+        /// Placeholder for equipment system integration
+        /// </summary>
+        bool EquipWeapon(LB::Domain::CharacterId characterId, LB::Domain::WeaponId weaponId) {
+            auto it = characters_.find(characterId);
+            if (it == characters_.end()) {
+                return false;
+            }
+
+            // TODO: Integrate with inventory/equipment system
+            // For now, just validate the character exists
+            return true;
+        }
+
+        /// <summary>
+        /// Equip armor to character
+        /// Placeholder for equipment system integration
+        /// </summary>
+        bool EquipArmor(LB::Domain::CharacterId characterId, LB::Domain::ArmorId armorId) {
+            auto it = characters_.find(characterId);
+            if (it == characters_.end()) {
+                return false;
+            }
+
+            // TODO: Integrate with inventory/equipment system
+            // For now, just validate the character exists
+            return true;
+        }
+
+        /// <summary>
+        /// Learn new ability for character
+        /// </summary>
+        bool LearnAbility(LB::Domain::CharacterId id, const LB::String& abilityName) {
+            auto it = characters_.find(id);
+            if (it == characters_.end() || abilityName.empty()) {
+                return false;
+            }
+
+            auto& character = it->second;
+            character.LearnAbility(abilityName);
+            return true;
+        }
+
+        /// <summary>
+        /// Revive a dead character with specified HP percentage
+        /// </summary>
+        bool ReviveCharacter(LB::Domain::CharacterId id, float healthPercentage = 0.5f) {
+            auto it = characters_.find(id);
+            if (it == characters_.end()) {
+                return false;
+            }
+
+            auto& character = it->second;
+            if (character.IsAlive()) {
+                return false; // Already alive
+            }
+
+            character.Revive();
+            auto healAmount = static_cast<int32_t>(character.GetMaxHitPoints() * std::clamp(healthPercentage, 0.0f, 1.0f));
+            character.Heal(healAmount);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Clear all characters from service
+        /// Useful for testing or resetting game state
+        /// </summary>
+        void ClearAll() {
+            characters_.clear();
+            nextId_ = 1;
+        }
+
     private:
         std::unordered_map<LB::Domain::CharacterId, LB::Domain::Character> characters_;
         LB::Domain::CharacterId nextId_{1};

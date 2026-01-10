@@ -111,6 +111,14 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\LBModel\LBModel.vcxproj">
+      <Project>{6dc099fe-2d65-40e1-ac81-9ea734b30ba1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Services\LBCharacterService\LBCharacterService.vcxproj">
+      <Project>{54cb0c98-89a4-472b-b184-98bc3c368f4e}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="..\..\..\..\packages\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.1.8.1.8\build\native\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.targets" Condition="Exists('..\..\..\..\packages\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.1.8.1.8\build\native\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.targets')" />
