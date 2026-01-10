@@ -1,200 +1,80 @@
-// LB.Repositories.ixx - Repository interfaces and proxy pattern module
+// LB.Repositories.ixx - Repository interfaces using Microsoft Proxy 4.0
 // Note: This belongs in the Services layer, not the Domain model
 export module LB.Repositories;
 
 import LB.Domain; // Import the pure domain model
 import std;
+import <proxy/proxy.h>; // Microsoft Proxy 4.0
+
 export namespace LB::Repositories {
 
+	// Define the repository facade using Microsoft Proxy 4.0
+	PRO_DEF_MEM_DISPATCH(MemGetSpell, GetSpell);
+	PRO_DEF_MEM_DISPATCH(MemGetAllSpellIds, GetAllSpellIds);
+	PRO_DEF_MEM_DISPATCH(MemSpellExists, SpellExists);
+	PRO_DEF_MEM_DISPATCH(MemGetSpellsBySchool, GetSpellsBySchool);
+	PRO_DEF_MEM_DISPATCH(MemGetSchoolDescription, GetSchoolDescription);
+	PRO_DEF_MEM_DISPATCH(MemGetSpellsByClass, GetSpellsByClass);
+	PRO_DEF_MEM_DISPATCH(MemGetSpellsByLevel, GetSpellsByLevel);
+	PRO_DEF_MEM_DISPATCH(MemGetSpellsByCategory, GetSpellsByCategory);
+	PRO_DEF_MEM_DISPATCH(MemGetSpellsByManaCost, GetSpellsByManaCost);
+	PRO_DEF_MEM_DISPATCH(MemGetSpellsByCastTime, GetSpellsByCastTime);
+
 	/// <summary>
-	/// Type-erased spell repository using function objects
-	/// Provides the same interface as Microsoft Proxy would
-	/// Any class with matching method signatures can be used
+	/// Spell repository facade using Microsoft Proxy 4.0
+	/// Any class with matching method signatures can be used with duck typing
 	/// </summary>
-	class SpellRepositoryProxy {
-	private:
-		// Function objects for type erasure (similar to Microsoft Proxy internals)
-		std::function<std::optional<LB::Domain::Spell>(LB::Domain::SpellId)> getSpell_;
-		std::function<std::vector<LB::Domain::SpellId>()> getAllSpellIds_;
-		std::function<bool(LB::Domain::SpellId)> spellExists_;
-		std::function<std::vector<LB::Domain::SpellId>(LB::Domain::SpellSchool)> getSpellsBySchool_;
-		std::function<std::optional<LB::String>(LB::Domain::SpellSchool)> getSchoolDescription_;
-		std::function<std::vector<LB::Domain::SpellId>(LB::Domain::CharacterClass)> getSpellsByClass_;
-		std::function<std::vector<LB::Domain::SpellId>(int32_t)> getSpellsByLevel_;
-		std::function<std::vector<LB::Domain::SpellId>(LB::Domain::SpellCategory)> getSpellsByCategory_;
-		std::function<std::vector<LB::Domain::SpellId>(int32_t, int32_t)> getSpellsByManaCost_;
-		std::function<std::vector<LB::Domain::SpellId>(float)> getSpellsByCastTime_;
-
-	public:
-		/// <summary>
-		/// Create proxy from any implementation using duck typing
-		/// No inheritance required - just matching method signatures!
-		/// </summary>
-		template<typename T>
-		explicit SpellRepositoryProxy(T&& impl) {
-			// Capture implementation methods using perfect forwarding
-			auto* ptr = new std::decay_t<T>(std::forward<T>(impl));
-			auto deleter = [ptr](auto*) { delete ptr; };
-
-			getSpell_ = [ptr](LB::Domain::SpellId id) { return ptr->GetSpell(id); };
-			getAllSpellIds_ = [ptr]() { return ptr->GetAllSpellIds(); };
-			spellExists_ = [ptr](LB::Domain::SpellId id) { return ptr->SpellExists(id); };
-			getSpellsBySchool_ = [ptr](LB::Domain::SpellSchool school) { return ptr->GetSpellsBySchool(school); };
-			getSchoolDescription_ = [ptr](LB::Domain::SpellSchool school) { return ptr->GetSchoolDescription(school); };
-			getSpellsByClass_ = [ptr](LB::Domain::CharacterClass cls) { return ptr->GetSpellsByClass(cls); };
-			getSpellsByLevel_ = [ptr](int32_t level) { return ptr->GetSpellsByLevel(level); };
-			getSpellsByCategory_ = [ptr](LB::Domain::SpellCategory cat) { return ptr->GetSpellsByCategory(cat); };
-			getSpellsByManaCost_ = [ptr](int32_t min, int32_t max) { return ptr->GetSpellsByManaCost(min, max); };
-			getSpellsByCastTime_ = [ptr](float maxTime) { return ptr->GetSpellsByCastTime(maxTime); };
-
-			// Store deleter for cleanup
-			cleanup_ = std::shared_ptr<void>(ptr, deleter);
-		}
-
-		// Repository interface - exactly like Microsoft Proxy would provide
-		std::optional<LB::Domain::Spell> GetSpell(LB::Domain::SpellId id) const { return getSpell_(id); }
-		std::vector<LB::Domain::SpellId> GetAllSpellIds() const { return getAllSpellIds_(); }
-		bool SpellExists(LB::Domain::SpellId id) const { return spellExists_(id); }
-		std::vector<LB::Domain::SpellId> GetSpellsBySchool(LB::Domain::SpellSchool school) const { return getSpellsBySchool_(school); }
-		std::optional<LB::String> GetSchoolDescription(LB::Domain::SpellSchool school) const { return getSchoolDescription_(school); }
-		std::vector<LB::Domain::SpellId> GetSpellsByClass(LB::Domain::CharacterClass characterClass) const { return getSpellsByClass_(characterClass); }
-		std::vector<LB::Domain::SpellId> GetSpellsByLevel(int32_t level) const { return getSpellsByLevel_(level); }
-		std::vector<LB::Domain::SpellId> GetSpellsByCategory(LB::Domain::SpellCategory category) const { return getSpellsByCategory_(category); }
-		std::vector<LB::Domain::SpellId> GetSpellsByManaCost(int32_t minCost, int32_t maxCost) const { return getSpellsByManaCost_(minCost, maxCost); }
-		std::vector<LB::Domain::SpellId> GetSpellsByCastTime(float maxCastTime) const { return getSpellsByCastTime_(maxCastTime); }
-
-	private:
-		std::shared_ptr<void> cleanup_; // For automatic memory management
-	};
+	struct SpellRepositoryFacade : pro::facade_builder
+		::add_convention<MemGetSpell, std::optional<LB::Domain::Spell>(LB::Domain::SpellId) const>
+		::add_convention<MemGetAllSpellIds, std::vector<LB::Domain::SpellId>() const>
+		::add_convention<MemSpellExists, bool(LB::Domain::SpellId) const>
+		::add_convention<MemGetSpellsBySchool, std::vector<LB::Domain::SpellId>(LB::Domain::SpellSchool) const>
+		::add_convention<MemGetSchoolDescription, std::optional<LB::String>(LB::Domain::SpellSchool) const>
+		::add_convention<MemGetSpellsByClass, std::vector<LB::Domain::SpellId>(LB::Domain::CharacterClass) const>
+		::add_convention<MemGetSpellsByLevel, std::vector<LB::Domain::SpellId>(int32_t) const>
+		::add_convention<MemGetSpellsByCategory, std::vector<LB::Domain::SpellId>(LB::Domain::SpellCategory) const>
+		::add_convention<MemGetSpellsByManaCost, std::vector<LB::Domain::SpellId>(int32_t, int32_t) const>
+		::add_convention<MemGetSpellsByCastTime, std::vector<LB::Domain::SpellId>(float) const>
+		::support_copy<pro::constraint_level::nontrivial>
+		::build {};
 
 	/// <summary>
-	/// Factory functions for creating repository proxies
-	/// These enable duck typing - any implementation with matching signatures works
+	/// Type alias for spell repository using Microsoft Proxy 4.0
+	/// This provides duck typing with zero-overhead abstractions
+	/// </summary>
+	using SpellRepository = pro::proxy<SpellRepositoryFacade>;
+
+	/// <summary>
+	/// Factory functions for creating repository proxies using Microsoft Proxy
 	/// </summary>
 	namespace Factory {
 
 		/// <summary>
 		/// Create spell repository proxy from any implementation
 		/// Duck typing - no inheritance required!
+		/// Uses Microsoft Proxy 4.0 for optimal performance and memory management
 		/// </summary>
 		template<typename T>
-		SpellRepositoryProxy MakeSpellRepository(T&& impl) {
-			return SpellRepositoryProxy(std::forward<T>(impl));
+		SpellRepository MakeSpellRepository(T&& impl) {
+			return pro::make_proxy<SpellRepositoryFacade>(std::forward<T>(impl));
+		}
+
+		/// <summary>
+		/// Create spell repository with custom allocator
+		/// </summary>
+		template<typename Allocator, typename T>
+		SpellRepository MakeSpellRepositoryWithAllocator(const Allocator& alloc, T&& impl) {
+			return pro::allocate_proxy<SpellRepositoryFacade>(alloc, std::forward<T>(impl));
+		}
+
+		/// <summary>
+		/// Create shared spell repository
+		/// </summary>
+		template<typename T>
+		SpellRepository MakeSharedSpellRepository(T&& impl) {
+			return pro::make_proxy_shared<SpellRepositoryFacade>(std::forward<T>(impl));
 		}
 
 	} // namespace Factory
 
 } // namespace LB::Repositories
-
-/// <summary>
-/// Example concrete implementations demonstrating the proxy pattern
-/// Shows duck typing and zero-coupling architecture
-/// </summary>
-export namespace LB::Repositories::Examples {
-
-	/// <summary>
-	/// Example concrete implementation that works with the proxy
-	/// Notice: No inheritance from any interface required!
-	/// Our proxy uses duck typing to adapt this automatically
-	/// </summary>
-	class ConcreteSpellRepository {
-	private:
-		std::vector<LB::Domain::Spell> spells_;
-
-	public:
-		// Just implement methods with right signatures - no inheritance needed!
-
-		std::optional<LB::Domain::Spell> GetSpell(LB::Domain::SpellId id) const {
-			for (const auto& spell : spells_) {
-				if (spell.GetId() == id) return spell;
-			}
-			return std::nullopt;
-		}
-
-		std::vector<LB::Domain::SpellId> GetAllSpellIds() const {
-			std::vector<LB::Domain::SpellId> ids;
-			for (const auto& spell : spells_) ids.push_back(spell.GetId());
-			return ids;
-		}
-
-		bool SpellExists(LB::Domain::SpellId id) const {
-			return GetSpell(id).has_value();
-		}
-
-		std::vector<LB::Domain::SpellId> GetSpellsBySchool(LB::Domain::SpellSchool school) const {
-			std::vector<LB::Domain::SpellId> ids;
-			for (const auto& spell : spells_) {
-				if (spell.GetSchool() == school) ids.push_back(spell.GetId());
-			}
-			return ids;
-		}
-
-		std::optional<LB::String> GetSchoolDescription(LB::Domain::SpellSchool school) const {
-			return LB::String(LB::Domain::ToString(school));
-		}
-
-		std::vector<LB::Domain::SpellId> GetSpellsByClass(LB::Domain::CharacterClass characterClass) const {
-			std::vector<LB::Domain::SpellId> ids;
-			for (const auto& spell : spells_) {
-				if (spell.CanBeCastBy(characterClass)) ids.push_back(spell.GetId());
-			}
-			return ids;
-		}
-
-		std::vector<LB::Domain::SpellId> GetSpellsByLevel(int32_t spellLevel) const {
-			std::vector<LB::Domain::SpellId> ids;
-			for (const auto& spell : spells_) {
-				if (spell.GetLevel() == spellLevel) ids.push_back(spell.GetId());
-			}
-			return ids;
-		}
-
-		std::vector<LB::Domain::SpellId> GetSpellsByCategory(LB::Domain::SpellCategory category) const {
-			std::vector<LB::Domain::SpellId> ids;
-			for (const auto& spell : spells_) {
-				const auto& categories = spell.GetCategories();
-				if (std::find(categories.begin(), categories.end(), category) != categories.end()) {
-					ids.push_back(spell.GetId());
-				}
-			}
-			return ids;
-		}
-
-		std::vector<LB::Domain::SpellId> GetSpellsByManaCost(int32_t minCost, int32_t maxCost) const {
-			std::vector<LB::Domain::SpellId> ids;
-			for (const auto& spell : spells_) {
-				int32_t cost = spell.GetManaCost();
-				if (cost >= minCost && cost <= maxCost) ids.push_back(spell.GetId());
-			}
-			return ids;
-		}
-
-		std::vector<LB::Domain::SpellId> GetSpellsByCastTime(float maxCastTime) const {
-			std::vector<LB::Domain::SpellId> ids;
-			for (const auto& spell : spells_) {
-				if (spell.GetCastTimeSeconds() <= maxCastTime) ids.push_back(spell.GetId());
-			}
-			return ids;
-		}
-	}; // End of ConcreteSpellRepository class
-
-	/// <summary>
-	/// Example usage putting it all together
-	/// Demonstrates the power of the proxy pattern
-	/// </summary>
-	inline void ExampleUsage() {
-		// Create concrete implementation (no inheritance!)
-		ConcreteSpellRepository concreteSpells;
-
-		// Create type-erased proxy using duck typing
-		auto spellRepo = LB::Repositories::Factory::MakeSpellRepository(std::move(concreteSpells));
-
-		// Use the proxy - full type safety, zero coupling, maximum flexibility
-		auto allSpells = spellRepo.GetAllSpellIds();
-		auto fireSpells = spellRepo.GetSpellsBySchool(LB::Domain::SpellSchool::Evocation);
-		auto quickSpells = spellRepo.GetSpellsByCastTime(1.0f);
-
-		// Zero coupling achieved!
-	}
-
-} // namespace LB::Repositories::Examples
