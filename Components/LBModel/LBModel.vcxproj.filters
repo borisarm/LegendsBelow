@@ -1,95 +1,15 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Entities">
-      <UniqueIdentifier>{9d242280-ddf0-4771-b499-6593b5d005da}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Enums">
-      <UniqueIdentifier>{c211d87a-fc44-4124-acec-6276201f9390}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Interfaces">
-      <UniqueIdentifier>{6ae457d2-e6aa-4aa4-9b3e-b7f37bc487c8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Common">
-      <UniqueIdentifier>{358a62a9-18bb-4ab2-b58a-eff3b5214119}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ValueObjects">
-      <UniqueIdentifier>{4d373a28-c3aa-49fb-bf06-ce688b59a4fb}</UniqueIdentifier>
-    </Filter>
+    <None Include="vcpkg.json" />
+    <None Include="C++20-Module-Phase1-Complete.md" />
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Entities\Character.h">
-      <Filter>Entities</Filter>
-    </ClInclude>
-    <ClInclude Include="Entities\Entity.h">
-      <Filter>Entities</Filter>
-    </ClInclude>
-    <ClInclude Include="Enums\CharacterClass.h">
-      <Filter>Enums</Filter>
-    </ClInclude>
-    <ClInclude Include="Enums\DamageType.h">
-      <Filter>Enums</Filter>
-    </ClInclude>
-    <ClInclude Include="Enums\SpellSchool.h">
-      <Filter>Enums</Filter>
-    </ClInclude>
-    <ClInclude Include="Enums\WeaponType.h">
-      <Filter>Enums</Filter>
-    </ClInclude>
-    <ClInclude Include="Interfaces\IAssetLoader.h">
-      <Filter>Interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Interfaces\ICharacterRepository.h">
-      <Filter>Interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Interfaces\ISpellRepository.h">
-      <Filter>Interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Interfaces\IWeaponRepository.h">
-      <Filter>Interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="ValueObjects\Attributes.h">
-      <Filter>ValueObjects</Filter>
-    </ClInclude>
-    <ClInclude Include="ValueObjects\Dice.h">
-      <Filter>ValueObjects</Filter>
-    </ClInclude>
-    <ClInclude Include="ValueObjects\Position.h">
-      <Filter>ValueObjects</Filter>
-    </ClInclude>
-    <ClInclude Include="ValueObjects\StatusEffect.h">
-      <Filter>ValueObjects</Filter>
-    </ClInclude>
-    <ClInclude Include="Common\Types.h">
-      <Filter>Common</Filter>
-    </ClInclude>
-    <ClInclude Include="Entities\Armor.h">
-      <Filter>Entities</Filter>
-    </ClInclude>
-    <ClInclude Include="Entities\Spell.h">
-      <Filter>Entities</Filter>
-    </ClInclude>
-    <ClInclude Include="Entities\Weapon.h">
-      <Filter>Entities</Filter>
-    </ClInclude>
-    <ClInclude Include="Entities\Item.h">
-      <Filter>Entities</Filter>
-    </ClInclude>
-    <ClInclude Include="Enums\ArmorCategory.h">
-      <Filter>Enums</Filter>
-    </ClInclude>
-    <ClInclude Include="Enums\EquipmentSlot.h">
-      <Filter>Enums</Filter>
-    </ClInclude>
-    <ClInclude Include="Enums\SpellCategory.h">
-      <Filter>Enums</Filter>
-    </ClInclude>
-    <ClInclude Include="Interfaces\IArmorRepository.h">
-      <Filter>Interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Interfaces\IItemRepository.h">
-      <Filter>Interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Interfaces\IEntityRepository.h" />
+    <ClCompile Include="LB.Common.ixx" />
+    <ClCompile Include="LB.Enums.ixx" />
+    <ClCompile Include="LB.Domain.ixx" />
+    <ClCompile Include="LB.ValueObjects.ixx" />
+    <ClCompile Include="LB.Entities.ixx" />
   </ItemGroup>
 </Project>
