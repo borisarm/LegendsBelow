@@ -147,12 +147,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="add-partitions.ps1" />
     <None Include="C++20-Module-Partitions-Success.md" />
     <None Include="C++20-Module-Phase1-Complete.md" />
     <None Include="README.md" />
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Armor.ixx" />
     <ClCompile Include="Character.ixx" />
     <ClCompile Include="Entity.ixx" />
     <ClCompile Include="LB.Common.ixx" />
@@ -161,6 +163,8 @@
     <ClCompile Include="LB.Enums.ixx" />
     <ClCompile Include="LB.ValueObjects.ixx" />
     <ClCompile Include="Spell.ixx" />
+    <ClCompile Include="StatusEffect.ixx" />
+    <ClCompile Include="Weapon.ixx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

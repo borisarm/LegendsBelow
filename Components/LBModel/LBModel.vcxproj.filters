@@ -5,6 +5,7 @@
     <None Include="C++20-Module-Phase1-Complete.md" />
     <None Include="README.md" />
     <None Include="C++20-Module-Partitions-Success.md" />
+    <None Include="add-partitions.ps1" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LB.Common.ixx" />
@@ -15,5 +16,8 @@
     <ClCompile Include="Entity.ixx" />
     <ClCompile Include="Spell.ixx" />
     <ClCompile Include="Character.ixx" />
+    <ClCompile Include="Weapon.ixx" />
+    <ClCompile Include="Armor.ixx" />
+    <ClCompile Include="StatusEffect.ixx" />
   </ItemGroup>
 </Project>
