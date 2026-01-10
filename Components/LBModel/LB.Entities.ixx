@@ -10,3 +10,6 @@ import std;
 export import :Entity;
 export import :Character;
 export import :Spell;
+export import :Weapon;
+export import :Armor;
+export import :StatusEffect;
