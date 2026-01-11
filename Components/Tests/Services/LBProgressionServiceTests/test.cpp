@@ -1,10 +1,9 @@
 #include "pch.h"
 
 import LB.ProgressionService;
-import LB.Domain;
 
 using namespace LB::Services::Progression;
-using namespace LB::Domain;
+
 
 // ============================================================================
 // Experience Curve Tests
@@ -445,7 +444,7 @@ TEST(ProgressionServiceTests, SuggestImprovements_NearMilestone_MentionsAbilitie
     // Should mention upcoming abilities at level 2
     bool mentionsLevel = false;
     for (const auto& suggestion : suggestions) {
-        if (suggestion.find("level 2") != LB::String::npos) {
+        if (suggestion.find("level 2") != std::string::npos) {
             mentionsLevel = true;
             break;
         }
