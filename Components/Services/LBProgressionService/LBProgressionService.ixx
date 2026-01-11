@@ -1,7 +1,9 @@
 // LB.ProgressionService.ixx - Character progression service using C++20 modules
 export module LB.ProgressionService;
 
-import LB.Domain;
+// Import only required domains
+import LB.Core;
+import LB.Character;
 import std;
 using namespace std;
 
@@ -11,6 +13,10 @@ using namespace std;
 /// Follows D&D-inspired progression with modern game balance
 /// </summary>
 export namespace LB::Services::Progression {
+    // Re-export domain types for service convenience
+    using LB::Character::CharacterClass;
+    using LB::Attributes;
+    using LB::String;
 
     /// <summary>
     /// Experience curve configuration

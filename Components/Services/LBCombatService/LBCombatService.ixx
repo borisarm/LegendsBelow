@@ -1,7 +1,10 @@
 // LB.CombatService.ixx - Combat mechanics service using C++20 modules
 export module LB.CombatService;
 
-import LB.Domain;
+// Import only required domains
+import LB.Core;
+import LB.Character;
+import LB.Combat;
 import std;
 
 using namespace std;
@@ -12,6 +15,11 @@ using namespace std;
 /// Follows D&D-inspired combat mechanics with modern game design
 /// </summary>
 export namespace LB::Services::Combat {
+    // Re-export domain types for service convenience
+    using LB::Combat::DamageType;
+    using LB::Character::CharacterClass;
+    using LB::Character::CharacterId;
+    using LB::Attributes;
 
     /// <summary>
     /// Result of an attack roll

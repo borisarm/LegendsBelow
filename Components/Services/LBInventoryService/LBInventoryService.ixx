@@ -1,7 +1,11 @@
 // LB.InventoryService.ixx - Inventory and equipment management service using C++20 modules
 export module LB.InventoryService;
 
-import LB.Domain;
+// Import only required domains
+import LB.Core;
+import LB.Character;
+import LB.Combat;
+import LB.Inventory;
 import std;
 
 /// <summary>
@@ -10,6 +14,16 @@ import std;
 /// Integrates with character service for equipment bonuses
 /// </summary>
 export namespace LB::Services::Inventory {
+    // Re-export domain types for service convenience
+    using LB::Character::CharacterId;
+    using LB::Character::ItemId;
+    using LB::Combat::EquipmentSlot;
+    using LB::Combat::WeaponType;
+    using LB::Combat::ArmorCategory;
+    using LB::Inventory::InventoryItem;
+    using LB::Inventory::Equipment;
+    using LB::Inventory::EquippedItems;
+    using LB::Inventory::InventoryOperationResult;
 
     /// <summary>
     /// Item instance in inventory

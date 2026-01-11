@@ -6,9 +6,9 @@ import std;
 
 export namespace LB {
     // Common ID types
-    using Id = std::int32_t;
-    constexpr Id InvalidId{ std::numeric_limits<Id>::max() };
+    export using Id = std::int32_t;
+    export constexpr Id InvalidId{ std::numeric_limits<Id>::max() };
     
     // Common string type 
-    using String = std::string;
+    export using String = std::string;
 }
