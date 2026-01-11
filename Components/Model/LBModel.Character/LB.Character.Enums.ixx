@@ -3,6 +3,8 @@ export module LB.Character.Enums;
 
 import std;
 
+using namespace std;
+
 export namespace LB::Character {
 
     /// <summary>

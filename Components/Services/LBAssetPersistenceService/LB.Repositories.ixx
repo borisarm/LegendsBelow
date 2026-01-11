@@ -2,11 +2,20 @@
 // Note: This belongs in the Services layer, not the Domain model
 export module LB.Repositories;
 
-import LB.Domain; // Import the pure domain model
+// Import only required domains
+import LB.Core;
+import LB.Character;
+import LB.Combat;
 import std;
 import <proxy/proxy.h>; // Microsoft Proxy 4.0
 
 export namespace LB::Repositories {
+	// Re-export domain types for convenience
+	using LB::Character::SpellId;
+	using LB::Character::CharacterClass;
+	using LB::Combat::SpellSchool;
+	using LB::Combat::SpellCategory;
+	using LB::String;
 
 	// Define the repository facade using Microsoft Proxy 4.0
 	PRO_DEF_MEM_DISPATCH(MemGetSpell, GetSpell);
@@ -25,16 +34,16 @@ export namespace LB::Repositories {
 	/// Any class with matching method signatures can be used with duck typing
 	/// </summary>
 	struct SpellRepositoryFacade : pro::facade_builder
-		::add_convention<MemGetSpell, std::optional<LB::Domain::Spell>(LB::Domain::SpellId) const>
-		::add_convention<MemGetAllSpellIds, std::vector<LB::Domain::SpellId>() const>
-		::add_convention<MemSpellExists, bool(LB::Domain::SpellId) const>
-		::add_convention<MemGetSpellsBySchool, std::vector<LB::Domain::SpellId>(LB::Domain::SpellSchool) const>
-		::add_convention<MemGetSchoolDescription, std::optional<LB::String>(LB::Domain::SpellSchool) const>
-		::add_convention<MemGetSpellsByClass, std::vector<LB::Domain::SpellId>(LB::Domain::CharacterClass) const>
-		::add_convention<MemGetSpellsByLevel, std::vector<LB::Domain::SpellId>(int32_t) const>
-		::add_convention<MemGetSpellsByCategory, std::vector<LB::Domain::SpellId>(LB::Domain::SpellCategory) const>
-		::add_convention<MemGetSpellsByManaCost, std::vector<LB::Domain::SpellId>(int32_t, int32_t) const>
-		::add_convention<MemGetSpellsByCastTime, std::vector<LB::Domain::SpellId>(float) const>
+		::add_convention<MemGetSpell, std::optional<LB::Character::Spell>(SpellId) const>
+		::add_convention<MemGetAllSpellIds, std::vector<SpellId>() const>
+		::add_convention<MemSpellExists, bool(SpellId) const>
+		::add_convention<MemGetSpellsBySchool, std::vector<SpellId>(SpellSchool) const>
+		::add_convention<MemGetSchoolDescription, std::optional<String>(SpellSchool) const>
+		::add_convention<MemGetSpellsByClass, std::vector<SpellId>(CharacterClass) const>
+		::add_convention<MemGetSpellsByLevel, std::vector<SpellId>(int32_t) const>
+		::add_convention<MemGetSpellsByCategory, std::vector<SpellId>(SpellCategory) const>
+		::add_convention<MemGetSpellsByManaCost, std::vector<SpellId>(int32_t, int32_t) const>
+		::add_convention<MemGetSpellsByCastTime, std::vector<SpellId>(float) const>
 		::support_copy<pro::constraint_level::nontrivial>
 		::build {};
 

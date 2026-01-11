@@ -4,6 +4,8 @@ export module LB.CoreValueObjects;
 import LB.Common;
 import std;
 
+using namespace std;
+
 export namespace LB {
     /// <summary>
     /// 2D Position for grid-based movement

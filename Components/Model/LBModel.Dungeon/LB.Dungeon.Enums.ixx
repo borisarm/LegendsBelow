@@ -3,6 +3,7 @@ export module LB.Dungeon.Enums;
 
 import std;
 
+using namespace std;
 export namespace LB::Dungeon {
 
     /// <summary>

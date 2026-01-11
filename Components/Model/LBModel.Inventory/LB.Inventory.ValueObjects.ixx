@@ -4,6 +4,7 @@ export module LB.Inventory.ValueObjects;
 import LB.Core;
 import std;
 
+using namespace std;
 export namespace LB::Inventory {
 
     /// <summary>
