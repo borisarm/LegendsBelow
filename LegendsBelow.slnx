@@ -17,7 +17,25 @@
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
     </Project>
-    <Project Path="Components/LBModel/LBModel.vcxproj" Id="6dc099fe-2d65-40e1-ac81-9ea734b30ba1">
+  </Folder>
+  <Folder Name="/Components/MOdel/">
+    <Project Path="Components/Model/LBModel.Character/LBModel.Character.vcxproj" Id="fbb9b480-2be7-44ac-8d85-7431db9b6959">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Model/LBModel.Combat/LBModel.Combat.vcxproj" Id="c259bb9e-7a4a-44c2-9a54-aefffa5228e3">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Model/LBModel.Core/LBModel.Core.vcxproj" Id="990b9ac5-23ad-45d1-b267-5bef0a4c6ebf">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Model/LBModel.Dungeon/LBModel.Dungeon.vcxproj" Id="4c51a10e-e6dd-4b60-9c5b-b5fc1d27c6b6">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Model/LBModel.Inventory/LBModel.Inventory.vcxproj" Id="9a682277-90f2-4283-8946-08694c37fc55">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
     </Project>
@@ -76,6 +94,28 @@
       <Platform Project="x64" />
     </Project>
     <Project Path="Components/Tests/LBModelTests/LBModelTests.vcxproj" Id="a406bb42-df25-4233-aa86-fa0c2c2ef70e">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/Components/Tests/Model/">
+    <Project Path="Components/Tests/Model/LBModel.Character.Tests/LBModel.Character.Tests.vcxproj" Id="e9c3f038-2d25-41fc-ab60-fab3b6924ce9">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Model/LBModel.Combat.Tests/LBModel.Combat.Tests.vcxproj" Id="aac8c8f9-5cc9-4100-83a3-b7d8635f8a93">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Model/LBModel.Core.Tests/LBModel.Core.Tests.vcxproj" Id="07f817e0-1b9d-4536-a921-6d526b98d2bf">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Model/LBModel.Dungeon.Tests/LBModel.Dungeon.Tests.vcxproj" Id="5b54c547-6c79-4e6c-8fab-53136abe28f5">
+      <BuildType Solution="Profile|*" Project="Release" />
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="Components/Tests/Model/LBModel.Inventory.Tests/LBModel.Inventory.Tests.vcxproj" Id="6821119f-c2b0-47e5-9efc-72d8dcaefdee">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
     </Project>
