@@ -2,6 +2,7 @@
 export module LB.Combat.Enums;
 
 import std;
+using namespace std;
 
 export namespace LB::Combat {
 

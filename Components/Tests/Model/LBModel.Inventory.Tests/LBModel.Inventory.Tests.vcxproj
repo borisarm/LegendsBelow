@@ -110,6 +110,20 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Model\LBModel.Character\LBModel.Character.vcxproj">
+      <Project>{fbb9b480-2be7-44ac-8d85-7431db9b6959}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Model\LBModel.Combat\LBModel.Combat.vcxproj">
+      <Project>{c259bb9e-7a4a-44c2-9a54-aefffa5228e3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Model\LBModel.Core\LBModel.Core.vcxproj">
+      <Project>{990b9ac5-23ad-45d1-b267-5bef0a4c6ebf}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Model\LBModel.Inventory\LBModel.Inventory.vcxproj">
+      <Project>{9a682277-90f2-4283-8946-08694c37fc55}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="..\..\..\..\packages\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.1.8.1.8\build\native\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.targets" Condition="Exists('..\..\..\..\packages\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.1.8.1.8\build\native\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.targets')" />
