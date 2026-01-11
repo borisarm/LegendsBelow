@@ -13,8 +13,12 @@ import std;
 /// </summary>
 export namespace LB::Services::Character {
     // Re-export domain types for service convenience
+	using LB::Character::Character;
     using LB::Character::CharacterClass;
     using LB::Character::CharacterId;
+	using LB::Character::WeaponId;
+	using LB::Character::ArmorId;
+
     using LB::Attributes;
     using LB::Position;
 
@@ -24,14 +28,14 @@ export namespace LB::Services::Character {
     /// </summary>
     struct CharacterCreationRequest {
         LB::String name;
-        LB::Domain::CharacterClass characterClass;
-        LB::Domain::Attributes baseAttributes;
-        LB::Domain::Position startingPosition{0, 0};
+        CharacterClass characterClass;
+        Attributes baseAttributes;
+        Position startingPosition{0, 0};
 
         CharacterCreationRequest(
             const LB::String& name, 
-            LB::Domain::CharacterClass charClass,
-            const LB::Domain::Attributes& attributes)
+            CharacterClass charClass,
+            const Attributes& attributes)
             : name(name), characterClass(charClass), baseAttributes(attributes) {}
     };
 
@@ -42,7 +46,7 @@ export namespace LB::Services::Character {
     struct CharacterProgressionResult {
         bool levelIncreased{false};
         int32_t newLevel{1};
-        LB::Domain::Attributes attributeGains{};
+        Attributes attributeGains{};
         int32_t hitPointIncrease{0};
         int32_t manaPointIncrease{0};
         std::vector<LB::String> unlockedAbilities;
@@ -57,18 +61,18 @@ export namespace LB::Services::Character {
     /// Represents the current state and condition of a character
     /// </summary>
     struct CharacterStatus {
-        LB::Domain::CharacterId id;
+        CharacterId id;
         LB::String name;
-        LB::Domain::CharacterClass characterClass;
+        CharacterClass characterClass;
         int32_t level;
         int32_t currentExperience;
         int32_t experienceToNextLevel;
-        LB::Domain::Attributes currentAttributes;
+        Attributes currentAttributes;
         int32_t currentHitPoints;
         int32_t maxHitPoints;
         int32_t currentManaPoints;
         int32_t maxManaPoints;
-        LB::Domain::Position position;
+        Position position;
         bool isAlive;
 
         // Derived properties
@@ -95,7 +99,7 @@ export namespace LB::Services::Character {
         /// Create a new character with specified parameters
         /// Handles class-specific starting stats and abilities
         /// </summary>
-        std::optional<LB::Domain::CharacterId> CreateCharacter(const CharacterCreationRequest& request) {
+        std::optional<CharacterId> CreateCharacter(const CharacterCreationRequest& request) {
             // Validate input
             if (request.name.empty()) {
                 return std::nullopt; // Invalid name
@@ -112,7 +116,7 @@ export namespace LB::Services::Character {
             auto startingMP = calculateBaseManaPoints(request.characterClass, adjustedAttributes);
 
             // Create character domain entity
-            LB::Domain::Character character(
+            Character character(
                 characterId,
                 request.name,
                 request.characterClass,
@@ -138,7 +142,7 @@ export namespace LB::Services::Character {
         /// Get current status of a character
         /// Returns comprehensive character information
         /// </summary>
-        std::optional<CharacterStatus> GetCharacterStatus(LB::Domain::CharacterId id) const {
+        std::optional<CharacterStatus> GetCharacterStatus(CharacterId id) const {
             auto it = characters_.find(id);
             if (it == characters_.end()) {
                 return std::nullopt;
@@ -168,7 +172,7 @@ export namespace LB::Services::Character {
         /// Award experience points and handle potential level-up
         /// Returns progression information if character levels up
         /// </summary>
-        std::optional<CharacterProgressionResult> AwardExperience(LB::Domain::CharacterId id, int32_t experiencePoints) {
+        std::optional<CharacterProgressionResult> AwardExperience(CharacterId id, int32_t experiencePoints) {
             auto it = characters_.find(id);
             if (it == characters_.end() || experiencePoints <= 0) {
                 return std::nullopt;
@@ -193,7 +197,7 @@ export namespace LB::Services::Character {
 
                 // Apply attribute gains
                 auto currentAttribs = character.GetAttributes();
-                auto newAttributes = LB::Domain::Attributes{
+                auto newAttributes = Attributes{
                     currentAttribs.strength + result.attributeGains.strength,
                     currentAttribs.dexterity + result.attributeGains.dexterity,
                     currentAttribs.constitution + result.attributeGains.constitution,
@@ -227,7 +231,7 @@ export namespace LB::Services::Character {
         /// Move character to new position
         /// Validates movement rules and updates position
         /// </summary>
-        bool MoveCharacter(LB::Domain::CharacterId id, const LB::Domain::Position& newPosition) {
+        bool MoveCharacter(CharacterId id, const Position& newPosition) {
             auto it = characters_.find(id);
             if (it == characters_.end()) {
                 return false;
@@ -252,7 +256,7 @@ export namespace LB::Services::Character {
         /// Apply damage to character
         /// Handles damage reduction and death state
         /// </summary>
-        bool DamageCharacter(LB::Domain::CharacterId id, int32_t damage, float damageReduction = 0.0f) {
+        bool DamageCharacter(CharacterId id, int32_t damage, float damageReduction = 0.0f) {
             auto it = characters_.find(id);
             if (it == characters_.end() || damage <= 0) {
                 return false;
@@ -274,7 +278,7 @@ export namespace LB::Services::Character {
         /// Heal character by specified amount
         /// Cannot exceed maximum hit points
         /// </summary>
-        int32_t HealCharacter(LB::Domain::CharacterId id, int32_t healAmount) {
+        int32_t HealCharacter(CharacterId id, int32_t healAmount) {
             auto it = characters_.find(id);
             if (it == characters_.end() || healAmount <= 0) {
                 return 0;
@@ -296,8 +300,8 @@ export namespace LB::Services::Character {
         /// Get all managed characters
         /// Returns character IDs for iteration
         /// </summary>
-        std::vector<LB::Domain::CharacterId> GetAllCharacterIds() const {
-            std::vector<LB::Domain::CharacterId> ids;
+        std::vector<CharacterId> GetAllCharacterIds() const {
+            std::vector<CharacterId> ids;
             ids.reserve(characters_.size());
 
             for (const auto& [id, character] : characters_) {
@@ -311,7 +315,7 @@ export namespace LB::Services::Character {
         /// Get character entity by ID
         /// Returns const reference to character for read-only operations
         /// </summary>
-        std::optional<std::reference_wrapper<const LB::Domain::Character>> GetCharacter(LB::Domain::CharacterId id) const {
+        std::optional<std::reference_wrapper<const Character>> GetCharacter(CharacterId id) const {
             auto it = characters_.find(id);
             if (it == characters_.end()) {
                 return std::nullopt;
@@ -323,7 +327,7 @@ export namespace LB::Services::Character {
         /// Rest character to restore health and mana
         /// Simulates short or long rest mechanics
         /// </summary>
-        bool RestCharacter(LB::Domain::CharacterId id, bool fullRest = true) {
+        bool RestCharacter(CharacterId id, bool fullRest = true) {
             auto it = characters_.find(id);
             if (it == characters_.end()) {
                 return false;
@@ -353,7 +357,7 @@ export namespace LB::Services::Character {
         /// Consume mana for spell casting or abilities
         /// Returns true if character had sufficient mana
         /// </summary>
-        bool ConsumeMana(LB::Domain::CharacterId id, int32_t manaCost) {
+        bool ConsumeMana(CharacterId id, int32_t manaCost) {
             auto it = characters_.find(id);
             if (it == characters_.end() || manaCost <= 0) {
                 return false;
@@ -372,7 +376,7 @@ export namespace LB::Services::Character {
         /// Restore mana to character
         /// Returns actual amount restored
         /// </summary>
-        int32_t RestoreMana(LB::Domain::CharacterId id, int32_t manaAmount) {
+        int32_t RestoreMana(CharacterId id, int32_t manaAmount) {
             auto it = characters_.find(id);
             if (it == characters_.end() || manaAmount <= 0) {
                 return 0;
@@ -394,14 +398,14 @@ export namespace LB::Services::Character {
         /// Remove character from service management
         /// Returns true if character was found and removed
         /// </summary>
-        bool RemoveCharacter(LB::Domain::CharacterId id) {
+        bool RemoveCharacter(CharacterId id) {
             return characters_.erase(id) > 0;
         }
 
         /// <summary>
         /// Check if character exists in service
         /// </summary>
-        bool HasCharacter(LB::Domain::CharacterId id) const {
+        bool HasCharacter(CharacterId id) const {
             return characters_.contains(id);
         }
 
@@ -415,8 +419,8 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Get all characters of a specific class
         /// </summary>
-        std::vector<LB::Domain::CharacterId> GetCharactersByClass(LB::Domain::CharacterClass charClass) const {
-            std::vector<LB::Domain::CharacterId> ids;
+        std::vector<CharacterId> GetCharactersByClass(CharacterClass charClass) const {
+            std::vector<CharacterId> ids;
 
             for (const auto& [id, character] : characters_) {
                 if (character.GetCharacterClass() == charClass) {
@@ -430,8 +434,8 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Get all alive characters
         /// </summary>
-        std::vector<LB::Domain::CharacterId> GetAliveCharacters() const {
-            std::vector<LB::Domain::CharacterId> ids;
+        std::vector<CharacterId> GetAliveCharacters() const {
+            std::vector<CharacterId> ids;
 
             for (const auto& [id, character] : characters_) {
                 if (character.IsAlive()) {
@@ -445,8 +449,8 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Get all characters in a level range
         /// </summary>
-        std::vector<LB::Domain::CharacterId> GetCharactersByLevelRange(int32_t minLevel, int32_t maxLevel) const {
-            std::vector<LB::Domain::CharacterId> ids;
+        std::vector<CharacterId> GetCharactersByLevelRange(int32_t minLevel, int32_t maxLevel) const {
+            std::vector<CharacterId> ids;
 
             for (const auto& [id, character] : characters_) {
                 auto level = character.GetLevel();
@@ -462,7 +466,7 @@ export namespace LB::Services::Character {
         /// Equip weapon to character
         /// Placeholder for equipment system integration
         /// </summary>
-        bool EquipWeapon(LB::Domain::CharacterId characterId, LB::Domain::WeaponId weaponId) {
+        bool EquipWeapon(CharacterId characterId, WeaponId weaponId) {
             auto it = characters_.find(characterId);
             if (it == characters_.end()) {
                 return false;
@@ -477,7 +481,7 @@ export namespace LB::Services::Character {
         /// Equip armor to character
         /// Placeholder for equipment system integration
         /// </summary>
-        bool EquipArmor(LB::Domain::CharacterId characterId, LB::Domain::ArmorId armorId) {
+        bool EquipArmor(CharacterId characterId, ArmorId armorId) {
             auto it = characters_.find(characterId);
             if (it == characters_.end()) {
                 return false;
@@ -491,7 +495,7 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Learn new ability for character
         /// </summary>
-        bool LearnAbility(LB::Domain::CharacterId id, const LB::String& abilityName) {
+        bool LearnAbility(CharacterId id, const LB::String& abilityName) {
             auto it = characters_.find(id);
             if (it == characters_.end() || abilityName.empty()) {
                 return false;
@@ -505,7 +509,7 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Revive a dead character with specified HP percentage
         /// </summary>
-        bool ReviveCharacter(LB::Domain::CharacterId id, float healthPercentage = 0.5f) {
+        bool ReviveCharacter(CharacterId id, float healthPercentage = 0.5f) {
             auto it = characters_.find(id);
             if (it == characters_.end()) {
                 return false;
@@ -533,55 +537,55 @@ export namespace LB::Services::Character {
         }
 
     private:
-        std::unordered_map<LB::Domain::CharacterId, LB::Domain::Character> characters_;
-        LB::Domain::CharacterId nextId_{1};
+        std::unordered_map<CharacterId, Character> characters_;
+        CharacterId nextId_{1};
 
-        LB::Domain::CharacterId generateNextId() {
+        CharacterId generateNextId() {
             return nextId_++;
         }
 
-        LB::Domain::Attributes applyClassModifiers(LB::Domain::CharacterClass charClass, const LB::Domain::Attributes& base) const {
+        Attributes applyClassModifiers(CharacterClass charClass, const Attributes& base) const {
             // Apply class-specific attribute modifiers
             switch (charClass) {
-                case LB::Domain::CharacterClass::Warrior:
-                    return LB::Domain::Attributes{base.strength + 2, base.dexterity, base.constitution + 1, base.intelligence, base.wisdom, base.charisma};
-                case LB::Domain::CharacterClass::Rogue:
-                    return LB::Domain::Attributes{base.strength, base.dexterity + 2, base.constitution, base.intelligence, base.wisdom, base.charisma + 1};
-                case LB::Domain::CharacterClass::Mage:
-                    return LB::Domain::Attributes{base.strength, base.dexterity, base.constitution, base.intelligence + 2, base.wisdom + 1, base.charisma};
-                case LB::Domain::CharacterClass::Cleric:
-                    return LB::Domain::Attributes{base.strength, base.dexterity, base.constitution + 1, base.intelligence, base.wisdom + 2, base.charisma};
+                case CharacterClass::Warrior:
+                    return Attributes{base.strength + 2, base.dexterity, base.constitution + 1, base.intelligence, base.wisdom, base.charisma};
+                case CharacterClass::Rogue:
+                    return Attributes{base.strength, base.dexterity + 2, base.constitution, base.intelligence, base.wisdom, base.charisma + 1};
+                case CharacterClass::Mage:
+                    return Attributes{base.strength, base.dexterity, base.constitution, base.intelligence + 2, base.wisdom + 1, base.charisma};
+                case CharacterClass::Cleric:
+                    return Attributes{base.strength, base.dexterity, base.constitution + 1, base.intelligence, base.wisdom + 2, base.charisma};
                 default:
                     return base;
             }
         }
 
-        int32_t calculateBaseHitPoints(LB::Domain::CharacterClass charClass, const LB::Domain::Attributes& attributes) const {
+        int32_t calculateBaseHitPoints(CharacterClass charClass, const Attributes& attributes) const {
             int32_t baseHP = 10; // Base hit points
             int32_t constitutionBonus = attributes.GetConstitutionModifier();
 
             // Class-specific HP modifiers
             switch (charClass) {
-                case LB::Domain::CharacterClass::Warrior: baseHP += 5; break;
-                case LB::Domain::CharacterClass::Rogue: baseHP += 2; break;
-                case LB::Domain::CharacterClass::Mage: baseHP += 0; break;
-                case LB::Domain::CharacterClass::Cleric: baseHP += 3; break;
+                case CharacterClass::Warrior: baseHP += 5; break;
+                case CharacterClass::Rogue: baseHP += 2; break;
+                case CharacterClass::Mage: baseHP += 0; break;
+                case CharacterClass::Cleric: baseHP += 3; break;
                 default: break;
             }
 
             return std::max(1, baseHP + constitutionBonus);
         }
 
-        int32_t calculateBaseManaPoints(LB::Domain::CharacterClass charClass, const LB::Domain::Attributes& attributes) const {
+        int32_t calculateBaseManaPoints(CharacterClass charClass, const Attributes& attributes) const {
             int32_t baseMP = 0; // Base mana points
             int32_t intelligenceBonus = attributes.GetIntelligenceModifier();
 
             // Class-specific MP modifiers
             switch (charClass) {
-                case LB::Domain::CharacterClass::Warrior: baseMP = 0; break;
-                case LB::Domain::CharacterClass::Rogue: baseMP = 5; break;
-                case LB::Domain::CharacterClass::Mage: baseMP = 20; break;
-                case LB::Domain::CharacterClass::Cleric: baseMP = 15; break;
+                case CharacterClass::Warrior: baseMP = 0; break;
+                case CharacterClass::Rogue: baseMP = 5; break;
+                case CharacterClass::Mage: baseMP = 20; break;
+                case CharacterClass::Cleric: baseMP = 15; break;
                 default: break;
             }
 
@@ -603,29 +607,29 @@ export namespace LB::Services::Character {
             return level;
         }
 
-        LB::Domain::Attributes calculateAttributeGains(LB::Domain::CharacterClass charClass, int32_t levels) const {
+        Attributes calculateAttributeGains(CharacterClass charClass, int32_t levels) const {
             // Per-level attribute gains based on class
-            LB::Domain::Attributes gainsPerLevel{};
+            Attributes gainsPerLevel{};
 
             switch (charClass) {
-                case LB::Domain::CharacterClass::Warrior:
-                    gainsPerLevel = LB::Domain::Attributes{1, 0, 1, 0, 0, 0};
+                case CharacterClass::Warrior:
+                    gainsPerLevel = Attributes{1, 0, 1, 0, 0, 0};
                     break;
-                case LB::Domain::CharacterClass::Rogue:
-                    gainsPerLevel = LB::Domain::Attributes{0, 1, 0, 0, 0, 1};
+                case CharacterClass::Rogue:
+                    gainsPerLevel = Attributes{0, 1, 0, 0, 0, 1};
                     break;
-                case LB::Domain::CharacterClass::Mage:
-                    gainsPerLevel = LB::Domain::Attributes{0, 0, 0, 1, 1, 0};
+                case CharacterClass::Mage:
+                    gainsPerLevel = Attributes{0, 0, 0, 1, 1, 0};
                     break;
-                case LB::Domain::CharacterClass::Cleric:
-                    gainsPerLevel = LB::Domain::Attributes{0, 0, 1, 0, 1, 0};
+                case CharacterClass::Cleric:
+                    gainsPerLevel = Attributes{0, 0, 1, 0, 1, 0};
                     break;
                 default:
-                    gainsPerLevel = LB::Domain::Attributes{0, 0, 0, 0, 0, 0};
+                    gainsPerLevel = Attributes{0, 0, 0, 0, 0, 0};
                     break;
             }
 
-            return LB::Domain::Attributes{
+            return Attributes{
                 gainsPerLevel.strength * levels,
                 gainsPerLevel.dexterity * levels,
                 gainsPerLevel.constitution * levels,
@@ -635,67 +639,67 @@ export namespace LB::Services::Character {
             };
         }
 
-        int32_t calculateHitPointGain(LB::Domain::CharacterClass charClass, int32_t constitutionGain, int32_t levels) const {
+        int32_t calculateHitPointGain(CharacterClass charClass, int32_t constitutionGain, int32_t levels) const {
             int32_t baseGainPerLevel = 3; // Base HP gain per level
 
             switch (charClass) {
-                case LB::Domain::CharacterClass::Warrior: baseGainPerLevel = 5; break;
-                case LB::Domain::CharacterClass::Rogue: baseGainPerLevel = 4; break;
-                case LB::Domain::CharacterClass::Mage: baseGainPerLevel = 2; break;
-                case LB::Domain::CharacterClass::Cleric: baseGainPerLevel = 3; break;
+                case CharacterClass::Warrior: baseGainPerLevel = 5; break;
+                case CharacterClass::Rogue: baseGainPerLevel = 4; break;
+                case CharacterClass::Mage: baseGainPerLevel = 2; break;
+                case CharacterClass::Cleric: baseGainPerLevel = 3; break;
                 default: break;
             }
 
             return (baseGainPerLevel + constitutionGain) * levels;
         }
 
-        int32_t calculateManaPointGain(LB::Domain::CharacterClass charClass, int32_t intelligenceGain, int32_t levels) const {
+        int32_t calculateManaPointGain(CharacterClass charClass, int32_t intelligenceGain, int32_t levels) const {
             int32_t baseGainPerLevel = 0;
 
             switch (charClass) {
-                case LB::Domain::CharacterClass::Warrior: baseGainPerLevel = 0; break;
-                case LB::Domain::CharacterClass::Rogue: baseGainPerLevel = 1; break;
-                case LB::Domain::CharacterClass::Mage: baseGainPerLevel = 5; break;
-                case LB::Domain::CharacterClass::Cleric: baseGainPerLevel = 3; break;
+                case CharacterClass::Warrior: baseGainPerLevel = 0; break;
+                case CharacterClass::Rogue: baseGainPerLevel = 1; break;
+                case CharacterClass::Mage: baseGainPerLevel = 5; break;
+                case CharacterClass::Cleric: baseGainPerLevel = 3; break;
                 default: break;
             }
 
             return (baseGainPerLevel + intelligenceGain * 2) * levels;
         }
 
-        int32_t getMaxMoveDistance(LB::Domain::CharacterClass charClass, const LB::Domain::Attributes& attributes) const {
+        int32_t getMaxMoveDistance(CharacterClass charClass, const Attributes& attributes) const {
             int32_t baseMoveDistance = 5;
             int32_t dexterityBonus = attributes.GetDexterityModifier();
 
             switch (charClass) {
-                case LB::Domain::CharacterClass::Warrior: baseMoveDistance = 4; break;
-                case LB::Domain::CharacterClass::Rogue: baseMoveDistance = 7; break;
-                case LB::Domain::CharacterClass::Mage: baseMoveDistance = 4; break;
-                case LB::Domain::CharacterClass::Cleric: baseMoveDistance = 5; break;
+                case CharacterClass::Warrior: baseMoveDistance = 4; break;
+                case CharacterClass::Rogue: baseMoveDistance = 7; break;
+                case CharacterClass::Mage: baseMoveDistance = 4; break;
+                case CharacterClass::Cleric: baseMoveDistance = 5; break;
                 default: break;
             }
 
             return std::max(1, baseMoveDistance + dexterityBonus);
         }
 
-        std::vector<LB::String> getAbilitiesUnlockedAtLevel(LB::Domain::CharacterClass charClass, int32_t level) const {
+        std::vector<LB::String> getAbilitiesUnlockedAtLevel(CharacterClass charClass, int32_t level) const {
             std::vector<LB::String> abilities;
 
             // Simplified ability unlocking system
             if (level == 2) {
                 switch (charClass) {
-                    case LB::Domain::CharacterClass::Warrior: abilities.push_back("Power Attack"); break;
-                    case LB::Domain::CharacterClass::Rogue: abilities.push_back("Sneak Attack"); break;
-                    case LB::Domain::CharacterClass::Mage: abilities.push_back("Magic Missile"); break;
-                    case LB::Domain::CharacterClass::Cleric: abilities.push_back("Heal"); break;
+                    case CharacterClass::Warrior: abilities.push_back("Power Attack"); break;
+                    case CharacterClass::Rogue: abilities.push_back("Sneak Attack"); break;
+                    case CharacterClass::Mage: abilities.push_back("Magic Missile"); break;
+                    case CharacterClass::Cleric: abilities.push_back("Heal"); break;
                     default: break;
                 }
             } else if (level == 5) {
                 switch (charClass) {
-                    case LB::Domain::CharacterClass::Warrior: abilities.push_back("Cleave"); break;
-                    case LB::Domain::CharacterClass::Rogue: abilities.push_back("Backstab"); break;
-                    case LB::Domain::CharacterClass::Mage: abilities.push_back("Fireball"); break;
-                    case LB::Domain::CharacterClass::Cleric: abilities.push_back("Turn Undead"); break;
+                    case CharacterClass::Warrior: abilities.push_back("Cleave"); break;
+                    case CharacterClass::Rogue: abilities.push_back("Backstab"); break;
+                    case CharacterClass::Mage: abilities.push_back("Fireball"); break;
+                    case CharacterClass::Cleric: abilities.push_back("Turn Undead"); break;
                     default: break;
                 }
             }
