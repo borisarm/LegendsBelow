@@ -1,10 +1,8 @@
 #include "pch.h"
 
 import LB.CharacterService;
-import LB.Domain;
 
 using namespace LB::Services::Character;
-using namespace LB::Domain;
 
 // ============================================================================
 // Character Creation Tests
@@ -266,8 +264,8 @@ TEST(CharacterServiceTests, MoveCharacter_ValidDistance_Success) {
 
     EXPECT_TRUE(success);
     auto status = service.GetCharacterStatus(characterId.value());
-    EXPECT_EQ(status->position.X(), 2);
-    EXPECT_EQ(status->position.Y(), 2);
+    EXPECT_EQ(status->position.x, 2);
+    EXPECT_EQ(status->position.y, 2);
 }
 
 TEST(CharacterServiceTests, MoveCharacter_TooFar_Fails) {
@@ -281,8 +279,8 @@ TEST(CharacterServiceTests, MoveCharacter_TooFar_Fails) {
 
     EXPECT_FALSE(success);
     auto status = service.GetCharacterStatus(characterId.value());
-    EXPECT_EQ(status->position.X(), 0); // Should remain at starting position
-    EXPECT_EQ(status->position.Y(), 0);
+    EXPECT_EQ(status->position.x, 0); // Should remain at starting position
+    EXPECT_EQ(status->position.y, 0);
 }
 
 // ============================================================================

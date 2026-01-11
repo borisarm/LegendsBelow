@@ -12,12 +12,10 @@ import std;
 /// Follows clean architecture principles with domain model separation
 /// </summary>
 export namespace LB::Services::Character {
-    // Re-export domain types for service convenience
+	// Re-export domain types for service convenience
 	using LB::Character::Character;
-    using LB::Character::CharacterClass;
-    using LB::Character::CharacterId;
-	using LB::Character::WeaponId;
-	using LB::Character::ArmorId;
+	using LB::Character::CharacterClass;
+	using LB::Character::CharacterId;
 
     using LB::Attributes;
     using LB::Position;
@@ -120,13 +118,15 @@ export namespace LB::Services::Character {
                 characterId,
                 request.name,
                 request.characterClass,
-                adjustedAttributes,
-                1, // Starting level
-                0, // Starting experience
-                startingHP,
-                startingMP,
-                request.startingPosition
+                adjustedAttributes
             );
+
+            // Set initial values
+            character.SetLevel(1);
+            character.SetExperience(0);
+            character.SetHitPoints(startingHP, startingHP);
+            character.SetManaPoints(startingMP, startingMP);
+            character.SetPosition(request.startingPosition);
 
             // Store character (would integrate with repository)
             auto [it, success] = characters_.emplace(characterId, std::move(character));
@@ -153,7 +153,7 @@ export namespace LB::Services::Character {
 
             status.id = character.GetId();
             status.name = character.GetName();
-            status.characterClass = character.GetCharacterClass();
+            status.characterClass = character.GetClass();
             status.level = character.GetLevel();
             status.currentExperience = character.GetExperience();
             status.experienceToNextLevel = calculateExperienceForLevel(character.GetLevel() + 1);
@@ -193,7 +193,7 @@ export namespace LB::Services::Character {
             if (result.levelIncreased) {
                 // Calculate attribute gains per level
                 auto levelsGained = newLevel - oldLevel;
-                result.attributeGains = calculateAttributeGains(character.GetCharacterClass(), levelsGained);
+                result.attributeGains = calculateAttributeGains(character.GetClass(), levelsGained);
 
                 // Apply attribute gains
                 auto currentAttribs = character.GetAttributes();
@@ -207,19 +207,22 @@ export namespace LB::Services::Character {
                 };
 
                 // Calculate hit point and mana increases
-                result.hitPointIncrease = calculateHitPointGain(character.GetCharacterClass(), result.attributeGains.constitution, levelsGained);
-                result.manaPointIncrease = calculateManaPointGain(character.GetCharacterClass(), result.attributeGains.intelligence, levelsGained);
+                result.hitPointIncrease = calculateHitPointGain(character.GetClass(), result.attributeGains.constitution, levelsGained);
+                result.manaPointIncrease = calculateManaPointGain(character.GetClass(), result.attributeGains.intelligence, levelsGained);
 
                 // Apply changes to character
                 character.SetLevel(newLevel);
                 character.SetExperience(newExperience);
                 character.SetAttributes(newAttributes);
-                character.IncreaseMaxHitPoints(result.hitPointIncrease);
-                character.IncreaseMaxManaPoints(result.manaPointIncrease);
-                character.RestoreToMaxHealth(); // Level up restores health
+
+                // Increase max HP and MP
+                auto newMaxHP = character.GetMaxHitPoints() + result.hitPointIncrease;
+                auto newMaxMP = character.GetMaxManaPoints() + result.manaPointIncrease;
+                character.SetHitPoints(newMaxHP, newMaxHP); // Level up restores health
+                character.SetManaPoints(newMaxMP, newMaxMP); // Level up restores mana
 
                 // Determine unlocked abilities (simplified)
-                result.unlockedAbilities = getAbilitiesUnlockedAtLevel(character.GetCharacterClass(), newLevel);
+                result.unlockedAbilities = getAbilitiesUnlockedAtLevel(character.GetClass(), newLevel);
             } else {
                 character.SetExperience(newExperience);
             }
@@ -241,8 +244,8 @@ export namespace LB::Services::Character {
 
             // Validate movement (basic distance check)
             auto currentPos = character.GetPosition();
-            auto distance = currentPos.ManhattanDistanceTo(newPosition);
-            auto maxMoveDistance = getMaxMoveDistance(character.GetCharacterClass(), character.GetAttributes());
+            auto distance = currentPos.ManhattanDistance(newPosition);
+            auto maxMoveDistance = getMaxMoveDistance(character.GetClass(), character.GetAttributes());
 
             if (distance > maxMoveDistance) {
                 return false;
@@ -269,7 +272,10 @@ export namespace LB::Services::Character {
 
             // Apply damage reduction
             auto actualDamage = static_cast<int32_t>(damage * (1.0f - std::clamp(damageReduction, 0.0f, 0.99f)));
-            character.TakeDamage(actualDamage);
+
+            // Apply damage
+            auto newHP = std::max(0, character.GetCurrentHitPoints() - actualDamage);
+            character.SetHitPoints(newHP, character.GetMaxHitPoints());
 
             return true;
         }
@@ -290,7 +296,7 @@ export namespace LB::Services::Character {
             auto actualHeal = std::min(healAmount, maxHP - currentHP);
 
             if (actualHeal > 0) {
-                character.Heal(actualHeal);
+                character.SetHitPoints(currentHP + actualHeal, maxHP);
             }
 
             return actualHeal;
@@ -340,14 +346,16 @@ export namespace LB::Services::Character {
 
             if (fullRest) {
                 // Long rest: full recovery
-                character.RestoreToMaxHealth();
-                character.RestoreToMaxMana();
+                character.SetHitPoints(character.GetMaxHitPoints(), character.GetMaxHitPoints());
+                character.SetManaPoints(character.GetMaxManaPoints(), character.GetMaxManaPoints());
             } else {
                 // Short rest: partial recovery
                 auto healAmount = character.GetMaxHitPoints() / 2;
                 auto manaAmount = character.GetMaxManaPoints() / 2;
-                character.Heal(healAmount);
-                character.RestoreMana(manaAmount);
+                auto newHP = std::min(character.GetCurrentHitPoints() + healAmount, character.GetMaxHitPoints());
+                auto newMP = std::min(character.GetCurrentManaPoints() + manaAmount, character.GetMaxManaPoints());
+                character.SetHitPoints(newHP, character.GetMaxHitPoints());
+                character.SetManaPoints(newMP, character.GetMaxManaPoints());
             }
 
             return true;
@@ -368,7 +376,9 @@ export namespace LB::Services::Character {
                 return false; // Insufficient mana
             }
 
-            character.ConsumeMana(manaCost);
+            // Consume mana
+            auto newMP = character.GetCurrentManaPoints() - manaCost;
+            character.SetManaPoints(newMP, character.GetMaxManaPoints());
             return true;
         }
 
@@ -388,7 +398,7 @@ export namespace LB::Services::Character {
             auto actualRestore = std::min(manaAmount, maxMP - currentMP);
 
             if (actualRestore > 0) {
-                character.RestoreMana(actualRestore);
+                character.SetManaPoints(currentMP + actualRestore, maxMP);
             }
 
             return actualRestore;
@@ -423,7 +433,7 @@ export namespace LB::Services::Character {
             std::vector<CharacterId> ids;
 
             for (const auto& [id, character] : characters_) {
-                if (character.GetCharacterClass() == charClass) {
+                if (character.GetClass() == charClass) {
                     ids.push_back(id);
                 }
             }
@@ -466,7 +476,7 @@ export namespace LB::Services::Character {
         /// Equip weapon to character
         /// Placeholder for equipment system integration
         /// </summary>
-        bool EquipWeapon(CharacterId characterId, WeaponId weaponId) {
+        bool EquipWeapon(CharacterId characterId, LB::Id weaponId) {
             auto it = characters_.find(characterId);
             if (it == characters_.end()) {
                 return false;
@@ -481,7 +491,7 @@ export namespace LB::Services::Character {
         /// Equip armor to character
         /// Placeholder for equipment system integration
         /// </summary>
-        bool EquipArmor(CharacterId characterId, ArmorId armorId) {
+        bool EquipArmor(CharacterId characterId, LB::Id armorId) {
             auto it = characters_.find(characterId);
             if (it == characters_.end()) {
                 return false;
@@ -494,6 +504,7 @@ export namespace LB::Services::Character {
 
         /// <summary>
         /// Learn new ability for character
+        /// TODO: Implement ability tracking system
         /// </summary>
         bool LearnAbility(CharacterId id, const LB::String& abilityName) {
             auto it = characters_.find(id);
@@ -501,8 +512,8 @@ export namespace LB::Services::Character {
                 return false;
             }
 
-            auto& character = it->second;
-            character.LearnAbility(abilityName);
+            // TODO: Integrate with ability/spell system
+            // For now, just validate the character exists
             return true;
         }
 
@@ -520,9 +531,9 @@ export namespace LB::Services::Character {
                 return false; // Already alive
             }
 
-            character.Revive();
+            // Revive character with specified HP percentage
             auto healAmount = static_cast<int32_t>(character.GetMaxHitPoints() * std::clamp(healthPercentage, 0.0f, 1.0f));
-            character.Heal(healAmount);
+            character.SetHitPoints(healAmount, character.GetMaxHitPoints());
 
             return true;
         }
