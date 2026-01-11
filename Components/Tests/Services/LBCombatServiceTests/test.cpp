@@ -2,10 +2,9 @@
 
 
 import LB.CombatService;
-import LB.Domain;
+
 
 using namespace LB::Services::Combat;
-using namespace LB::Domain;
 
 // ============================================================================
 // Attack Roll Tests

@@ -26,148 +26,6 @@ export namespace LB::Services::Inventory {
     using LB::Inventory::InventoryOperationResult;
 
     /// <summary>
-    /// Item instance in inventory
-    /// Represents a specific item with quantity and metadata
-    /// </summary>
-    struct InventoryItem {
-        LB::Domain::ItemId itemId;
-        LB::String name;
-        LB::String description;
-        int32_t quantity{1};
-        int32_t maxStack{1};
-        bool isEquippable{false};
-        bool isConsumable{false};
-        LB::Domain::EquipmentSlot equipmentSlot{LB::Domain::EquipmentSlot::None};
-
-        [[nodiscard]] bool CanStack() const noexcept {
-            return maxStack > 1;
-        }
-
-        [[nodiscard]] bool IsStackFull() const noexcept {
-            return quantity >= maxStack;
-        }
-
-        [[nodiscard]] int32_t GetRemainingStackSpace() const noexcept {
-            return std::max(0, maxStack - quantity);
-        }
-    };
-
-    /// <summary>
-    /// Equipment piece with stats
-    /// </summary>
-    struct Equipment {
-        LB::Domain::ItemId itemId;
-        LB::String name;
-        LB::Domain::EquipmentSlot slot;
-        LB::Domain::WeaponType weaponType{LB::Domain::WeaponType::None};
-        LB::Domain::ArmorCategory armorCategory{LB::Domain::ArmorCategory::None};
-
-        // Stat bonuses
-        int32_t strengthBonus{0};
-        int32_t dexterityBonus{0};
-        int32_t constitutionBonus{0};
-        int32_t intelligenceBonus{0};
-        int32_t wisdomBonus{0};
-        int32_t charismaBonus{0};
-
-        // Combat stats
-        int32_t armorClassBonus{0};
-        int32_t attackBonus{0};
-        int32_t damageBonus{0};
-
-        [[nodiscard]] LB::Domain::Attributes GetAttributeBonuses() const noexcept {
-            return LB::Domain::Attributes{
-                strengthBonus,
-                dexterityBonus,
-                constitutionBonus,
-                intelligenceBonus,
-                wisdomBonus,
-                charismaBonus
-            };
-        }
-
-        [[nodiscard]] bool IsWeapon() const noexcept {
-            return slot == LB::Domain::EquipmentSlot::MainHand || 
-                   slot == LB::Domain::EquipmentSlot::OffHand;
-        }
-
-        [[nodiscard]] bool IsArmor() const noexcept {
-            return slot == LB::Domain::EquipmentSlot::Head ||
-                   slot == LB::Domain::EquipmentSlot::Chest ||
-                   slot == LB::Domain::EquipmentSlot::Legs ||
-                   slot == LB::Domain::EquipmentSlot::Feet;
-        }
-    };
-
-    /// <summary>
-    /// Equipped items per character
-    /// </summary>
-    struct EquippedItems {
-        std::unordered_map<LB::Domain::EquipmentSlot, Equipment> equipment;
-
-        [[nodiscard]] bool HasItemInSlot(LB::Domain::EquipmentSlot slot) const {
-            return equipment.contains(slot);
-        }
-
-        [[nodiscard]] std::optional<Equipment> GetEquipment(LB::Domain::EquipmentSlot slot) const {
-            auto it = equipment.find(slot);
-            if (it == equipment.end()) {
-                return std::nullopt;
-            }
-            return it->second;
-        }
-
-        [[nodiscard]] LB::Domain::Attributes GetTotalAttributeBonuses() const noexcept {
-            LB::Domain::Attributes total{0, 0, 0, 0, 0, 0};
-
-            for (const auto& [slot, equip] : equipment) {
-                auto bonuses = equip.GetAttributeBonuses();
-                total.strength += bonuses.strength;
-                total.dexterity += bonuses.dexterity;
-                total.constitution += bonuses.constitution;
-                total.intelligence += bonuses.intelligence;
-                total.wisdom += bonuses.wisdom;
-                total.charisma += bonuses.charisma;
-            }
-
-            return total;
-        }
-
-        [[nodiscard]] int32_t GetTotalArmorClass() const noexcept {
-            int32_t total = 0;
-            for (const auto& [slot, equip] : equipment) {
-                total += equip.armorClassBonus;
-            }
-            return total;
-        }
-
-        [[nodiscard]] int32_t GetTotalAttackBonus() const noexcept {
-            int32_t total = 0;
-            for (const auto& [slot, equip] : equipment) {
-                total += equip.attackBonus;
-            }
-            return total;
-        }
-
-        [[nodiscard]] int32_t GetTotalDamageBonus() const noexcept {
-            int32_t total = 0;
-            for (const auto& [slot, equip] : equipment) {
-                total += equip.damageBonus;
-            }
-            return total;
-        }
-    };
-
-    /// <summary>
-    /// Inventory operation result
-    /// </summary>
-    struct InventoryOperationResult {
-        bool success{false};
-        LB::String errorMessage;
-        int32_t itemsAffected{0};
-    };
-
-    /// <summary>
     /// Core inventory service
     /// Manages items, equipment, and inventory capacity
     /// </summary>
@@ -176,7 +34,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Create inventory for a character
         /// </summary>
-        bool CreateInventory(LB::Domain::CharacterId characterId, int32_t capacity = 20) {
+        bool CreateInventory(CharacterId characterId, int32_t capacity = 20) {
             if (inventories_.contains(characterId)) {
                 return false; // Inventory already exists
             }
@@ -192,7 +50,7 @@ export namespace LB::Services::Inventory {
         /// Add item to inventory
         /// Handles stacking automatically
         /// </summary>
-        InventoryOperationResult AddItem(LB::Domain::CharacterId characterId, const InventoryItem& item) {
+        InventoryOperationResult AddItem(CharacterId characterId, const InventoryItem& item) {
             InventoryOperationResult result{};
 
             if (!inventories_.contains(characterId)) {
@@ -245,7 +103,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Remove item from inventory
         /// </summary>
-        InventoryOperationResult RemoveItem(LB::Domain::CharacterId characterId, LB::Domain::ItemId itemId, int32_t quantity = 1) {
+        InventoryOperationResult RemoveItem(CharacterId characterId, ItemId itemId, int32_t quantity = 1) {
             InventoryOperationResult result{};
 
             if (!inventories_.contains(characterId)) {
@@ -291,12 +149,12 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Equip item to character
         /// </summary>
-        bool EquipItem(LB::Domain::CharacterId characterId, const Equipment& equipment) {
+        bool EquipItem(CharacterId characterId, const Equipment& equipment) {
             if (!inventories_.contains(characterId)) {
                 return false;
             }
 
-            if (equipment.slot == LB::Domain::EquipmentSlot::None) {
+            if (equipment.slot == EquipmentSlot::None) {
                 return false; // Invalid slot
             }
 
@@ -314,7 +172,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Unequip item from slot
         /// </summary>
-        bool UnequipItem(LB::Domain::CharacterId characterId, LB::Domain::EquipmentSlot slot) {
+        bool UnequipItem(CharacterId characterId, EquipmentSlot slot) {
             if (!equippedItems_.contains(characterId)) {
                 return false;
             }
@@ -326,7 +184,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Get equipped items for character
         /// </summary>
-        std::optional<EquippedItems> GetEquippedItems(LB::Domain::CharacterId characterId) const {
+        std::optional<EquippedItems> GetEquippedItems(CharacterId characterId) const {
             auto it = equippedItems_.find(characterId);
             if (it == equippedItems_.end()) {
                 return std::nullopt;
@@ -337,7 +195,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Get all items in inventory
         /// </summary>
-        std::vector<InventoryItem> GetInventory(LB::Domain::CharacterId characterId) const {
+        std::vector<InventoryItem> GetInventory(CharacterId characterId) const {
             auto it = inventories_.find(characterId);
             if (it == inventories_.end()) {
                 return {};
@@ -348,7 +206,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Get item count in inventory
         /// </summary>
-        int32_t GetItemCount(LB::Domain::CharacterId characterId, LB::Domain::ItemId itemId) const {
+        int32_t GetItemCount(CharacterId characterId, ItemId itemId) const {
             auto it = inventories_.find(characterId);
             if (it == inventories_.end()) {
                 return 0;
@@ -366,7 +224,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Check if inventory has space
         /// </summary>
-        bool HasInventorySpace(LB::Domain::CharacterId characterId) const {
+        bool HasInventorySpace(CharacterId characterId) const {
             auto inventoryIt = inventories_.find(characterId);
             auto capacityIt = capacities_.find(characterId);
 
@@ -380,7 +238,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Get current inventory usage
         /// </summary>
-        int32_t GetInventorySize(LB::Domain::CharacterId characterId) const {
+        int32_t GetInventorySize(CharacterId characterId) const {
             auto it = inventories_.find(characterId);
             if (it == inventories_.end()) {
                 return 0;
@@ -391,7 +249,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Get inventory capacity
         /// </summary>
-        int32_t GetInventoryCapacity(LB::Domain::CharacterId characterId) const {
+        int32_t GetInventoryCapacity(CharacterId characterId) const {
             auto it = capacities_.find(characterId);
             if (it == capacities_.end()) {
                 return 0;
@@ -402,7 +260,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Set inventory capacity
         /// </summary>
-        bool SetInventoryCapacity(LB::Domain::CharacterId characterId, int32_t capacity) {
+        bool SetInventoryCapacity(CharacterId characterId, int32_t capacity) {
             if (!inventories_.contains(characterId)) {
                 return false;
             }
@@ -418,7 +276,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Clear inventory
         /// </summary>
-        bool ClearInventory(LB::Domain::CharacterId characterId) {
+        bool ClearInventory(CharacterId characterId) {
             if (!inventories_.contains(characterId)) {
                 return false;
             }
@@ -430,7 +288,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Remove character inventory completely
         /// </summary>
-        bool RemoveInventory(LB::Domain::CharacterId characterId) {
+        bool RemoveInventory(CharacterId characterId) {
             bool removed = false;
             removed |= inventories_.erase(characterId) > 0;
             removed |= capacities_.erase(characterId) > 0;
@@ -441,14 +299,14 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Check if character has inventory
         /// </summary>
-        bool HasInventory(LB::Domain::CharacterId characterId) const {
+        bool HasInventory(CharacterId characterId) const {
             return inventories_.contains(characterId);
         }
 
         /// <summary>
         /// Find items by name
         /// </summary>
-        std::vector<InventoryItem> FindItems(LB::Domain::CharacterId characterId, const LB::String& nameQuery) const {
+        std::vector<InventoryItem> FindItems(CharacterId characterId, const LB::String& nameQuery) const {
             std::vector<InventoryItem> results;
 
             auto it = inventories_.find(characterId);
@@ -469,15 +327,15 @@ export namespace LB::Services::Inventory {
         /// Get total weight (if implementing weight system)
         /// Placeholder for future weight mechanics
         /// </summary>
-        float GetTotalWeight(LB::Domain::CharacterId characterId) const {
+        float GetTotalWeight(CharacterId characterId) const {
             // Future: implement weight system
             return 0.0f;
         }
 
     private:
-        std::unordered_map<LB::Domain::CharacterId, std::vector<InventoryItem>> inventories_;
-        std::unordered_map<LB::Domain::CharacterId, int32_t> capacities_;
-        std::unordered_map<LB::Domain::CharacterId, EquippedItems> equippedItems_;
+        std::unordered_map<CharacterId, std::vector<InventoryItem>> inventories_;
+        std::unordered_map<CharacterId, int32_t> capacities_;
+        std::unordered_map<CharacterId, EquippedItems> equippedItems_;
     };
 
 } // namespace LB::Services::Inventory

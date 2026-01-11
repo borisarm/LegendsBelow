@@ -93,10 +93,6 @@
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
     </Project>
-    <Project Path="Components/Tests/LBModelTests/LBModelTests.vcxproj" Id="a406bb42-df25-4233-aa86-fa0c2c2ef70e">
-      <BuildType Solution="Profile|*" Project="Release" />
-      <Platform Project="x64" />
-    </Project>
   </Folder>
   <Folder Name="/Components/Tests/Model/">
     <Project Path="Components/Tests/Model/LBModel.Character.Tests/LBModel.Character.Tests.vcxproj" Id="e9c3f038-2d25-41fc-ab60-fab3b6924ce9">

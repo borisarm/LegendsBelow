@@ -44,7 +44,7 @@ export namespace LB::Services::Combat {
         int32_t baseDamage{0};
         int32_t bonusDamage{0};
         int32_t mitigatedDamage{0};
-        LB::Domain::DamageType damageType{LB::Domain::DamageType::None};
+        DamageType damageType{DamageType::None};
         bool wasCritical{false};
         float damageReduction{0.0f};
     };
@@ -72,16 +72,16 @@ export namespace LB::Services::Combat {
         int32_t manaCost{0};
         DamageResult damageResult{};
         int32_t healingAmount{0};
-        std::vector<LB::Domain::CharacterId> affectedTargets{};
+        std::vector<CharacterId> affectedTargets{};
     };
 
     /// <summary>
     /// Attack parameters for combat actions
     /// </summary>
     struct AttackParams {
-        LB::Domain::CharacterId attackerId;
-        LB::Domain::CharacterId targetId;
-        LB::Domain::DamageType damageType{LB::Domain::DamageType::Slashing};
+        CharacterId attackerId;
+        CharacterId targetId;
+        DamageType damageType{DamageType::Slashing};
         int32_t baseDamage{0};
         int32_t bonusDamage{0};
         bool advantageOnRoll{false};
@@ -139,7 +139,7 @@ export namespace LB::Services::Combat {
         DamageResult CalculateDamage(
             int32_t baseDamage,
             int32_t bonusDamage,
-            LB::Domain::DamageType damageType,
+            DamageType damageType,
             bool isCritical,
             float damageReduction = 0.0f) const {
 
@@ -169,30 +169,30 @@ export namespace LB::Services::Combat {
         /// </summary>
         float CalculateDamageReduction(
             int32_t armorClass,
-            LB::Domain::DamageType damageType) const {
+            DamageType damageType) const {
 
             // Base armor effectiveness (10 AC = 0%, 20 AC = 50%, 30 AC = 75%)
             float baseReduction = std::min(0.75f, (armorClass - 10.0f) / 40.0f);
 
             // Physical damage types are more affected by armor
             switch (damageType) {
-                case LB::Domain::DamageType::Slashing:
-                case LB::Domain::DamageType::Bludgeoning:
+                case DamageType::Slashing:
+                case DamageType::Bludgeoning:
                     return baseReduction;
 
-                case LB::Domain::DamageType::Piercing:
+                case DamageType::Piercing:
                     // Piercing ignores some armor
                     return baseReduction * 0.75f;
 
-                case LB::Domain::DamageType::Fire:
-                case LB::Domain::DamageType::Cold:
-                case LB::Domain::DamageType::Lightning:
-                case LB::Domain::DamageType::Arcane:
+                case DamageType::Fire:
+                case DamageType::Cold:
+                case DamageType::Lightning:
+                case DamageType::Arcane:
                     // Elemental damage ignores most physical armor
                     return baseReduction * 0.25f;
 
-                case LB::Domain::DamageType::Holy:
-                case LB::Domain::DamageType::Shadow:
+                case DamageType::Holy:
+                case DamageType::Shadow:
                     // Spiritual damage ignores physical armor entirely
                     return 0.0f;
 
@@ -206,7 +206,7 @@ export namespace LB::Services::Combat {
         /// </summary>
         int32_t CalculateWeaponDamage(
             int32_t baseDamage,
-            const LB::Domain::Attributes& attributes,
+            const Attributes& attributes,
             bool useStrength = true) const {
 
             int32_t modifier = useStrength ?
@@ -221,19 +221,19 @@ export namespace LB::Services::Combat {
         /// </summary>
         int32_t CalculateSpellDamage(
             int32_t baseDamage,
-            const LB::Domain::Attributes& attributes,
-            LB::Domain::CharacterClass casterClass) const {
+            const Attributes& attributes,
+            CharacterClass casterClass) const {
 
             int32_t spellBonus = 0;
 
             switch (casterClass) {
-                case LB::Domain::CharacterClass::Mage:
+                case CharacterClass::Mage:
                     spellBonus = attributes.GetIntelligenceModifier();
                     break;
-                case LB::Domain::CharacterClass::Cleric:
+                case CharacterClass::Cleric:
                     spellBonus = attributes.GetWisdomModifier();
                     break;
-                case LB::Domain::CharacterClass::Rogue:
+                case CharacterClass::Rogue:
                     spellBonus = attributes.GetIntelligenceModifier() / 2;
                     break;
                 default:
@@ -273,17 +273,17 @@ export namespace LB::Services::Combat {
         /// </summary>
         int32_t CalculateSpellSaveDC(
             int32_t casterLevel,
-            const LB::Domain::Attributes& attributes,
-            LB::Domain::CharacterClass casterClass) const {
+            const Attributes& attributes,
+            CharacterClass casterClass) const {
 
             int32_t baseDC = 8 + (casterLevel / 2);
             int32_t abilityBonus = 0;
 
             switch (casterClass) {
-                case LB::Domain::CharacterClass::Mage:
+                case CharacterClass::Mage:
                     abilityBonus = attributes.GetIntelligenceModifier();
                     break;
-                case LB::Domain::CharacterClass::Cleric:
+                case CharacterClass::Cleric:
                     abilityBonus = attributes.GetWisdomModifier();
                     break;
                 default:
@@ -314,7 +314,7 @@ export namespace LB::Services::Combat {
         std::vector<DamageResult> CalculateAreaDamage(
             int32_t baseDamage,
             int32_t spellBonus,
-            LB::Domain::DamageType damageType,
+            DamageType damageType,
             const std::vector<int32_t>& targetArmorClasses) const {
 
             std::vector<DamageResult> results;
@@ -340,7 +340,7 @@ export namespace LB::Services::Combat {
         /// </summary>
         int32_t CalculateHealing(
             int32_t baseHealing,
-            const LB::Domain::Attributes& attributes) const {
+            const Attributes& attributes) const {
 
             int32_t wisdomBonus = attributes.GetWisdomModifier();
             return std::max(1, baseHealing + wisdomBonus);
@@ -372,11 +372,11 @@ export namespace LB::Services::Combat {
         /// Calculate critical hit multiplier
         /// Some classes or weapons may have different multipliers
         /// </summary>
-        float GetCriticalMultiplier(LB::Domain::CharacterClass attackerClass) const {
+        float GetCriticalMultiplier(CharacterClass attackerClass) const {
             switch (attackerClass) {
-                case LB::Domain::CharacterClass::Rogue:
+                case CharacterClass::Rogue:
                     return 3.0f; // Rogues get better crits
-                case LB::Domain::CharacterClass::Warrior:
+                case CharacterClass::Warrior:
                     return 2.5f; // Warriors get enhanced crits
                 default:
                     return 2.0f; // Standard double damage
@@ -387,11 +387,11 @@ export namespace LB::Services::Combat {
         /// Calculate critical hit chance
         /// Base is 5% (natural 20), some classes get higher
         /// </summary>
-        int32_t GetCriticalHitThreshold(LB::Domain::CharacterClass attackerClass) const {
+        int32_t GetCriticalHitThreshold(CharacterClass attackerClass) const {
             switch (attackerClass) {
-                case LB::Domain::CharacterClass::Rogue:
+                case CharacterClass::Rogue:
                     return 19; // Crits on 19-20 (10% chance)
-                case LB::Domain::CharacterClass::Warrior:
+                case CharacterClass::Warrior:
                     return 19; // Crits on 19-20 (10% chance)
                 default:
                     return 20; // Crits only on natural 20 (5% chance)
