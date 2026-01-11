@@ -1,7 +1,9 @@
 // LB.CharacterService.ixx - Character management service using C++20 modules
 export module LB.CharacterService;
 
-import LB.Domain; // Import the pure domain model
+// Import only required domains
+import LB.Core;
+import LB.Character;
 import std;
 
 /// <summary>
@@ -10,6 +12,11 @@ import std;
 /// Follows clean architecture principles with domain model separation
 /// </summary>
 export namespace LB::Services::Character {
+    // Re-export domain types for service convenience
+    using LB::Character::CharacterClass;
+    using LB::Character::CharacterId;
+    using LB::Attributes;
+    using LB::Position;
 
     /// <summary>
     /// Character creation parameters
