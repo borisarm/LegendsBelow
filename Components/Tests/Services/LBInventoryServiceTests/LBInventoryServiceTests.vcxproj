@@ -112,11 +112,20 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\Model\LBModel.Character\LBModel.Character.vcxproj">
+      <Project>{fbb9b480-2be7-44ac-8d85-7431db9b6959}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Model\LBModel.Combat\LBModel.Combat.vcxproj">
+      <Project>{c259bb9e-7a4a-44c2-9a54-aefffa5228e3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Model\LBModel.Core\LBModel.Core.vcxproj">
+      <Project>{990b9ac5-23ad-45d1-b267-5bef0a4c6ebf}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\Model\LBModel.Inventory\LBModel.Inventory.vcxproj">
+      <Project>{9a682277-90f2-4283-8946-08694c37fc55}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\..\Services\LBInventoryService\LBInventoryService.vcxproj">
       <Project>{0660e29a-5d0d-4024-bca2-70d97491cf45}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\LBModelTests\LBModelTests.vcxproj">
-      <Project>{a406bb42-df25-4233-aa86-fa0c2c2ef70e}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
