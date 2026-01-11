@@ -65,7 +65,7 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Get dungeon by ID
         /// </summary>
-        [[nodiscard]] std::optional<Dungeon> GetDungeon(LB::Domain::Id dungeonId) const {
+        [[nodiscard]] std::optional<Dungeon> GetDungeon(Id dungeonId) const {
             auto it = dungeons_.find(dungeonId);
             if (it == dungeons_.end()) return std::nullopt;
             return it->second;
@@ -74,7 +74,7 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Move to connected room
         /// </summary>
-        bool MoveToRoom(LB::Domain::Id dungeonId, Direction direction) {
+        bool MoveToRoom(Id dungeonId, Direction direction) {
             auto it = dungeons_.find(dungeonId);
             if (it == dungeons_.end()) return false;
 
@@ -88,7 +88,7 @@ export namespace LB::Services::Dungeon {
             }
 
             // Move to new room
-            LB::Domain::Id newRoomId = currentRoom->connections.at(direction);
+            Id newRoomId = currentRoom->connections.at(direction);
             dungeon.currentRoomId = newRoomId;
 
             // Mark new room as explored
@@ -100,7 +100,7 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Mark current room as cleared
         /// </summary>
-        bool ClearCurrentRoom(LB::Domain::Id dungeonId) {
+        bool ClearCurrentRoom(Id dungeonId) {
             auto it = dungeons_.find(dungeonId);
             if (it == dungeons_.end()) return false;
 
@@ -160,7 +160,7 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Get available directions from current room
         /// </summary>
-        [[nodiscard]] std::vector<Direction> GetAvailableDirections(LB::Domain::Id dungeonId) const {
+        [[nodiscard]] std::vector<Direction> GetAvailableDirections(Id dungeonId) const {
             std::vector<Direction> directions;
 
             auto dungeon = GetDungeon(dungeonId);
@@ -179,7 +179,7 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Get room in specific direction
         /// </summary>
-        [[nodiscard]] std::optional<DungeonRoom> GetRoomInDirection(LB::Domain::Id dungeonId, Direction direction) const {
+        [[nodiscard]] std::optional<DungeonRoom> GetRoomInDirection(Id dungeonId, Direction direction) const {
             auto dungeon = GetDungeon(dungeonId);
             if (!dungeon.has_value()) return std::nullopt;
 
@@ -190,14 +190,14 @@ export namespace LB::Services::Dungeon {
                 return std::nullopt;
             }
 
-            LB::Domain::Id targetRoomId = currentRoom->connections.at(direction);
+            Id targetRoomId = currentRoom->connections.at(direction);
             return dungeon->GetRoom(targetRoomId);
         }
 
         /// <summary>
         /// Check if dungeon is complete
         /// </summary>
-        [[nodiscard]] bool IsDungeonComplete(LB::Domain::Id dungeonId) const {
+        [[nodiscard]] bool IsDungeonComplete(Id dungeonId) const {
             auto dungeon = GetDungeon(dungeonId);
             if (!dungeon.has_value()) return false;
             return dungeon->IsComplete();
@@ -206,7 +206,7 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Get dungeon completion percentage
         /// </summary>
-        [[nodiscard]] float GetCompletionPercentage(LB::Domain::Id dungeonId) const {
+        [[nodiscard]] float GetCompletionPercentage(Id dungeonId) const {
             auto dungeon = GetDungeon(dungeonId);
             if (!dungeon.has_value()) return 0.0f;
 
@@ -220,15 +220,15 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Remove dungeon
         /// </summary>
-        bool RemoveDungeon(LB::Domain::Id dungeonId) {
+        bool RemoveDungeon(Id dungeonId) {
             return dungeons_.erase(dungeonId) > 0;
         }
 
         /// <summary>
         /// Get all dungeons
         /// </summary>
-        [[nodiscard]] std::vector<LB::Domain::Id> GetAllDungeonIds() const {
-            std::vector<LB::Domain::Id> ids;
+        [[nodiscard]] std::vector<Id> GetAllDungeonIds() const {
+            std::vector<Id> ids;
             ids.reserve(dungeons_.size());
             for (const auto& [id, dungeon] : dungeons_) {
                 ids.push_back(id);
@@ -244,30 +244,30 @@ export namespace LB::Services::Dungeon {
         }
 
     private:
-        std::unordered_map<LB::Domain::Id, Dungeon> dungeons_;
-        mutable LB::Domain::Id nextDungeonId_{1};
-        mutable LB::Domain::Id nextRoomId_{1};
-        mutable LB::Domain::Id nextEncounterId_{1};
-        mutable LB::Domain::Id nextEnemyId_{1000};
-        mutable LB::Domain::Id nextItemId_{2000};
+        std::unordered_map<Id, Dungeon> dungeons_;
+        mutable Id nextDungeonId_{1};
+        mutable Id nextRoomId_{1};
+        mutable Id nextEncounterId_{1};
+        mutable Id nextEnemyId_{1000};
+        mutable Id nextItemId_{2000};
 
-        [[nodiscard]] LB::Domain::Id generateNextDungeonId() const {
+        [[nodiscard]] Id generateNextDungeonId() const {
             return nextDungeonId_++;
         }
 
-        [[nodiscard]] LB::Domain::Id generateNextRoomId() const {
+        [[nodiscard]] Id generateNextRoomId() const {
             return nextRoomId_++;
         }
 
-        [[nodiscard]] LB::Domain::Id generateNextEncounterId() const {
+        [[nodiscard]] Id generateNextEncounterId() const {
             return nextEncounterId_++;
         }
 
-        [[nodiscard]] LB::Domain::Id generateNextEnemyId() const {
+        [[nodiscard]] Id generateNextEnemyId() const {
             return nextEnemyId_++;
         }
 
-        [[nodiscard]] LB::Domain::Id generateNextItemId() const {
+        [[nodiscard]] Id generateNextItemId() const {
             return nextItemId_++;
         }
 
@@ -283,7 +283,7 @@ export namespace LB::Services::Dungeon {
                 room.roomId = generateNextRoomId();
                 room.name = "Room " + std::to_string(room.roomId);
                 room.description = "A dungeon room";
-                room.gridPosition = LB::Domain::Position(i % 5, i / 5); // Simple grid layout
+                room.gridPosition = Position(i % 5, i / 5); // Simple grid layout
 
                 // Assign room type
                 if (i == roomCount - 1 && params.guaranteeBossRoom) {
@@ -304,11 +304,11 @@ export namespace LB::Services::Dungeon {
 
             // Simple linear connection for now
             auto it = dungeon.rooms.begin();
-            LB::Domain::Id previousRoomId = it->first;
+            Id previousRoomId = it->first;
             ++it;
 
             while (it != dungeon.rooms.end()) {
-                LB::Domain::Id currentRoomId = it->first;
+                Id currentRoomId = it->first;
 
                 // Connect previous to current
                 dungeon.rooms[previousRoomId].connections[Direction::East] = currentRoomId;
