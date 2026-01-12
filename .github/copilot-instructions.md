@@ -66,8 +66,30 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 
 ## C++20 Module Guidelines
 
+## C++20 Module Guidelines
+
+### Module Usage Policy
+
+**All code should use C++20 modules EXCEPT:**
+- ? **LBGameEditor** (editor tool) - May consume modules but uses traditional headers due to UI framework limitations
+
+**These projects MUST use modules:**
+- ? **All Model projects** (LBModel.*)
+- ? **All Service projects** (LB*Service)
+- ? **All System projects** (LB*System)
+- ? **LBEngineCore** (core game engine)
+- ? **LBAssetProcessor** (asset processing tool)
+- ? **LegendsBelow** (main game executable) - Can be refactored to use modules
+
+**Rationale**: Modern C++20 modules work with Win32 applications. Only LBGameEditor has tooling limitations.
+
 ### Module Naming Conventions
-- Use dot notation for module names: `LB.ModuleName` (e.g., `LB.Domain`, `LB.Entities`)
+- Use dot notation for module names: `LB.ModuleName` (e.g., `LB.Core`, `LB.Character`)
+- Use Pascal case for module names: `LB.CharacterService`, `LB.ValueObjects`
+- Module files use `.ixx` extension for interface modules
+
+### Module Naming Conventions
+- Use dot notation for module names: `LB.ModuleName` (e.g., `LB.Core`, `LB.Character`)
 - Use Pascal case for module names: `LB.CharacterService`, `LB.ValueObjects`
 - Module files use `.ixx` extension for interface modules
 
