@@ -424,6 +424,11 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <None Include="README.md" />
     <None Include="vcpkg.json" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Components\LBEngineCore\LBEngineCore.vcxproj">
+      <Project>{7e9219b4-cd0b-4186-bfac-1b60d55e1678}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Condition="Exists('$(VCInstallDir)vcpkg\scripts\buildsystems\msbuild\vcpkg.targets')" Project="$(VCInstallDir)vcpkg\scripts\buildsystems\msbuild\vcpkg.targets" />
   <PropertyGroup>
