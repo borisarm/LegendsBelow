@@ -18,7 +18,7 @@
       <Platform Project="x64" />
     </Project>
   </Folder>
-  <Folder Name="/Components/MOdel/">
+  <Folder Name="/Components/Model/">
     <Project Path="Components/Model/LBModel.Character/LBModel.Character.vcxproj" Id="fbb9b480-2be7-44ac-8d85-7431db9b6959">
       <BuildType Solution="Profile|*" Project="Release" />
       <Platform Project="x64" />
@@ -165,22 +165,26 @@
     </Project>
   </Folder>
   <Folder Name="/Documentation/">
-    <File Path=".github/asset-preprocesing-strategy-instructions.md" />
     <File Path=".github/copilot-instructions.md" />
-    <File Path=".github/design-architecture.md" />
-    <File Path=".github/design-armour-list.md" />
-    <File Path=".github/design-armour-system.md" />
-    <File Path=".github/design-character-system.md" />
-    <File Path=".github/design-combat-system.md" />
-    <File Path=".github/design-dungeon-and-world.md" />
-    <File Path=".github/design-loot-and-progression.md" />
-    <File Path=".github/design-spell-list.md" />
-    <File Path=".github/design-spells-system.md" />
-    <File Path=".github/design-technical-directx12.md" />
-    <File Path=".github/design-ui-ux-and-audio.md" />
-    <File Path=".github/design-weapons-list.md" />
-    <File Path=".github/design-weapons-system.md" />
-    <File Path=".github/game-design.md" />
+    <File Path="CHANGELOG.md" />
+    <File Path="README-LegendsBelow.md" />
+    <File Path="Documentation/architecture.md" />
+    <File Path="Documentation/asset-preprocesing-strategy-instructions.md" />
+    <File Path="Documentation/design-armour-list.md" />
+    <File Path="Documentation/design-armour-system.md" />
+    <File Path="Documentation/design-character-system.md" />
+    <File Path="Documentation/design-combat-system.md" />
+    <File Path="Documentation/design-dungeon-and-world.md" />
+    <File Path="Documentation/design-loot-and-progression.md" />
+    <File Path="Documentation/design-spell-list.md" />
+    <File Path="Documentation/design-spells-system.md" />
+    <File Path="Documentation/design-technical-directx12.md" />
+    <File Path="Documentation/design-ui-ux-and-audio.md" />
+    <File Path="Documentation/design-weapons-list.md" />
+    <File Path="Documentation/design-weapons-system.md" />
+    <File Path="Documentation/game-design.md" />
+    <File Path="Documentation/microsoft-proxy-implementation.md" />
+    <File Path="Documentation/modularized-game-architecture.md" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/LBAssetProcessor/LBAssetProcessor.vcxproj" Id="6155f5eb-661e-4330-9915-b2c14a27122d">
