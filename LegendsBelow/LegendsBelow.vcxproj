@@ -420,6 +420,16 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="Assets\StoreLogo.png">
       <DestinationFolders>$(OutDir)Assets</DestinationFolders>
     </CopyFileToFolders>
+    <!-- Game content, loaded at startup from <exe dir>\Assets\Data -->
+    <CopyFileToFolders Include="..\Assets\Data\spells.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Data\weapons.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Data\armour.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />

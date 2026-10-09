@@ -80,6 +80,7 @@ export namespace LB::Inventory {
             return slot == EquipmentSlot::Head ||
                    slot == EquipmentSlot::Chest ||
                    slot == EquipmentSlot::Legs ||
+                   slot == EquipmentSlot::Hands ||
                    slot == EquipmentSlot::Feet;
         }
     };
