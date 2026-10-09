@@ -390,9 +390,9 @@ TEST(DungeonServiceTests, GetAllDungeonIds_MultipleDungeons_ReturnsAll) {
     DungeonService service;
     DungeonGenerationParams params{};
 
-    service.GenerateDungeon("Dungeon1", params);
-    service.GenerateDungeon("Dungeon2", params);
-    service.GenerateDungeon("Dungeon3", params);
+    std::ignore = service.GenerateDungeon("Dungeon1", params);
+    std::ignore = service.GenerateDungeon("Dungeon2", params);
+    std::ignore = service.GenerateDungeon("Dungeon3", params);
 
     auto ids = service.GetAllDungeonIds();
 
@@ -405,10 +405,10 @@ TEST(DungeonServiceTests, GetDungeonCount_TracksCount) {
 
     EXPECT_EQ(service.GetDungeonCount(), size_t(0));
 
-    service.GenerateDungeon("Dungeon1", params);
+    std::ignore = service.GenerateDungeon("Dungeon1", params);
     EXPECT_EQ(service.GetDungeonCount(), size_t(1));
 
-    service.GenerateDungeon("Dungeon2", params);
+    std::ignore = service.GenerateDungeon("Dungeon2", params);
     EXPECT_EQ(service.GetDungeonCount(), size_t(2));
 }
 

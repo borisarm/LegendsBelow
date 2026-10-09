@@ -76,7 +76,7 @@ TEST(RenderingSystemTests, EndFrame_RendersQueued) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_GT(stats.spritesRendered, 0);
+    EXPECT_GT(stats.spritesRendered, 0u);
 }
 
 // ============================================================================
@@ -206,7 +206,7 @@ TEST(RenderingSystemTests, DrawRectangle_ValidRect_Queued) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_GT(stats.spritesRendered, 0);
+    EXPECT_GT(stats.spritesRendered, 0u);
 }
 
 TEST(RenderingSystemTests, DrawRectangle_MultipleRects_AllQueued) {
@@ -292,7 +292,7 @@ TEST(RenderingSystemTests, GetStats_AfterRendering_UpdatedCorrectly) {
     const auto& stats = system.GetStats();
     EXPECT_EQ(stats.spritesRendered, 1);
     EXPECT_EQ(stats.textRendered, 1);
-    EXPECT_GT(stats.drawCalls, 0);
+    EXPECT_GT(stats.drawCalls, 0u);
 }
 
 // ============================================================================
