@@ -62,6 +62,18 @@ export namespace LB::Systems::Input {
         inline constexpr int32_t Up = 0x26;
         inline constexpr int32_t Right = 0x27;
         inline constexpr int32_t Down = 0x28;
+        inline constexpr int32_t F1 = 0x70;
+        inline constexpr int32_t F2 = 0x71;
+        inline constexpr int32_t F3 = 0x72;
+        inline constexpr int32_t F4 = 0x73;
+        inline constexpr int32_t F5 = 0x74;
+        inline constexpr int32_t F6 = 0x75;
+        inline constexpr int32_t F7 = 0x76;
+        inline constexpr int32_t F8 = 0x77;
+        inline constexpr int32_t F9 = 0x78;
+        inline constexpr int32_t F10 = 0x79;
+        inline constexpr int32_t F11 = 0x7A;
+        inline constexpr int32_t F12 = 0x7B;
 
         /// <summary>
         /// Key code for a letter ('a'-'z', 'A'-'Z') or digit ('0'-'9'); -1 for anything else
