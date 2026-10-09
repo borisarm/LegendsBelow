@@ -92,15 +92,15 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 |---------|--------|-----------|--------|
 | LBRenderingSystem | `LB.RenderingSystem` | `LB::Systems::Rendering` | Draw-command API with a Direct3D 12 backend (device, swap chain, clear/present); headless when no window is given. Sprite/text drawing not implemented yet |
 | LBInputSystem | `LB.InputSystem` | `LB::Systems::Input` | Keyboard/mouse pushed by the host; gamepads read through GameInput (internal partition `:GameInputBackend`) with radial dead zones; transition-based edge detection (no lost taps); actions with multiple bindings |
-| LBAudioSystem | `LB.AudioSystem` | `LB::Systems::Audio` | Channel/clip bookkeeping; no audio API yet |
+| LBAudioSystem | `LB.AudioSystem` | `LB::Systems::Audio` | XAudio2 output device (internal partition `:XAudio2Backend`), master volume, suspend/resume, channel pause; clip playback awaits audio assets |
 | LBAssetSystem | `LB.AssetSystem` | `LB::Systems::Asset` | Asset registry/lifecycle; no file I/O yet |
-| LBPersistenceSystem | `LB.PersistenceSystem` | `LB::Systems::Persistence` | Save-slot model; no storage backend yet |
+| LBPersistenceSystem | `LB.PersistenceSystem` | `LB::Systems::Persistence` | Save slots (metadata + key/value `SaveData`) and preferences as JSON files, written atomically; existing saves discovered at startup; in-memory when no directory is given |
 
 ### Engine and application
 
 | Project | Status |
 |---------|--------|
-| `Components/LBEngineCore` | `LB.Engine` (`:StepTimer`, `:GameEngine`): fixed 60 Hz loop driving LBRenderingSystem and LBInputSystem; tactical pause (Esc) with a game clock that stops while paused. No Win32 dependency. Services and the Audio/Asset/Persistence systems are not wired in yet |
+| `Components/LBEngineCore` | `LB.Engine` (`:StepTimer`, `:GameEngine`): fixed 60 Hz loop driving Rendering, Input, Audio, and Persistence; tactical pause (Esc/Start); quick save/load (F5/F9). No Win32 dependency. Services, the Asset system, and dungeon generation are not wired in yet |
 | `LegendsBelow` | Win32/GDK shell only: `Main.cpp` creates the window, runs the message loop, and forwards events to `LB::Engine::GameEngine` |
 
 The native window crosses module boundaries only as an opaque `void*`. Direct3D types stay inside LBRenderingSystem's internal partition `LB.RenderingSystem:DeviceResources` (`DeviceResources.cpp`), and GameInput types inside LBInputSystem's `LB.InputSystem:GameInputBackend` (`GameInputBackend.cpp`); consumers cannot import either. `gameinput.lib` is a static loader merged into `LBInputSystem.lib`, so the game starts without the GameInput runtime (it then runs without gamepad support).
@@ -131,7 +131,8 @@ One GoogleTest project per component under `Model/`, `Services/`, and `System/`,
 The shell → engine → renderer split from `modularized-game-architecture.md` is done. Remaining responsibilities:
 - [x] Own the `StepTimer` and run `Tick → Update (fixed 60 Hz) → Render`
 - [x] Input: the host forwards keyboard/mouse events (`OnKeyDown`, `OnMouseMove`, …); each simulation step reads input, then ends the input frame
-- Construct the remaining Systems (Audio, Asset, Persistence) and Services, and inject dependencies (repositories into services)
+- [x] Audio and Persistence systems
+- Construct the remaining Services and inject dependencies (repositories into services)
 - [x] Gamepad input through GameInput: `LB.InputSystem:GameInputBackend` (`GameInputBackend.cpp`) reads the most recently used gamepad; the engine enables it only with a real window and polls once per simulation step while focused
 - Game state machine (main menu, town, dungeon, pause)
 - Cross-system events (`EventBus`) so Services never call Systems directly

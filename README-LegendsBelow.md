@@ -34,9 +34,9 @@ Documentation/             Game design and architecture documents
 |------|-------|
 | Domain model | Implemented as C++20 modules, unit tested |
 | Services (Character, Combat, Inventory, Progression, Dungeon) | Implemented, unit tested |
-| Systems | Unit tested. Rendering has a Direct3D 12 backend (device, swap chain, clear/present); Input receives keyboard/mouse from the window and gamepads through GameInput; Audio, Asset, and Persistence have no platform backends yet |
+| Systems | Unit tested. Rendering: Direct3D 12 (clear and present). Input: keyboard/mouse from the window, gamepads through GameInput. Audio: XAudio2 output device. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
 | Repositories | Spell facade via Microsoft Proxy 4; no concrete JSON-backed implementation yet |
-| Engine / game loop | `LB.Engine` runs the loop, drives rendering and input; the game opens a window, clears it each frame, and Esc or gamepad Start toggles the tactical pause (dimmed background). Services are not wired in yet |
+| Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: Esc/Start toggles the tactical pause; F5/F9 quick save and load. Services are not wired in yet |
 | Asset pipeline | Not started (see `Documentation/asset-preprocesing-strategy-instructions.md`) |
 | Content | 45 spells, 12 weapons, 15 armour pieces authored in JSON |
 

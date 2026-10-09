@@ -148,6 +148,12 @@
     <ProjectReference Include="..\Model\LBModel.Core\LBModel.Core.vcxproj">
       <Project>{990b9ac5-23ad-45d1-b267-5bef0a4c6ebf}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\Systems\LBAudioSystem\LBAudioSystem.vcxproj">
+      <Project>{280d6694-757a-485e-b410-9b4a4301aac8}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Systems\LBPersistenceSystem\LBPersistenceSystem.vcxproj">
+      <Project>{69fecce1-3522-4e3b-ae96-8af3e92b23bb}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Systems\LBInputSystem\LBInputSystem.vcxproj">
       <Project>{a9e225ac-4060-4f56-b359-0eacddb08670}</Project>
     </ProjectReference>

@@ -33,6 +33,26 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 namespace
 {
+    // %LOCALAPPDATA%\LegendsBelow\Saves as UTF-8, or empty (saves kept in memory) if unavailable
+    std::string GetSaveDirectory()
+    {
+        PWSTR localAppData = nullptr;
+        if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DEFAULT, nullptr, &localAppData)))
+            return {};
+
+        std::wstring path = localAppData;
+        CoTaskMemFree(localAppData);
+        path += L"\\LegendsBelow\\Saves";
+
+        const int size = WideCharToMultiByte(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()), nullptr, 0, nullptr, nullptr);
+        if (size <= 0)
+            return {};
+
+        std::string utf8(static_cast<size_t>(size), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()), utf8.data(), size, nullptr, nullptr);
+        return utf8;
+    }
+
     // Translate a WM_*BUTTONDOWN/UP message into an engine mouse event
     void ForwardMouseButton(GameEngine* engine, UINT message, LPARAM lParam, bool down)
     {
@@ -117,7 +137,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
         GetClientRect(hwnd, &rc);
 
-        if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top))
+        if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top, GetSaveDirectory()))
         {
             std::ignore = MessageBoxW(hwnd, L"Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.", g_szAppName, MB_ICONERROR | MB_OK);
             // Destroy the window first: it holds a pointer to the engine

@@ -140,6 +140,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AudioSystem.cpp" />
+    <ClCompile Include="XAudio2Backend.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
     <ClCompile Include="LB.AudioSystem.ixx" />
   </ItemGroup>
   <ItemGroup>
