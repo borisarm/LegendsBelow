@@ -20,6 +20,7 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ### Fixed
 - LBAssetPersistenceService builds: `proxy` added to the vcpkg manifest, included via the global module fragment instead of a header unit.
 - Fresh clones build on the first try: `Directory.Build.targets` runs the vcpkg install before C++ module dependency scanning.
+- Test projects build in Release|x64 (C++20 was only set for Debug); tests and libraries now share `/sdl` and, in Release, `/guard:cf`, removing the C5050 module-environment warnings.
 
 ### Removed
 - Empty placeholder modules: `GameState`, `SystemManager` (LBEngineCore), `RenderContext`, `GraphicsTypes` (LBRenderingSystem), and `LBAssetPersistenceService` (LBAssetPersistenceService).
