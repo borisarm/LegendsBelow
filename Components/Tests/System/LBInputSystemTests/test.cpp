@@ -449,3 +449,211 @@ TEST(InputSystemTests, ReleaseAll_ReleasesKeysAndButtons) {
     EXPECT_FALSE(system.IsMouseButtonDown(MouseButton::Left));
     EXPECT_FALSE(system.IsMouseButtonDown(MouseButton::Middle));
 }
+
+// ============================================================================
+// Gamepad Type Tests
+// ============================================================================
+
+TEST(GamepadTypesTests, ButtonMask_UsesEnumValueAsBitIndex) {
+    EXPECT_EQ(ButtonMask(GamepadButton::A), 0x1u);
+    EXPECT_EQ(ButtonMask(GamepadButton::Start), 1u << 7);
+    EXPECT_EQ(ButtonMask(GamepadButton::DPadRight), 1u << 13);
+}
+
+TEST(GamepadTypesTests, ApplyRadialDeadZone_InsideZone_Zeroed) {
+    float x = 0.1f;
+    float y = -0.15f;
+
+    ApplyRadialDeadZone(x, y, LeftThumbDeadZone);
+
+    EXPECT_EQ(x, 0.0f);
+    EXPECT_EQ(y, 0.0f);
+}
+
+TEST(GamepadTypesTests, ApplyRadialDeadZone_FullDeflection_StaysFull) {
+    float x = 1.0f;
+    float y = 0.0f;
+
+    ApplyRadialDeadZone(x, y, LeftThumbDeadZone);
+
+    EXPECT_NEAR(x, 1.0f, 1e-6f);
+    EXPECT_NEAR(y, 0.0f, 1e-6f);
+}
+
+TEST(GamepadTypesTests, ApplyRadialDeadZone_JustOutsideZone_SmallOutput) {
+    float x = LeftThumbDeadZone + 0.01f;
+    float y = 0.0f;
+
+    ApplyRadialDeadZone(x, y, LeftThumbDeadZone);
+
+    EXPECT_GT(x, 0.0f);
+    EXPECT_LT(x, 0.05f);
+}
+
+TEST(GamepadTypesTests, ApplyRadialDeadZone_Diagonal_PreservesDirectionAndClamps) {
+    // Square-gate sticks can report (1, 1): magnitude above 1 is clamped
+    float x = 1.0f;
+    float y = 1.0f;
+
+    ApplyRadialDeadZone(x, y, LeftThumbDeadZone);
+
+    EXPECT_NEAR(x, y, 1e-6f);
+    EXPECT_NEAR(std::sqrt(x * x + y * y), 1.0f, 1e-5f);
+}
+
+// ============================================================================
+// Gamepad Input Tests
+// ============================================================================
+
+namespace {
+    GamepadState Pad(std::uint32_t buttons) {
+        GamepadState state{};
+        state.connected = true;
+        state.buttons = buttons;
+        return state;
+    }
+}
+
+TEST(InputSystemTests, SetGamepadState_StoresState) {
+    InputSystem system;
+    system.Initialize();
+    GamepadState state = Pad(ButtonMask(GamepadButton::A));
+    state.leftThumbX = 0.5f;
+
+    system.SetGamepadState(0, state);
+
+    EXPECT_TRUE(system.GetGamepadState(0).connected);
+    EXPECT_FLOAT_EQ(system.GetGamepadState(0).leftThumbX, 0.5f);
+    EXPECT_TRUE(system.IsGamepadButtonDown(GamepadButton::A));
+    EXPECT_FALSE(system.IsGamepadButtonDown(GamepadButton::B));
+}
+
+TEST(InputSystemTests, IsGamepadButtonPressed_NewPress_Reported) {
+    InputSystem system;
+    system.Initialize();
+
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::Start)));
+
+    EXPECT_TRUE(system.IsGamepadButtonPressed(GamepadButton::Start));
+}
+
+TEST(InputSystemTests, IsGamepadButtonPressed_HeldIntoNextFrame_NotReportedAgain) {
+    InputSystem system;
+    system.Initialize();
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::A)));
+    system.Update();
+
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::A)));
+
+    EXPECT_FALSE(system.IsGamepadButtonPressed(GamepadButton::A));
+    EXPECT_TRUE(system.IsGamepadButtonDown(GamepadButton::A));
+}
+
+TEST(InputSystemTests, IsGamepadButtonPressed_TapWithinOneFrame_StillReported) {
+    InputSystem system;
+    system.Initialize();
+
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::B)));
+    system.SetGamepadState(0, Pad(0));
+
+    EXPECT_TRUE(system.IsGamepadButtonPressed(GamepadButton::B));
+    EXPECT_FALSE(system.IsGamepadButtonDown(GamepadButton::B));
+}
+
+TEST(InputSystemTests, IsGamepadButtonPressed_OtherGamepad_Independent) {
+    InputSystem system;
+    system.Initialize();
+
+    system.SetGamepadState(1, Pad(ButtonMask(GamepadButton::X)));
+
+    EXPECT_TRUE(system.IsGamepadButtonPressed(GamepadButton::X, 1));
+    EXPECT_FALSE(system.IsGamepadButtonPressed(GamepadButton::X, 0));
+}
+
+TEST(InputSystemTests, IsActionTriggered_GamepadAction_Triggers) {
+    InputSystem system;
+    system.Initialize();
+    InputAction action{};
+    action.name = "Confirm";
+    action.deviceType = InputDevice::Gamepad;
+    action.gamepadButton = GamepadButton::A;
+    system.RegisterAction(action);
+
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::A)));
+
+    EXPECT_TRUE(system.IsActionTriggered("Confirm"));
+}
+
+TEST(InputSystemTests, IsActionTriggered_MultipleBindings_AnyTriggers) {
+    InputSystem system;
+    system.Initialize();
+    InputAction key{};
+    key.name = "Pause";
+    key.deviceType = InputDevice::Keyboard;
+    key.keyCode = Keys::Escape;
+    InputAction pad{};
+    pad.name = "Pause";
+    pad.deviceType = InputDevice::Gamepad;
+    pad.gamepadButton = GamepadButton::Start;
+    system.RegisterAction(key);
+    system.RegisterAction(pad);
+
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::Start)));
+    EXPECT_TRUE(system.IsActionTriggered("Pause"));
+
+    system.Update();
+    system.SetKeyState(Keys::Escape, KeyState::Pressed);
+    EXPECT_TRUE(system.IsActionTriggered("Pause"));
+}
+
+TEST(InputSystemTests, ReleaseAll_ReleasesGamepadButtons) {
+    InputSystem system;
+    system.Initialize();
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::A) | ButtonMask(GamepadButton::DPadUp)));
+
+    system.ReleaseAll();
+
+    EXPECT_FALSE(system.IsGamepadButtonDown(GamepadButton::A));
+    EXPECT_FALSE(system.IsGamepadButtonDown(GamepadButton::DPadUp));
+    EXPECT_TRUE(system.GetGamepadState(0).connected);
+}
+
+TEST(InputSystemTests, Shutdown_ClearsGamepadState) {
+    InputSystem system;
+    system.Initialize();
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::A)));
+
+    system.Shutdown();
+
+    EXPECT_FALSE(system.GetGamepadState(0).connected);
+}
+
+// ============================================================================
+// Device Input Tests
+// ============================================================================
+
+TEST(InputSystemTests, HasDeviceInput_Default_False) {
+    InputSystem system;
+    system.Initialize();
+
+    EXPECT_FALSE(system.HasDeviceInput());
+}
+
+TEST(InputSystemTests, PollDevices_WithoutDeviceInput_KeepsPushedState) {
+    InputSystem system;
+    system.Initialize();
+    system.SetGamepadState(0, Pad(ButtonMask(GamepadButton::Y)));
+
+    system.PollDevices();
+
+    EXPECT_TRUE(system.IsGamepadButtonDown(GamepadButton::Y));
+}
+
+TEST(InputSystemTests, DisableDeviceInput_WithoutDevices_NoError) {
+    InputSystem system;
+    system.Initialize();
+
+    system.DisableDeviceInput();
+
+    EXPECT_FALSE(system.HasDeviceInput());
+}
