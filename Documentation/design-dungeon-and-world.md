@@ -1,4 +1,4 @@
-# LegendsBelow – Dungeon and World Design
+# LegendsBelow â€“ Dungeon and World Design
 
 ## 1. Purpose
 
@@ -29,12 +29,12 @@ Per-floor parameters:
 
 Core room categories:
 
-- Combat Room – main enemy encounters.
-- Treasure Room – high loot density, often guarded or trapped.
-- Boss Room – large arena with bespoke layout.
-- Rest Room – safe room with no enemy spawns.
-- Puzzle Room – contains environment-based puzzles.
-- Trap Room – emphasizes hazard navigation.
+- Combat Room â€“ main enemy encounters.
+- Treasure Room â€“ high loot density, often guarded or trapped.
+- Boss Room â€“ large arena with bespoke layout.
+- Rest Room â€“ safe room with no enemy spawns.
+- Puzzle Room â€“ contains environment-based puzzles.
+- Trap Room â€“ emphasizes hazard navigation.
 
 Rooms are built from templates with metadata:
 - Shape (rectangle, L-shape, cross, multi-level).
@@ -63,7 +63,7 @@ The room graph must:
 
 Algorithm (example):
 - Generate a linear critical path of N rooms.
-- For each critical room (except entrance/exit), randomly add 0–2 side branches.
+- For each critical room (except entrance/exit), randomly add 0â€“2 side branches.
 - Enforce maximum total rooms.
 
 ### 3.3 Room Type Assignment
@@ -73,7 +73,7 @@ Use weighted random selection subject to constraints:
 - One Entrance (start) room.
 - One Exit (goal) room.
 - At most one Boss room per floor (or every X floors).
-- 0–2 Rest rooms per floor.
+- 0â€“2 Rest rooms per floor.
 
 For each non-critical room:
 - Roll for type using theme-specific weights.
@@ -111,9 +111,9 @@ Rules:
 
 Types of gates:
 
-- Keyed Doors – require a key item dropped by an elite or found in a side room.
-- Switch Gates – require one or more levers to be activated.
-- Puzzle Gates – require solving a puzzle in a nearby room.
+- Keyed Doors â€“ require a key item dropped by an elite or found in a side room.
+- Switch Gates â€“ require one or more levers to be activated.
+- Puzzle Gates â€“ require solving a puzzle in a nearby room.
 
 Data example for a keyed door:
 
@@ -170,9 +170,9 @@ Each theme provides:
 
 ### 6.1 Trap Types
 
-- Pressure Plate Traps – trigger darts, spikes, or flames.
-- Tripwire Traps – trigger swinging blades or alarms.
-- Rune Traps – magical effects (curse, fear, damage zones).
+- Pressure Plate Traps â€“ trigger darts, spikes, or flames.
+- Tripwire Traps â€“ trigger swinging blades or alarms.
+- Rune Traps â€“ magical effects (curse, fear, damage zones).
 
 Each trap type has:
 - Detection difficulty (perception threshold).
@@ -181,17 +181,17 @@ Each trap type has:
 
 ### 6.2 Hazards
 
-- Static Hazards – lava pools, poison pools, bottomless pits.
-- Dynamic Hazards – moving saws, timed fire jets, falling rocks.
+- Static Hazards â€“ lava pools, poison pools, bottomless pits.
+- Dynamic Hazards â€“ moving saws, timed fire jets, falling rocks.
 
 Implementation:
 - Hazards are entities with trigger volumes and periodic logic.
 
 ### 6.3 Interactive Elements
 
-- Levers and Switches – open doors, disable traps, rearrange layouts.
-- Cranks – move platforms or bridges.
-- Teleporters – connect distant rooms.
+- Levers and Switches â€“ open doors, disable traps, rearrange layouts.
+- Cranks â€“ move platforms or bridges.
+- Teleporters â€“ connect distant rooms.
 
 All interactive elements expose generic events (e.g., OnActivated, OnDeactivated).
 
@@ -208,9 +208,9 @@ Group floors into tiers, each with its own:
 
 Example:
 
-- Tier 1 (Floors 1–3): Crypts
-- Tier 2 (Floors 4–6): Caves
-- Tier 3 (Floors 7–9): Ancient Ruins
+- Tier 1 (Floors 1â€“3): Crypts
+- Tier 2 (Floors 4â€“6): Caves
+- Tier 3 (Floors 7â€“9): Ancient Ruins
 
 ### 7.2 Boss Floors
 

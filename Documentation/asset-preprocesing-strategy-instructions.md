@@ -1,4 +1,4 @@
-# LegendsBelow – Asset Processing Strategy
+# LegendsBelow â€“ Asset Processing Strategy
 
 Purpose: describe the automated steps, validation, and outputs required to process gameplay JSON assets into runtime-ready binary data files that can be loaded dynamically without requiring solution recompilation.
 
@@ -18,11 +18,11 @@ Principles:
 - Runtime flexibility: assets loaded from external files, not compiled into executable.
 
 Pipeline overview (high-level):
-1. `validate` — run JSON schema and cross-reference checks.
-2. `normalize` — canonicalize fields, enforce ID naming, fill defaults.
-3. `pack` — produce binary-packed data files for runtime loading.
-4. `bundle` — compress and sign package for distribution (optional).
-5. `deploy` — copy assets to game's asset directory for runtime access.
+1. `validate` â€” run JSON schema and cross-reference checks.
+2. `normalize` â€” canonicalize fields, enforce ID naming, fill defaults.
+3. `pack` â€” produce binary-packed data files for runtime loading.
+4. `bundle` â€” compress and sign package for distribution (optional).
+5. `deploy` â€” copy assets to game's asset directory for runtime access.
 
 Suggested file layout and conventions:
 - Source: `data/*.json` (human-editable canonical assets).
@@ -32,7 +32,7 @@ Suggested file layout and conventions:
 - Runtime location: Game loads binary assets from `Assets/Data/` directory at startup or on-demand.
 
 Validation rules (minimum):
-- Use JSON Schema files stored in `.github/schemas/` for `spells.json`, `weapons.json`, `armour.json`.
+- Use JSON Schema files stored in `Assets/Schemas/` for `spells.json`, `weapons.json`, `armour.json`.
 - Enforce unique `id` across each domain and optionally globally.
 - Cross-reference checks: ensure `appliedStatusIds` exist in a `status` registry or `status_*.json`.
 - Field type and range checks (numeric ranges for `manaCost`, `requiredLevel`).
@@ -59,7 +59,7 @@ Generated C++ helpers (minimal):
 - Asset loader API in engine provides type-safe access using the enum IDs.
 
 Developer tools and scripts:
-- `scripts/validate_spells.py` (example) — add more domain validators.
+- `scripts/validate_spells.py` (example) â€” add more domain validators.
 - Add `scripts/normalize_assets.py` to canonicalize and write to `build/normalized/`.
 - Add `scripts/pack_assets.py` to produce binary `.bin` files and `manifest.json`.
 
@@ -72,7 +72,7 @@ CI integration:
 
 Versioning and migrations:
 - Store an `assetVersion` in the `manifest.json` produced by the pipeline.
-- When schema changes are introduced, provide a migration script under `.github/migrations/v{N}_to_v{N+1}.py` that can upgrade JSON sources or produce compatibility metadata.
+- When schema changes are introduced, provide a migration script under `Tools/AssetMigrations/v{N}_to_v{N+1}.py` that can upgrade JSON sources or produce compatibility metadata.
 
 Testing and QA:
 - Unit tests for validators and packer code (Python `pytest` or C++ tests).
@@ -156,7 +156,7 @@ Development best practices:
 - Version assets independently from code to allow content updates without code changes.
 
 Maintenance:
-- Document schema changes in `.github/schemas/CHANGELOG.md`.
+- Document schema changes in `Assets/Schemas/CHANGELOG.md`.
 - Rotate migration scripts and keep them minimal.
 
 Contact/ownership:

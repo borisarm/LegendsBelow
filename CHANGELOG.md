@@ -1,131 +1,49 @@
-# LegendsBelow - Changelog
+# Changelog
 
-## [Current] - December 2024
+All notable changes to LegendsBelow. Dates are commit dates.
 
-### ? **Major Achievements**
+## [Unreleased]
 
-#### **Complete Domain Model (LBModel)**
-- **Entities**: Character, Spell, Weapon, Armor, Item with full property support
-- **Value Objects**: Attributes, Dice, Position, StatusEffect with immutable design
-- **Enums**: CharacterClass, SpellSchool, WeaponType, DamageType, ArmorCategory with string conversion
-- **Architecture**: Header-only library design eliminates linking dependencies
-- **Testing**: 50+ comprehensive unit tests covering all domain logic
+### Changed
+- Moved design and architecture documents from `.github/` to `Documentation/`; `copilot-instructions.md` stays in `.github/` so GitHub Copilot picks it up.
+- Merged `architecture-current.md` and `design-architecture.md` into `Documentation/architecture.md`, which now reflects the C++20 module layout and actual implementation status.
+- Updated `microsoft-proxy-implementation.md` to document the Proxy 4 facade that is actually in use.
+- Converted design documents from Windows-1252 to UTF-8 and restored characters lost in earlier conversions.
+- Solution: the Documentation folder now points at `Documentation/`; fixed the `/Components/MOdel/` folder name.
+- Rewrote the README and this changelog to match the current state of the code.
 
-#### **Complete Asset System**
-- **LBAssetSystem**: Infrastructure layer with caching and hot-reload support
-- **LBAssetPersistenceService**: Service layer with JSON serialization/deserialization
-- **JSON Parsing**: Complete support for spells.json, weapons.json, armour.json formats
-- **Architecture Fix**: Corrected dependency flow (removed circular dependencies)
+## 2026-01-12
 
-### ??? **Project Structure Completed**
+### Changed
+- Split the services layer away from the old `LB.Domain` types onto the per-domain modules.
+- Converted systems to C++20 modules and removed PCH usage from module projects.
+- Laid out the modular game architecture (`LB.Engine`, rendering split); see `Documentation/modularized-game-architecture.md`.
 
-#### **Service Layer Projects**
-- LBCharacterService - Character management and lifecycle
-- LBCombatService - Combat mechanics and damage calculation
-- LBProgressionService - Character advancement and leveling
-- LBDungeonService - Dungeon generation and management  
-- LBInventoryService - Item and equipment management
-- LBAssetPersistenceService - ? JSON persistence implementation
+### Added
+- Unit tests for all Model, Service, and System components.
+- Expanded `copilot-instructions.md` with module rules and common build errors.
 
-#### **System Layer Projects** 
-- LBAssetSystem - ? Asset management with caching
-- LBRenderingSystem - DirectX 12 rendering pipeline
-- LBAudioSystem - Audio management and effects
-- LBInputSystem - Input handling and controls
-- LBPersistenceSystem - Game state save/load
+## 2026-01-11
 
-#### **Test Coverage**
-- **Domain Tests**: LBModelTests with comprehensive entity validation
-- **Service Tests**: Test projects for all service components
-- **System Tests**: Test projects for all system components
-- **Integration Tests**: End-to-end asset loading validation
+### Changed
+- Split the domain model into separate C++20 module projects: `LBModel.Core`, `.Character`, `.Combat`, `.Inventory`, `.Dungeon`.
+- Moved Progression Service DTOs into their own modules.
 
-### ?? **Game Content Ready**
+## 2026-01-10
 
-#### **Asset Data**
-- **45+ Spells**: Complete magical system from Magic Missile to Meteor
-- **12+ Weapons**: Diverse weapon types with scaling and properties  
-- **15+ Armor Pieces**: Protection system from cloth to plate mail
-- **D&D-Inspired**: Familiar mechanics and balanced progression
+### Added
+- C++20 module services with tests: Character, Combat, Progression, Inventory.
+- Module partitions for entities (Character, Spell, Weapon, Armor, StatusEffect).
 
-#### **Game Systems**
-- **Character Classes**: Warrior, Rogue, Mage, Cleric with distinct abilities
-- **Attribute System**: STR, DEX, CON, INT, WIS, CHA with proper scaling
-- **Damage Types**: Physical, Elemental, Spiritual + Arcane support
-- **Equipment Slots**: Head, Chest, MainHand, OffHand with proper validation
+### Changed
+- Repository interfaces now use Microsoft Proxy 4.0 type erasure (`LB.Repositories`).
+- `LBModel` became module-ready.
 
-### ?? **Technical Improvements**
+## 2026-01-09
 
-#### **Architecture Corrections**
-- **Fixed Asset Dependencies**: LBAssetPersistenceService no longer depends on LBAssetSystem
-- **Clean Layering**: Proper Domain ? Service ? System ? Core ? Application flow
-- **Header-Only Domain**: Eliminated LBModel.lib linking issues
-- **Dependency Inversion**: Systems depend on service abstractions
-
-#### **Code Quality**
-- **Type Safety**: Strong typing throughout all layers
-- **Error Handling**: Graceful failure handling in asset loading
-- **Performance**: Efficient caching and memory management
-- **Maintainability**: Clear separation of concerns and responsibilities
-
-### ?? **Documentation Updates**
-
-#### **Architecture Documentation**
-- **architecture-current.md**: Complete system architecture with current status
-- **README-LegendsBelow.md**: Project overview and getting started guide
-- **Copilot Instructions**: Development guidelines and best practices
-
-#### **Design Documentation**
-- **Game Design**: Character progression and combat mechanics
-- **Technical Design**: Asset formats and system interfaces
-- **Testing Strategy**: Comprehensive test coverage documentation
-
----
-
-## **Development Status Summary**
-
-### ? **100% Complete**
-- Domain model with comprehensive entity system
-- Asset loading and persistence infrastructure
-- JSON parsing for all game content types
-- Comprehensive test coverage for implemented components
-
-### ??? **Structure Ready** 
-- All service and system projects created
-- Test projects for all components
-- Development tools project structure
-- Clean architecture foundation established
-
-### ?? **Next Priorities**
-1. **Service Implementation**: Add business logic to service projects
-2. **Rendering System**: DirectX 12 isometric rendering pipeline
-3. **Engine Integration**: System coordination in LBEngineCore
-4. **Game Loop**: Main application and state management
-
----
-
-## **Key Decisions Made**
-
-### **Architecture Decisions**
-- **Header-Only Domain**: Eliminates linking complexity and improves reusability
-- **Layered Architecture**: Clean separation with dependency inversion
-- **Asset System Separation**: Persistence vs. management responsibilities clearly defined
-- **Test-Driven Development**: Comprehensive testing from the ground up
-
-### **Technology Decisions**  
-- **Microsoft GDK**: Cross-platform Xbox/PC development
-- **DirectX 12**: Modern graphics API for performance
-- **vcpkg**: Dependency management and package integration
-- **JSON Assets**: Human-readable, version-controllable game content
-
-### **Design Decisions**
-- **D&D-Inspired Mechanics**: Familiar and proven game systems
-- **Modular Content**: Easily extensible spells, weapons, and items
-- **Type-Safe Enums**: Compile-time validation and string conversion
-- **Immutable Value Objects**: Thread-safe and predictable behavior
-
-The LegendsBelow project now has a solid foundation for continued development with clean architecture, comprehensive testing, and complete game content systems ready for implementation.
-
----
-
-*Architecture is complete. Time to build worlds.* ?????
+### Added
+- Initial project from the Microsoft GDK DirectX 12 template.
+- D&D-inspired domain model (characters, items, spells, weapons, armour) with unit tests.
+- Solution structure for Services, Systems, Tools, and GoogleTest test projects.
+- Repository interfaces and asset persistence scaffolding.
+- Game content: `spells.json`, `weapons.json`, `armour.json`.

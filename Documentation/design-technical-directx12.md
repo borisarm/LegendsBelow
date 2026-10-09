@@ -1,4 +1,4 @@
-# LegendsBelow – Technical Design (DirectX 12)
+# LegendsBelow â€“ Technical Design (DirectX 12)
 
 ## 1. Purpose
 
@@ -21,9 +21,9 @@ This document is descriptive; engine code lives in C++ files like `Game.cpp`, `D
 - Rendering style: isometric scene with 2D/3D hybrid (tile geometry + sprites + UI).
 
 Core components:
-- `DeviceResources` – encapsulates device, swap chain, command queues, etc.
-- `Renderer` (or equivalent) – owns frame graph, render passes, and resource bindings.
-- `Game` – issues high-level draw requests and manages scene state.
+- `DeviceResources` â€“ encapsulates device, swap chain, command queues, etc.
+- `Renderer` (or equivalent) â€“ owns frame graph, render passes, and resource bindings.
+- `Game` â€“ issues high-level draw requests and manages scene state.
 
 ### 2.2 Swap Chain and Frame Buffers
 
@@ -33,11 +33,11 @@ Core components:
 
 ### 2.3 Render Passes (Baseline)
 
-1. **Depth/Prepass (optional)** – if using 3D walls/props with depth-heavy scenes.
-2. **Opaque Geometry** – floor tiles, walls, static props.
-3. **Characters and Dynamic Objects** – player, enemies, projectiles.
-4. **Transparent/Particles** – spell effects, environment FX.
-5. **UI/HUD** – drawn last in screen space.
+1. **Depth/Prepass (optional)** â€“ if using 3D walls/props with depth-heavy scenes.
+2. **Opaque Geometry** â€“ floor tiles, walls, static props.
+3. **Characters and Dynamic Objects** â€“ player, enemies, projectiles.
+4. **Transparent/Particles** â€“ spell effects, environment FX.
+5. **UI/HUD** â€“ drawn last in screen space.
 
 Each pass has its own root signature and PSO configuration or shares a generalized one where possible.
 
@@ -146,8 +146,8 @@ Workflow per frame:
 
 ### 8.1 Game Update/Render Separation
 
-- `Game::Update` – handles simulation (input, AI, physics, gameplay logic).
-- `Game::Render` – issues draw calls via renderer and DirectX 12.
+- `Game::Update` â€“ handles simulation (input, AI, physics, gameplay logic).
+- `Game::Render` â€“ issues draw calls via renderer and DirectX 12.
 
 ### 8.2 StepTimer
 

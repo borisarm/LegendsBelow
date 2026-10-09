@@ -1,4 +1,4 @@
-# LegendsBelow – UI/UX and Audio Design
+# LegendsBelow â€“ UI/UX and Audio Design
 
 ## 1. Purpose
 
@@ -25,7 +25,7 @@ Baseline layout (subject to iteration):
   - Mini-map with fog-of-war.
   - Compass markers for key objectives.
 - Bottom-center:
-  - Action bar (abilities and items, 1–8 slots).
+  - Action bar (abilities and items, 1â€“8 slots).
   - Cooldown overlays and keybind hints.
 - Bottom:
   - XP bar spanning the lower edge of the screen.
@@ -85,7 +85,7 @@ Tabs:
 - Movement: WASD (or click-to-move if implemented later).
 - Primary action: Left Click.
 - Secondary action: Right Click.
-- Ability shortcuts: 1–8.
+- Ability shortcuts: 1â€“8.
 - Inventory: I.
 - Character: C.
 - Map: M.
