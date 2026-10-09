@@ -19,6 +19,7 @@
       "host": true
     },
     "ms-gdk",
+    "proxy",
     "winpixevent"
   ]
 }

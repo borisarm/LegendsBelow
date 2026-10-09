@@ -1,50 +1,195 @@
 #include "pch.h"
+#include "RepositoryTestHelpers.h"
 
-// Basic LBAssetPersistenceService tests
-// This service is responsible for JSON serialization/deserialization of domain entities
+using namespace LB::Testing::Repositories;
+using LB::Repositories::SpellRepository;
+using LB::Repositories::Factory::MakeSharedSpellRepository;
+using LB::Repositories::Factory::MakeSpellRepository;
+using LB::Repositories::Factory::MakeSpellRepositoryWithAllocator;
 
-TEST(LBAssetPersistenceServiceTests, BasicServiceSetupWorks) {
-    // Verify the test project compiles and runs
-    EXPECT_EQ(1, 1);
-    EXPECT_TRUE(true);
+namespace {
+    // Order-independent comparison of ID lists
+    std::vector<SpellId> Sorted(std::vector<SpellId> ids) {
+        std::ranges::sort(ids);
+        return ids;
+    }
+
+    SpellRepository MakeSample() {
+        return MakeSpellRepository(CreateSampleRepository());
+    }
 }
 
-TEST(LBAssetPersistenceServiceTests, CanPerformBasicOperations) {
-    // Test basic C++ functionality to ensure the test environment works
-    std::string testJson = R"({
-        "name": "Test Asset",
-        "value": 42
-    })";
+// ============================================================================
+// Factory Tests
+// ============================================================================
 
-    EXPECT_FALSE(testJson.empty());
-    EXPECT_TRUE(testJson.find("Test Asset") != std::string::npos);
-    EXPECT_TRUE(testJson.find("42") != std::string::npos);
+TEST(SpellRepositoryFactoryTests, MakeSpellRepository_ReturnsUsableProxy) {
+    SpellRepository repo = MakeSample();
+
+    ASSERT_TRUE(repo.has_value());
+    EXPECT_EQ(repo->GetAllSpellIds().size(), 4u);
 }
 
-TEST(LBAssetPersistenceServiceTests, JsonStringHandlingWorks) {
-    // Test JSON string manipulation (core functionality for this service)
-    std::string jsonData = R"([
-        {
-            "id": "spell_fireball",
-            "name": "Fireball",
-            "school": "Evocation",
-            "level": 3,
-            "manaCost": 30
-        }
-    ])";
+TEST(SpellRepositoryFactoryTests, MakeSpellRepository_EmptyImplementation_NoSpells) {
+    SpellRepository repo = MakeSpellRepository(MockSpellRepository{});
 
-    // Simple JSON validation tests
-    EXPECT_TRUE(jsonData.find("spell_fireball") != std::string::npos);
-    EXPECT_TRUE(jsonData.find("Fireball") != std::string::npos);
-    EXPECT_TRUE(jsonData.find("Evocation") != std::string::npos);
-    EXPECT_TRUE(jsonData.find("30") != std::string::npos);
-
-    // Test that we can find JSON structure
-    EXPECT_TRUE(jsonData.find('[') != std::string::npos); // Array start
-    EXPECT_TRUE(jsonData.find('{') != std::string::npos); // Object start
-    EXPECT_TRUE(jsonData.find('}') != std::string::npos); // Object end
-    EXPECT_TRUE(jsonData.find(']') != std::string::npos); // Array end
+    EXPECT_TRUE(repo->GetAllSpellIds().empty());
 }
 
-// TODO: Add actual JSON parsing/serialization tests once we decide on the JSON library
-// (nlohmann/json, rapidjson, etc.) and implement the core persistence functionality
+TEST(SpellRepositoryFactoryTests, MakeSharedSpellRepository_ReturnsUsableProxy) {
+    SpellRepository repo = MakeSharedSpellRepository(CreateSampleRepository());
+
+    ASSERT_TRUE(repo.has_value());
+    EXPECT_TRUE(repo->SpellExists(TestSpells::Fireball));
+}
+
+TEST(SpellRepositoryFactoryTests, MakeSpellRepositoryWithAllocator_UsesAllocator) {
+    CountingAllocator<std::byte> allocator;
+
+    SpellRepository repo = MakeSpellRepositoryWithAllocator(allocator, CreateSampleRepository());
+
+    ASSERT_TRUE(repo.has_value());
+    EXPECT_GE(*allocator.allocations, 1u);
+    EXPECT_TRUE(repo->SpellExists(TestSpells::MagicMissile));
+}
+
+TEST(SpellRepositoryFactoryTests, Copy_ProducesIndependentProxyWithSameData) {
+    SpellRepository original = MakeSample();
+
+    SpellRepository copy = original;
+
+    ASSERT_TRUE(copy.has_value());
+    EXPECT_EQ(Sorted(copy->GetAllSpellIds()), Sorted(original->GetAllSpellIds()));
+}
+
+// ============================================================================
+// Lookup Tests
+// ============================================================================
+
+TEST(SpellRepositoryTests, GetSpell_ExistingId_ReturnsSpell) {
+    SpellRepository repo = MakeSample();
+
+    auto spell = repo->GetSpell(TestSpells::Fireball);
+
+    ASSERT_TRUE(spell.has_value());
+    EXPECT_EQ(spell->id, TestSpells::Fireball);
+    EXPECT_EQ(spell->name, "Fireball");
+    EXPECT_EQ(spell->manaCost, 30);
+    EXPECT_EQ(spell->baseDamage, 28);
+}
+
+TEST(SpellRepositoryTests, GetSpell_UnknownId_ReturnsNullopt) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_FALSE(repo->GetSpell(999).has_value());
+}
+
+TEST(SpellRepositoryTests, GetSpell_InvalidId_ReturnsNullopt) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_FALSE(repo->GetSpell(LB::InvalidId).has_value());
+}
+
+TEST(SpellRepositoryTests, SpellExists_KnownAndUnknown) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_TRUE(repo->SpellExists(TestSpells::DivineLight));
+    EXPECT_FALSE(repo->SpellExists(999));
+}
+
+TEST(SpellRepositoryTests, GetAllSpellIds_ReturnsEveryId) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(Sorted(repo->GetAllSpellIds()),
+        (std::vector<SpellId>{ TestSpells::MagicMissile, TestSpells::Fireball, TestSpells::FrostNova, TestSpells::DivineLight }));
+}
+
+// ============================================================================
+// Filter Tests
+// ============================================================================
+
+TEST(SpellRepositoryTests, GetSpellsBySchool_Evocation_ReturnsOnlyEvocation) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(Sorted(repo->GetSpellsBySchool(SpellSchool::Evocation)),
+        (std::vector<SpellId>{ TestSpells::MagicMissile, TestSpells::Fireball }));
+}
+
+TEST(SpellRepositoryTests, GetSpellsBySchool_NoMatches_ReturnsEmpty) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_TRUE(repo->GetSpellsBySchool(SpellSchool::Shadow).empty());
+}
+
+TEST(SpellRepositoryTests, GetSchoolDescription_KnownSchool_ReturnsText) {
+    SpellRepository repo = MakeSample();
+
+    auto description = repo->GetSchoolDescription(SpellSchool::Frost);
+
+    ASSERT_TRUE(description.has_value());
+    EXPECT_FALSE(description->empty());
+}
+
+TEST(SpellRepositoryTests, GetSchoolDescription_None_ReturnsNullopt) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_FALSE(repo->GetSchoolDescription(SpellSchool::None).has_value());
+}
+
+TEST(SpellRepositoryTests, GetSpellsByClass_Cleric_ReturnsClericSpells) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(repo->GetSpellsByClass(CharacterClass::Cleric), (std::vector<SpellId>{ TestSpells::DivineLight }));
+}
+
+TEST(SpellRepositoryTests, GetSpellsByClass_Warrior_ReturnsEmpty) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_TRUE(repo->GetSpellsByClass(CharacterClass::Warrior).empty());
+}
+
+TEST(SpellRepositoryTests, GetSpellsByLevel_LevelOne_ReturnsLevelOneSpells) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(Sorted(repo->GetSpellsByLevel(1)),
+        (std::vector<SpellId>{ TestSpells::MagicMissile, TestSpells::DivineLight }));
+}
+
+TEST(SpellRepositoryTests, GetSpellsByCategory_Control_MatchesMultiCategorySpell) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(repo->GetSpellsByCategory(SpellCategory::Control), (std::vector<SpellId>{ TestSpells::FrostNova }));
+}
+
+TEST(SpellRepositoryTests, GetSpellsByCategory_Damage_ReturnsAllDamageSpells) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(Sorted(repo->GetSpellsByCategory(SpellCategory::Damage)),
+        (std::vector<SpellId>{ TestSpells::MagicMissile, TestSpells::Fireball, TestSpells::FrostNova }));
+}
+
+TEST(SpellRepositoryTests, GetSpellsByManaCost_RangeIsInclusive) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(Sorted(repo->GetSpellsByManaCost(15, 20)),
+        (std::vector<SpellId>{ TestSpells::FrostNova, TestSpells::DivineLight }));
+}
+
+TEST(SpellRepositoryTests, GetSpellsByManaCost_InvertedRange_ReturnsEmpty) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_TRUE(repo->GetSpellsByManaCost(50, 10).empty());
+}
+
+TEST(SpellRepositoryTests, GetSpellsByCastTime_IncludesInstantAndBoundary) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(Sorted(repo->GetSpellsByCastTime(1.0f)),
+        (std::vector<SpellId>{ TestSpells::MagicMissile, TestSpells::FrostNova, TestSpells::DivineLight }));
+}
+
+TEST(SpellRepositoryTests, GetSpellsByCastTime_Zero_ReturnsOnlyInstant) {
+    SpellRepository repo = MakeSample();
+
+    EXPECT_EQ(repo->GetSpellsByCastTime(0.0f), (std::vector<SpellId>{ TestSpells::MagicMissile }));
+}

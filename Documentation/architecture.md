@@ -84,7 +84,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 | LBInventoryService | `LB.InventoryService` | `LB::Services::Inventory` | Implemented and tested |
 | LBProgressionService | `LB.ProgressionService` (+5 sub-modules) | `LB::Services::Progression` | Implemented and tested |
 | LBDungeonService | `LB.DungeonService` | `LB::Services::Dungeon` | Implemented and tested |
-| LBAssetPersistenceService | `LB.Repositories` | `LB::Repositories` | Spell repository facade only (Microsoft Proxy) |
+| LBAssetPersistenceService | `LB.Repositories` | `LB::Repositories` | Spell repository facade (Microsoft Proxy 4, from vcpkg); tested with a duck-typed mock. No JSON-backed implementation yet |
 
 ### Systems – `Components/Systems/`
 
@@ -105,7 +105,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 The native window crosses module boundaries only as an opaque `void*`. Direct3D types stay inside LBRenderingSystem's internal partition `LB.RenderingSystem:DeviceResources` (`DeviceResources.cpp`), which consumers cannot import.
 
-All projects share one vcpkg manifest at the repository root (`vcpkg.json`); LegendsBelow and LBRenderingSystem enable manifest mode.
+All projects share one vcpkg manifest at the repository root (`vcpkg.json`); LegendsBelow, LBRenderingSystem, and LBAssetPersistenceService enable manifest mode. `Directory.Build.targets` makes vcpkg install before C++ module dependency scanning, so a fresh clone builds on the first try.
 
 ### Tools
 
@@ -175,7 +175,5 @@ LB.Engine::Save → collect state from Services
 
 - **Cross-domain imports.** `LB.Dungeon` imports `LB.Character`; `LB.Inventory` imports `LB.Character` and `LB.Combat`. Either relax the rule to an explicit domain ordering (Core → Character/Combat → Inventory/Dungeon) or move the shared IDs (e.g. `CharacterId`, `ItemId`) into `LB.Core`.
 - **Stub module.** LBModel.Progression has three files all declaring `export module LB;`; it needs proper `LB.Progression*` names when implemented.
-- **LBAssetPersistenceService does not build.** `LB.Repositories` imports `<proxy/proxy.h>`, but no `vcpkg.json` declares `proxy` and the header is not found. LBEngineCore no longer references it.
 - **No vcpkg baseline.** The root `vcpkg.json` has no `builtin-baseline`, so a fresh install takes whatever port versions the local vcpkg provides (GDK, Agility SDK). Pin a baseline for reproducible builds.
 - **Release|Win32 / ARM64 configurations** of the component projects are untested; build Debug|x64 or Release|x64.
-- **Leftover module.** `LBAssetPersistenceService.ixx` is an empty module (`LBAssetPersistenceService`) with no content.
