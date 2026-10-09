@@ -214,3 +214,115 @@ TEST(AudioSystemTests, SetChannelVolume_MultipleChannels_IndependentControl) {
     EXPECT_EQ(system.GetChannelVolume(AudioChannel::SoundEffects), 0.8f);
     EXPECT_EQ(system.GetChannelVolume(AudioChannel::Ambient), 0.5f);
 }
+// ============================================================================
+// Channel Pause Tests
+// ============================================================================
+
+TEST(AudioSystemTests, PauseChannel_PausesOnlyThatChannel) {
+    AudioSystem system;
+    system.Initialize();
+    auto sfx = system.PlaySound("hit", AudioChannel::SoundEffects);
+    auto music = system.PlaySound("theme", AudioChannel::Music, 1.0f, true);
+
+    system.PauseChannel(AudioChannel::SoundEffects);
+
+    EXPECT_FALSE(system.IsPlaying(sfx));
+    EXPECT_TRUE(system.IsPlaying(music));
+    EXPECT_EQ(system.GetActiveSourceCount(), 2u);
+}
+
+TEST(AudioSystemTests, ResumeChannel_ResumesPausedSources) {
+    AudioSystem system;
+    system.Initialize();
+    auto sfx = system.PlaySound("hit", AudioChannel::SoundEffects);
+    system.PauseChannel(AudioChannel::SoundEffects);
+
+    system.ResumeChannel(AudioChannel::SoundEffects);
+
+    EXPECT_TRUE(system.IsPlaying(sfx));
+}
+
+TEST(AudioSystemTests, ResumeChannel_OtherChannel_NoEffect) {
+    AudioSystem system;
+    system.Initialize();
+    auto sfx = system.PlaySound("hit", AudioChannel::SoundEffects);
+    system.PauseChannel(AudioChannel::SoundEffects);
+
+    system.ResumeChannel(AudioChannel::Ambient);
+
+    EXPECT_FALSE(system.IsPlaying(sfx));
+}
+
+// ============================================================================
+// Effective Volume Tests
+// ============================================================================
+
+TEST(AudioSystemTests, GetEffectiveVolume_MultipliesMasterChannelAndSource) {
+    AudioSystem system;
+    system.Initialize();
+    system.SetMasterVolume(0.5f);
+    system.SetChannelVolume(AudioChannel::SoundEffects, 0.8f);
+
+    auto id = system.PlaySound("hit", AudioChannel::SoundEffects, 0.5f);
+
+    EXPECT_FLOAT_EQ(system.GetEffectiveVolume(id), 0.5f * 0.8f * 0.5f);
+}
+
+TEST(AudioSystemTests, GetEffectiveVolume_MasterChannelSource_CountsMasterOnce) {
+    AudioSystem system;
+    system.Initialize();
+    system.SetMasterVolume(0.5f);
+
+    auto id = system.PlaySound("ui", AudioChannel::Master, 1.0f);
+
+    EXPECT_FLOAT_EQ(system.GetEffectiveVolume(id), 0.5f);
+}
+
+TEST(AudioSystemTests, GetEffectiveVolume_UnknownSource_Zero) {
+    AudioSystem system;
+    system.Initialize();
+
+    EXPECT_FLOAT_EQ(system.GetEffectiveVolume(999), 0.0f);
+}
+
+// ============================================================================
+// Device and Suspend Tests
+// ============================================================================
+
+TEST(AudioSystemTests, HasDeviceOutput_Default_False) {
+    AudioSystem system;
+    system.Initialize();
+
+    EXPECT_FALSE(system.HasDeviceOutput());
+}
+
+TEST(AudioSystemTests, SuspendResume_TracksState) {
+    AudioSystem system;
+    system.Initialize();
+
+    system.Suspend();
+    EXPECT_TRUE(system.IsSuspended());
+
+    system.Resume();
+    EXPECT_FALSE(system.IsSuspended());
+}
+
+TEST(AudioSystemTests, Shutdown_ClearsSuspendAndDevice) {
+    AudioSystem system;
+    system.Initialize();
+    system.Suspend();
+
+    system.Shutdown();
+
+    EXPECT_FALSE(system.IsSuspended());
+    EXPECT_FALSE(system.HasDeviceOutput());
+}
+
+TEST(AudioSystemTests, SetMasterVolume_WithoutDevice_StillTracked) {
+    AudioSystem system;
+    system.Initialize();
+
+    system.SetMasterVolume(0.3f);
+
+    EXPECT_FLOAT_EQ(system.GetMasterVolume(), 0.3f);
+}

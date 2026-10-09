@@ -19,6 +19,7 @@
       "host": true
     },
     "ms-gdk",
+    "nlohmann-json",
     "proxy",
     "winpixevent"
   ]

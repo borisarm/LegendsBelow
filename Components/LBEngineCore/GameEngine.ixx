@@ -2,7 +2,9 @@
 export module LB.Engine:GameEngine;
 
 import std;
+import LB.AudioSystem;
 import LB.InputSystem;
+import LB.PersistenceSystem;
 import LB.RenderingSystem;
 import :StepTimer;
 
@@ -23,6 +25,11 @@ export namespace LB::Engine {
 
         // Input action names registered by the engine (bindings from design-ui-ux-and-audio.md)
         static constexpr std::string_view PauseAction = "Pause";
+        static constexpr std::string_view QuickSaveAction = "QuickSave";
+        static constexpr std::string_view QuickLoadAction = "QuickLoad";
+
+        // Save slot used by quick save/load (F5/F9)
+        static constexpr std::int32_t QuickSaveSlot = 0;
 
         GameEngine() {
             timer_.SetFixedTimeStep(true);
@@ -38,11 +45,23 @@ export namespace LB::Engine {
 
         /// <summary>
         /// Initialize the engine and its systems. Returns false if the graphics device could not be created.
+        /// saveDirectory (UTF-8) holds saves and preferences; empty keeps them in memory only.
         /// </summary>
-        bool Initialize(void* nativeWindow, std::int32_t width, std::int32_t height) {
+        bool Initialize(void* nativeWindow, std::int32_t width, std::int32_t height, const std::string& saveDirectory = {}) {
             if (!renderingSystem_.Initialize(nativeWindow, width, height)) {
                 return false;
             }
+
+            // An unusable save directory should not stop the game; fall back to memory only
+            if (!persistenceSystem_.Initialize(saveDirectory)) {
+                persistenceSystem_.Initialize({});
+            }
+
+            audioSystem_.Initialize();
+            if (nativeWindow != nullptr) {
+                audioSystem_.EnableDeviceOutput();
+            }
+            ApplyPreferences(persistenceSystem_.LoadPreferences());
 
             inputSystem_.Initialize();
             RegisterDefaultBindings();
@@ -70,7 +89,11 @@ export namespace LB::Engine {
         void Shutdown() {
             if (!initialized_) return;
 
+            SaveVolumePreferences();
+
             inputSystem_.Shutdown();
+            audioSystem_.Shutdown();
+            persistenceSystem_.Shutdown();
             renderingSystem_.Shutdown();
             paused_ = false;
             initialized_ = false;
@@ -109,10 +132,12 @@ export namespace LB::Engine {
         }
 
         void OnSuspending() {
-            // TODO: Game is being power-suspended (or minimized).
+            audioSystem_.Suspend();
         }
 
         void OnResuming() {
+            audioSystem_.Resume();
+
             // Avoid a burst of catch-up updates for the time spent suspended
             timer_.ResetElapsedTime();
         }
@@ -179,6 +204,9 @@ export namespace LB::Engine {
         [[nodiscard]] bool HasGpuDevice() const noexcept { return renderingSystem_.HasGpuDevice(); }
         [[nodiscard]] const StepTimer& GetTimer() const noexcept { return timer_; }
         [[nodiscard]] const Systems::Input::InputSystem& GetInput() const noexcept { return inputSystem_; }
+        [[nodiscard]] const Systems::Audio::AudioSystem& GetAudio() const noexcept { return audioSystem_; }
+        [[nodiscard]] Systems::Audio::AudioSystem& GetAudio() noexcept { return audioSystem_; }
+        [[nodiscard]] const Systems::Persistence::PersistenceSystem& GetPersistence() const noexcept { return persistenceSystem_; }
 
         /// <summary>
         /// True when gamepads are read from the platform (GameInput runtime available)
@@ -196,6 +224,39 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] double GetGameTimeSeconds() const noexcept { return gameTimeSeconds_; }
 
+        /// <summary>
+        /// Save the game state to a slot
+        /// </summary>
+        bool SaveGame(std::int32_t slotIndex) {
+            if (!initialized_) return false;
+
+            Systems::Persistence::SaveSlotInfo metadata{};
+            metadata.saveName = slotIndex == QuickSaveSlot ? "Quick Save" : std::format("Save {}", slotIndex);
+            metadata.playtimeSeconds = static_cast<std::int32_t>(gameTimeSeconds_);
+
+            Systems::Persistence::SaveData data;
+            data["gameTimeSeconds"] = std::format("{}", gameTimeSeconds_);
+
+            return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
+        }
+
+        /// <summary>
+        /// Restore the game state from a slot. Returns false (state unchanged) if the slot is
+        /// missing or unreadable.
+        /// </summary>
+        bool LoadGame(std::int32_t slotIndex) {
+            if (!initialized_) return false;
+
+            auto result = persistenceSystem_.LoadGame(slotIndex);
+            if (!result.success) return false;
+
+            double gameTime = 0.0;
+            if (!ParseDouble(result.data, "gameTimeSeconds", gameTime)) return false;
+
+            gameTimeSeconds_ = gameTime;
+            return true;
+        }
+
     private:
         /// <summary>
         /// Advance the simulation by one step.
@@ -206,7 +267,14 @@ export namespace LB::Engine {
             }
 
             if (inputSystem_.IsActionTriggered(std::string(PauseAction))) {
-                paused_ = !paused_;
+                SetPaused(!paused_);
+            }
+
+            if (inputSystem_.IsActionTriggered(std::string(QuickSaveAction))) {
+                SaveGame(QuickSaveSlot);
+            }
+            if (inputSystem_.IsActionTriggered(std::string(QuickLoadAction))) {
+                LoadGame(QuickSaveSlot);
             }
 
             if (!paused_) {
@@ -241,6 +309,50 @@ export namespace LB::Engine {
             renderingSystem_.EndFrame();
         }
 
+        void SetPaused(bool paused) {
+            paused_ = paused;
+
+            // Gameplay sounds stop with the simulation; music keeps playing
+            using Systems::Audio::AudioChannel;
+            for (auto channel : { AudioChannel::SoundEffects, AudioChannel::Ambient, AudioChannel::Voice }) {
+                if (paused_) audioSystem_.PauseChannel(channel);
+                else audioSystem_.ResumeChannel(channel);
+            }
+        }
+
+        void ApplyPreferences(const Systems::Persistence::PlayerPreferences& prefs) {
+            using Systems::Audio::AudioChannel;
+            audioSystem_.SetChannelVolume(AudioChannel::Master, prefs.masterVolume);
+            audioSystem_.SetChannelVolume(AudioChannel::Music, prefs.musicVolume);
+            audioSystem_.SetChannelVolume(AudioChannel::SoundEffects, prefs.sfxVolume);
+        }
+
+        void SaveVolumePreferences() {
+            using Systems::Audio::AudioChannel;
+            auto prefs = persistenceSystem_.LoadPreferences();
+            prefs.masterVolume = audioSystem_.GetChannelVolume(AudioChannel::Master);
+            prefs.musicVolume = audioSystem_.GetChannelVolume(AudioChannel::Music);
+            prefs.sfxVolume = audioSystem_.GetChannelVolume(AudioChannel::SoundEffects);
+            persistenceSystem_.SavePreferences(prefs);
+        }
+
+        static bool ParseDouble(const Systems::Persistence::SaveData& data, const std::string& key, double& value) {
+            auto it = data.find(key);
+            if (it == data.end()) return false;
+
+            const auto& text = it->second;
+            const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
+            return ec == std::errc{} && end == text.data() + text.size();
+        }
+
+        void RegisterKeyBinding(std::string_view action, std::int32_t keyCode) {
+            Systems::Input::InputAction binding{};
+            binding.name = std::string(action);
+            binding.deviceType = Systems::Input::InputDevice::Keyboard;
+            binding.keyCode = keyCode;
+            inputSystem_.RegisterAction(binding);
+        }
+
         void RegisterDefaultBindings() {
             Systems::Input::InputAction pause{};
             pause.name = std::string(PauseAction);
@@ -253,6 +365,9 @@ export namespace LB::Engine {
             pauseGamepad.deviceType = Systems::Input::InputDevice::Gamepad;
             pauseGamepad.gamepadButton = Systems::Input::GamepadButton::Start;
             inputSystem_.RegisterAction(pauseGamepad);
+
+            RegisterKeyBinding(QuickSaveAction, Systems::Input::Keys::F5);
+            RegisterKeyBinding(QuickLoadAction, Systems::Input::Keys::F9);
         }
 
         void OnDeviceLost() {
@@ -265,6 +380,8 @@ export namespace LB::Engine {
 
         Systems::Rendering::RenderingSystem renderingSystem_;
         Systems::Input::InputSystem inputSystem_;
+        Systems::Audio::AudioSystem audioSystem_;
+        Systems::Persistence::PersistenceSystem persistenceSystem_;
         StepTimer timer_;
         double gameTimeSeconds_{0.0};
         bool paused_{false};
