@@ -90,7 +90,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 | Project | Module | Namespace | Status |
 |---------|--------|-----------|--------|
-| LBRenderingSystem | `LB.RenderingSystem` | `LB::Systems::Rendering` | Platform-neutral draw-command API; no DX12 yet |
+| LBRenderingSystem | `LB.RenderingSystem` | `LB::Systems::Rendering` | Draw-command API with a Direct3D 12 backend (device, swap chain, clear/present); headless when no window is given. Sprite/text drawing not implemented yet |
 | LBInputSystem | `LB.InputSystem` | `LB::Systems::Input` | State tracking (keyboard/mouse/gamepad); no GameInput yet |
 | LBAudioSystem | `LB.AudioSystem` | `LB::Systems::Audio` | Channel/clip bookkeeping; no audio API yet |
 | LBAssetSystem | `LB.AssetSystem` | `LB::Systems::Asset` | Asset registry/lifecycle; no file I/O yet |
@@ -100,8 +100,12 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 | Project | Status |
 |---------|--------|
-| `Components/LBEngineCore` | Placeholder `.ixx` files only; references all Systems and Services |
-| `LegendsBelow` | Still the DirectX 12 template (`Game`, `DeviceResources`, `StepTimer`, `pch.h`); references LBEngineCore but does not import it |
+| `Components/LBEngineCore` | `LB.Engine` (`:StepTimer`, `:GameEngine`): fixed 60 Hz loop driving LBRenderingSystem; no Win32 dependency. Services and the other Systems are not wired in yet |
+| `LegendsBelow` | Win32/GDK shell only: `Main.cpp` creates the window, runs the message loop, and forwards events to `LB::Engine::GameEngine` |
+
+The native window crosses module boundaries only as an opaque `void*`. Direct3D types stay inside LBRenderingSystem's internal partition `LB.RenderingSystem:DeviceResources` (`DeviceResources.cpp`), which consumers cannot import.
+
+All projects share one vcpkg manifest at the repository root (`vcpkg.json`); LegendsBelow and LBRenderingSystem enable manifest mode.
 
 ### Tools
 
@@ -112,7 +116,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 ### Tests – `Components/Tests/`
 
-One GoogleTest project per component under `Model/`, `Services/`, and `System/`, plus `LBEngineTests` (placeholder). Coverage targets: domain >90%, services >85%, systems >75%.
+One GoogleTest project per component under `Model/`, `Services/`, and `System/`, plus `LBEngineTests` (StepTimer and headless GameEngine). Test packages come from NuGet `packages.config`; restore with `msbuild LegendsBelow.slnx -t:restore -p:RestorePackagesConfig=true` or Visual Studio's package restore. Coverage targets: domain >90%, services >85%, systems >75%.
 
 ### Data – `Assets/Data/`
 
@@ -124,9 +128,9 @@ One GoogleTest project per component under `Model/`, `Services/`, and `System/`,
 
 ### 4.1 Engine orchestration (LB.Engine)
 
-See `modularized-game-architecture.md` for the concrete migration. Responsibilities:
-- Own the `StepTimer` and run `Tick → Update (fixed 60 Hz) → Render`
-- Construct Systems and Services and inject dependencies (repositories into services)
+The shell → engine → renderer split from `modularized-game-architecture.md` is done. Remaining responsibilities:
+- [x] Own the `StepTimer` and run `Tick → Update (fixed 60 Hz) → Render`
+- Construct the remaining Systems (Input, Audio, Asset, Persistence) and Services, and inject dependencies (repositories into services)
 - Game state machine (main menu, town, dungeon, pause)
 - Cross-system events (`EventBus`) so Services never call Systems directly
 
@@ -170,6 +174,8 @@ LB.Engine::Save → collect state from Services
 ## 5. Known Deviations and Open Issues
 
 - **Cross-domain imports.** `LB.Dungeon` imports `LB.Character`; `LB.Inventory` imports `LB.Character` and `LB.Combat`. Either relax the rule to an explicit domain ordering (Core → Character/Combat → Inventory/Dungeon) or move the shared IDs (e.g. `CharacterId`, `ItemId`) into `LB.Core`.
-- **Stub modules with wrong names.** LBEngineCore (`export module LB;`, `GameEngine`, `StepTimer`, …), LBRenderingSystem's `DeviceResources`/`RenderContext`/`GraphicsTypes`, and LBModel.Progression (three files all declaring `export module LB;`) need proper `LB.*` names when they are implemented.
-- **Undeclared dependency.** `LB.Repositories` imports `<proxy/proxy.h>`, but no `vcpkg.json` declares `proxy`.
+- **Stub module.** LBModel.Progression has three files all declaring `export module LB;`; it needs proper `LB.Progression*` names when implemented.
+- **LBAssetPersistenceService does not build.** `LB.Repositories` imports `<proxy/proxy.h>`, but no `vcpkg.json` declares `proxy` and the header is not found. LBEngineCore no longer references it.
+- **No vcpkg baseline.** The root `vcpkg.json` has no `builtin-baseline`, so a fresh install takes whatever port versions the local vcpkg provides (GDK, Agility SDK). Pin a baseline for reproducible builds.
+- **Release|Win32 / ARM64 configurations** of the component projects are untested; build Debug|x64 or Release|x64.
 - **Leftover module.** `LBAssetPersistenceService.ixx` is an empty module (`LBAssetPersistenceService`) with no content.

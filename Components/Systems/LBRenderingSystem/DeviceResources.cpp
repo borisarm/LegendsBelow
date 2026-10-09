@@ -1,21 +1,350 @@
+// DeviceResources.cpp - Direct3D 12 device, swap chain, and frame presentation
 //
-// DeviceResources.cpp - A wrapper for the Direct3D 12 device and swapchain
-//
+// Internal partition of LB.RenderingSystem: nothing here is visible to consumers of
+// the module. Ported from the Microsoft GDK DirectX 12 template (DeviceResources.h/.cpp).
+module;
 
-#include "pch.h"
-#include "DeviceResources.h"
+#include <winsdkver.h>
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+#include <sdkddkver.h>
 
-using namespace DirectX;
-using namespace DX;
+#define NOMINMAX
+#define NODRAWTEXT
+#define NOGDI
+#define NOBITMAP
+#define NOMCX
+#define NOSERVICE
+#define NOHELP
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 
-using Microsoft::WRL::ComPtr;
+#include <wrl/client.h>
+#include <wrl/event.h>
 
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wcovered-switch-default"
-#pragma clang diagnostic ignored "-Wswitch-enum"
+#include <directx/dxgiformat.h>
+#include <directx/d3d12.h>
+#include <directx/d3dx12.h>
+#include <dxguids/dxguids.h>
+
+#include <dxgi1_6.h>
+
+#ifdef _DEBUG
+#include <dxgidebug.h>
 #endif
 
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <exception>
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <stdexcept>
+#include <system_error>
+#include <tuple>
+
+// Keep the library self-contained so any consumer (game, tests) links without extra setup.
+#pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dxguid.lib")
+
 #pragma warning(disable : 4061)
+
+module LB.RenderingSystem:DeviceResources;
+
+namespace LB::Systems::Rendering::Detail
+{
+    using Microsoft::WRL::ComPtr;
+
+    // Helper class for COM exceptions
+    class com_exception : public std::exception
+    {
+    public:
+        com_exception(HRESULT hr) noexcept : result(hr) {}
+
+        const char* what() const noexcept override
+        {
+            static char s_str[64] = {};
+            sprintf_s(s_str, "Failure with HRESULT of %08X", static_cast<unsigned int>(result));
+            return s_str;
+        }
+
+    private:
+        HRESULT result;
+    };
+
+    // Helper utility converts D3D API failures into exceptions.
+    inline void ThrowIfFailed(HRESULT hr)
+    {
+        if (FAILED(hr))
+        {
+            throw com_exception(hr);
+        }
+    }
+
+    // Provides an interface for an application that owns DeviceResources to be notified of the device being lost or created.
+    struct IDeviceNotify
+    {
+        virtual void OnDeviceLost() = 0;
+        virtual void OnDeviceRestored() = 0;
+
+    protected:
+        ~IDeviceNotify() = default;
+    };
+
+    // Controls all the DirectX device resources.
+    class DeviceResources
+    {
+    public:
+        static constexpr unsigned int c_AllowTearing = 0x1;
+        static constexpr unsigned int c_EnableHDR    = 0x2;
+        static constexpr unsigned int c_ReverseDepth = 0x4;
+
+        DeviceResources(DXGI_FORMAT backBufferFormat = DXGI_FORMAT_B8G8R8A8_UNORM,
+                        DXGI_FORMAT depthBufferFormat = DXGI_FORMAT_D32_FLOAT,
+                        UINT backBufferCount = 2,
+                        D3D_FEATURE_LEVEL minFeatureLevel = D3D_FEATURE_LEVEL_11_0,
+                        unsigned int flags = 0) noexcept(false);
+        ~DeviceResources();
+
+        DeviceResources(DeviceResources&&) = default;
+        DeviceResources& operator= (DeviceResources&&) = default;
+
+        DeviceResources(DeviceResources const&) = delete;
+        DeviceResources& operator= (DeviceResources const&) = delete;
+
+        void CreateDeviceResources();
+        void CreateWindowSizeDependentResources();
+        void SetWindow(HWND window, int width, int height) noexcept;
+        bool WindowSizeChanged(int width, int height);
+        void HandleDeviceLost();
+        void RegisterDeviceNotify(IDeviceNotify* deviceNotify) noexcept { m_deviceNotify = deviceNotify; }
+        void Prepare(D3D12_RESOURCE_STATES beforeState = D3D12_RESOURCE_STATE_PRESENT,
+                     D3D12_RESOURCE_STATES afterState = D3D12_RESOURCE_STATE_RENDER_TARGET);
+        void Present(D3D12_RESOURCE_STATES beforeState = D3D12_RESOURCE_STATE_RENDER_TARGET);
+        void WaitForGpu() noexcept;
+        void UpdateColorSpace();
+
+        // Device Accessors.
+        RECT GetOutputSize() const noexcept { return m_outputSize; }
+
+        // Direct3D Accessors.
+        auto                        GetD3DDevice() const noexcept          { return m_d3dDevice.Get(); }
+        auto                        GetSwapChain() const noexcept          { return m_swapChain.Get(); }
+        auto                        GetDXGIFactory() const noexcept        { return m_dxgiFactory.Get(); }
+        HWND                        GetWindow() const noexcept             { return m_window; }
+        D3D_FEATURE_LEVEL           GetDeviceFeatureLevel() const noexcept { return m_d3dFeatureLevel; }
+        ID3D12Resource*             GetRenderTarget() const noexcept       { return m_renderTargets[m_backBufferIndex].Get(); }
+        ID3D12Resource*             GetDepthStencil() const noexcept       { return m_depthStencil.Get(); }
+        ID3D12CommandQueue*         GetCommandQueue() const noexcept       { return m_commandQueue.Get(); }
+        ID3D12CommandAllocator*     GetCommandAllocator() const noexcept   { return m_commandAllocators[m_backBufferIndex].Get(); }
+        auto                        GetCommandList() const noexcept        { return m_commandList.Get(); }
+        DXGI_FORMAT                 GetBackBufferFormat() const noexcept   { return m_backBufferFormat; }
+        DXGI_FORMAT                 GetDepthBufferFormat() const noexcept  { return m_depthBufferFormat; }
+        D3D12_VIEWPORT              GetScreenViewport() const noexcept     { return m_screenViewport; }
+        D3D12_RECT                  GetScissorRect() const noexcept        { return m_scissorRect; }
+        UINT                        GetCurrentFrameIndex() const noexcept  { return m_backBufferIndex; }
+        UINT                        GetBackBufferCount() const noexcept    { return m_backBufferCount; }
+        DXGI_COLOR_SPACE_TYPE       GetColorSpace() const noexcept         { return m_colorSpace; }
+        unsigned int                GetDeviceOptions() const noexcept      { return m_options; }
+
+        CD3DX12_CPU_DESCRIPTOR_HANDLE GetRenderTargetView() const noexcept
+        {
+            const auto cpuHandle = m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            return CD3DX12_CPU_DESCRIPTOR_HANDLE(cpuHandle, static_cast<INT>(m_backBufferIndex), m_rtvDescriptorSize);
+        }
+        CD3DX12_CPU_DESCRIPTOR_HANDLE GetDepthStencilView() const noexcept
+        {
+            const auto cpuHandle = m_dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            return CD3DX12_CPU_DESCRIPTOR_HANDLE(cpuHandle);
+        }
+
+    private:
+        void MoveToNextFrame();
+        void GetAdapter(IDXGIAdapter1** ppAdapter);
+
+        static constexpr size_t MAX_BACK_BUFFER_COUNT = 3;
+
+        UINT                                                m_backBufferIndex;
+
+        // Direct3D objects.
+        Microsoft::WRL::ComPtr<ID3D12Device>                m_d3dDevice;
+        Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>   m_commandList;
+        Microsoft::WRL::ComPtr<ID3D12CommandQueue>          m_commandQueue;
+        Microsoft::WRL::ComPtr<ID3D12CommandAllocator>      m_commandAllocators[MAX_BACK_BUFFER_COUNT];
+
+        // Swap chain objects.
+        Microsoft::WRL::ComPtr<IDXGIFactory6>               m_dxgiFactory;
+        Microsoft::WRL::ComPtr<IDXGISwapChain3>             m_swapChain;
+        Microsoft::WRL::ComPtr<ID3D12Resource>              m_renderTargets[MAX_BACK_BUFFER_COUNT];
+        Microsoft::WRL::ComPtr<ID3D12Resource>              m_depthStencil;
+
+        // Presentation fence objects.
+        Microsoft::WRL::ComPtr<ID3D12Fence>                 m_fence;
+        UINT64                                              m_fenceValues[MAX_BACK_BUFFER_COUNT];
+        Microsoft::WRL::Wrappers::Event                     m_fenceEvent;
+
+        // Direct3D rendering objects.
+        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>        m_rtvDescriptorHeap;
+        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>        m_dsvDescriptorHeap;
+        UINT                                                m_rtvDescriptorSize;
+        D3D12_VIEWPORT                                      m_screenViewport;
+        D3D12_RECT                                          m_scissorRect;
+
+        // Direct3D properties.
+        DXGI_FORMAT                                         m_backBufferFormat;
+        DXGI_FORMAT                                         m_depthBufferFormat;
+        UINT                                                m_backBufferCount;
+        D3D_FEATURE_LEVEL                                   m_d3dMinFeatureLevel;
+
+        // Cached device properties.
+        HWND                                                m_window;
+        D3D_FEATURE_LEVEL                                   m_d3dFeatureLevel;
+        DWORD                                               m_dxgiFactoryFlags;
+        RECT                                                m_outputSize;
+
+        // HDR Support
+        DXGI_COLOR_SPACE_TYPE                               m_colorSpace;
+
+        // DeviceResources options (see flags above)
+        unsigned int                                        m_options;
+
+        // The IDeviceNotify can be held directly as it owns the DeviceResources.
+        IDeviceNotify*                                      m_deviceNotify;
+    };
+
+    /// <summary>
+    /// Thin frame-level wrapper over DeviceResources exposing only plain types,
+    /// so RenderingSystem never handles Direct3D types directly.
+    /// </summary>
+    class GpuRenderer final : public IDeviceNotify
+    {
+    public:
+        using DeviceCallback = std::function<void()>;
+
+        GpuRenderer() : m_deviceResources(std::make_unique<DeviceResources>())
+        {
+            m_deviceResources->RegisterDeviceNotify(this);
+        }
+
+        ~GpuRenderer()
+        {
+            m_deviceResources->WaitForGpu();
+        }
+
+        GpuRenderer(GpuRenderer const&) = delete;
+        GpuRenderer& operator= (GpuRenderer const&) = delete;
+
+        // Creates the device and swap chain for the given native window (HWND). Throws on failure.
+        void Initialize(void* nativeWindow, int width, int height)
+        {
+            m_deviceResources->SetWindow(static_cast<HWND>(nativeWindow), width, height);
+
+            m_deviceResources->CreateDeviceResources();
+            CreateDeviceDependentResources();
+
+            m_deviceResources->CreateWindowSizeDependentResources();
+        }
+
+        // Resets the command list and clears the back buffer, depth buffer, viewport and scissor.
+        void BeginFrame(float r, float g, float b, float a)
+        {
+            m_deviceResources->Prepare();
+
+            auto commandList = m_deviceResources->GetCommandList();
+
+            const auto rtvDescriptor = m_deviceResources->GetRenderTargetView();
+            const auto dsvDescriptor = m_deviceResources->GetDepthStencilView();
+            const float clearColor[4] = { r, g, b, a };
+
+            commandList->OMSetRenderTargets(1, &rtvDescriptor, FALSE, &dsvDescriptor);
+            commandList->ClearRenderTargetView(rtvDescriptor, clearColor, 0, nullptr);
+            commandList->ClearDepthStencilView(dsvDescriptor, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+            const auto viewport = m_deviceResources->GetScreenViewport();
+            const auto scissorRect = m_deviceResources->GetScissorRect();
+            commandList->RSSetViewports(1, &viewport);
+            commandList->RSSetScissorRects(1, &scissorRect);
+        }
+
+        // Submits the frame's command list and presents the back buffer.
+        void EndFrame()
+        {
+            m_deviceResources->Present();
+        }
+
+        // Returns true if the swap chain was resized.
+        bool OnWindowSizeChanged(int width, int height)
+        {
+            return m_deviceResources->WindowSizeChanged(width, height);
+        }
+
+        void OnWindowMoved()
+        {
+            const auto r = m_deviceResources->GetOutputSize();
+            m_deviceResources->WindowSizeChanged(r.right, r.bottom);
+        }
+
+        void OnDisplayChange()
+        {
+            m_deviceResources->UpdateColorSpace();
+        }
+
+        void WaitForGpu() noexcept
+        {
+            m_deviceResources->WaitForGpu();
+        }
+
+        void SetDeviceCallbacks(DeviceCallback onLost, DeviceCallback onRestored)
+        {
+            m_onDeviceLost = std::move(onLost);
+            m_onDeviceRestored = std::move(onRestored);
+        }
+
+        // IDeviceNotify
+        void OnDeviceLost() override
+        {
+            if (m_onDeviceLost)
+                m_onDeviceLost();
+        }
+
+        void OnDeviceRestored() override
+        {
+            CreateDeviceDependentResources();
+
+            if (m_onDeviceRestored)
+                m_onDeviceRestored();
+        }
+
+    private:
+        // These are the resources that depend on the device.
+        void CreateDeviceDependentResources()
+        {
+            auto device = m_deviceResources->GetD3DDevice();
+
+            // Check Shader Model 6 support
+            D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_0 };
+            if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel)))
+                || (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_0))
+            {
+#ifdef _DEBUG
+                OutputDebugStringA("ERROR: Shader Model 6.0 is not supported!\n");
+#endif
+                throw std::runtime_error("Shader Model 6.0 is not supported!");
+            }
+        }
+
+        std::unique_ptr<DeviceResources> m_deviceResources;
+        DeviceCallback m_onDeviceLost;
+        DeviceCallback m_onDeviceRestored;
+    };
+}
+
+// ---------------------------------------------------------------------------
+// DeviceResources implementation
+// ---------------------------------------------------------------------------
 
 namespace
 {
@@ -38,6 +367,8 @@ namespace
     }
 }
 
+namespace LB::Systems::Rendering::Detail
+{
 // Constructor for DeviceResources.
 DeviceResources::DeviceResources(
     DXGI_FORMAT backBufferFormat,
@@ -773,4 +1104,5 @@ void DeviceResources::UpdateColorSpace()
     {
         ThrowIfFailed(m_swapChain->SetColorSpace1(colorSpace));
     }
+}
 }

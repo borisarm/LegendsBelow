@@ -331,3 +331,86 @@ TEST(RenderingSystemTests, SetVSync_Disabled_Success) {
 
     SUCCEED();
 }
+// ============================================================================
+// Native Window / Headless Mode Tests
+// ============================================================================
+
+TEST(RenderingSystemTests, Initialize_NullWindow_RunsHeadless) {
+    RenderingSystem system;
+
+    bool result = system.Initialize(nullptr, 1280, 720);
+
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(system.IsInitialized());
+    EXPECT_FALSE(system.HasGpuDevice());
+}
+
+TEST(RenderingSystemTests, Initialize_NullWindow_SetsDimensions) {
+    RenderingSystem system;
+    system.Initialize(nullptr, 1280, 720);
+
+    int32_t width, height;
+    system.GetScreenSize(width, height);
+
+    EXPECT_EQ(width, 1280);
+    EXPECT_EQ(height, 720);
+}
+
+TEST(RenderingSystemTests, HasGpuDevice_HeadlessInitialize_False) {
+    RenderingSystem system;
+    system.Initialize(1920, 1080);
+
+    EXPECT_FALSE(system.HasGpuDevice());
+}
+
+TEST(RenderingSystemTests, OnWindowSizeChanged_UpdatesScreenSize) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+
+    system.OnWindowSizeChanged(1024, 768);
+
+    int32_t width, height;
+    system.GetScreenSize(width, height);
+    EXPECT_EQ(width, 1024);
+    EXPECT_EQ(height, 768);
+}
+
+TEST(RenderingSystemTests, WindowEvents_Headless_NoError) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+
+    system.OnWindowMoved();
+    system.OnDisplayChange();
+
+    EXPECT_TRUE(system.IsInitialized());
+}
+
+TEST(RenderingSystemTests, SetDeviceCallbacks_Headless_NeverInvoked) {
+    RenderingSystem system;
+    int calls = 0;
+    system.SetDeviceCallbacks([&] { ++calls; }, [&] { ++calls; });
+    system.Initialize(800, 600);
+
+    system.BeginFrame();
+    system.EndFrame();
+    system.Shutdown();
+
+    EXPECT_EQ(calls, 0);
+}
+
+TEST(RenderingSystemTests, Shutdown_WithoutInitialize_NoError) {
+    RenderingSystem system;
+
+    system.Shutdown();
+
+    EXPECT_FALSE(system.IsInitialized());
+}
+
+TEST(RenderingSystemTests, Color_CornflowerBlue_CorrectValues) {
+    constexpr Color color = Color::CornflowerBlue();
+
+    EXPECT_NEAR(color.r, 100.0f / 255.0f, 1e-3f);
+    EXPECT_NEAR(color.g, 149.0f / 255.0f, 1e-3f);
+    EXPECT_NEAR(color.b, 237.0f / 255.0f, 1e-3f);
+    EXPECT_EQ(color.a, 1.0f);
+}

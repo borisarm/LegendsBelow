@@ -11,13 +11,13 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 
 ## Project Structure
 - **Components/Model**: Domain models (Core, Character, Combat, Dungeon, Inventory; Progression is a stub)
-- **Components/LBEngineCore**: Game loop and system/service orchestration (`LB.Engine` module; migration in progress, see `Documentation/modularized-game-architecture.md`)
+- **Components/LBEngineCore**: Game loop and system/service orchestration (`LB.Engine` module: `GameEngine`, `StepTimer`)
 - **Components/Services**: Business logic services (Character, Combat, Inventory, Progression, Dungeon, AssetPersistence)
 - **Components/Systems**: Technical systems (Asset, Audio, Input, Persistence, Rendering)
 - **Components/Tests**: Unit tests for all components (Model, Services, Systems)
 - **Tools/LBAssetProcessor**: Build-time asset processing tool (JSON validation, format conversion, manifest generation)
 - **Tools/LBGameEditor**: Level/content editor (future - for designing dungeons, placing items, etc.)
-- **LegendsBelow**: Main game executable (DirectX game loop, Game.cpp/Game.h)
+- **LegendsBelow**: Win32/GDK shell (`Main.cpp`): window, message loop, Agility SDK exports; forwards everything to `LB::Engine::GameEngine`
 
 ## Tool Projects
 
@@ -39,8 +39,9 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 - Level testing and preview
 
 ## Best Practices
-- Keep DirectX resource management patterns consistent with DeviceResources
-- Follow the existing game loop structure in Game class
+- Keep Direct3D code inside LBRenderingSystem's internal partition (`DeviceResources.cpp`); follow its DeviceResources patterns
+- Game loop logic belongs in `LB::Engine::GameEngine` (Update/Render); keep the LegendsBelow shell free of game code
+- Pass native handles across module boundaries as opaque `void*`, never as Win32/DirectX types
 - Module projects do not use precompiled headers; `pch.h` remains only in the LegendsBelow shell, test projects, and LBGameEditor
 - Maintain Xbox compatibility when adding features
 
@@ -48,7 +49,7 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 - Use RAII for resource management
 - Prefer smart pointers (ComPtr) for DirectX COM objects
 - Follow the existing Update/Render separation pattern
-- Use the StepTimer for game timing logic
+- Use `LB::Engine::StepTimer` for game timing logic (`Advance` for deterministic tests)
 
 ## Architectural Guidelines
 - Favor data-driven design for gameplay systems (characters, items, abilities, dungeons) using simple JSON or equivalent.
@@ -78,7 +79,7 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 - ✅ **All System projects** (LB*System)
 - ✅ **LBEngineCore** (core game engine)
 - ✅ **LBAssetProcessor** (asset processing tool)
-- ✅ **LegendsBelow** (main game executable) - Can be refactored to use modules
+- ✅ **LegendsBelow** (main game executable) - imports `LB.Engine`; keeps `pch.h` only for Win32/GDK headers
 
 **Rationale**: Modern C++20 modules work with Win32 applications. Only LBGameEditor has tooling limitations.
 
@@ -291,7 +292,9 @@ Every new project MUST have these in `.vcxproj`:
 </ClCompile>
 ```
 
-2. **Project References** (Test projects need BOTH component AND LBModel.Core):
+2. **Matching module flags**: projects that import module libraries must use the same `SDLCheck`, `FloatingPointModel`, and `ControlFlowGuard` settings as those libraries (see C5050 below).
+
+3. **Project References** (Test projects need BOTH component AND LBModel.Core):
 ```xml
 <ItemGroup>
   <!-- The component being tested -->
@@ -367,6 +370,8 @@ Tests        →  Component under test + LB.Core
 | `'InventoryItem' cannot be defined` | Remove duplicate struct, use `using LB::Inventory::InventoryItem;` |
 | `could not find module 'LB.Common'` | Add LBModel.Core project reference to `.vcxproj` |
 | `IsKeyReleased` test fails | Check state BEFORE second `Update()` call |
+| `C7622` module interface extension incompatible with `/internalPartition` | Internal partitions (`module X:Part;`) must be `.cpp` files with `<CompileAs>CompileAsCppModuleInternalPartition</CompileAs>` |
+| `C5050` possible incompatible environment importing module | Importer and module libraries must agree on `/sdl` (`SDLCheck`), `/fp` (`FloatingPointModel`), and `/guard:cf` (`ControlFlowGuard`) |
 | `'X': is not a member of 'Y'` | Verify namespace and check if type uses `.x` vs `.X()` |
 
 ### Testing Standards

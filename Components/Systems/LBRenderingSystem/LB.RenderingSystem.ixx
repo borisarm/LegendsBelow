@@ -37,6 +37,7 @@ export namespace LB::Systems::Rendering {
         static constexpr Color Yellow() { return Color{1.0f, 1.0f, 0.0f, 1.0f}; }
         static constexpr Color Magenta() { return Color{1.0f, 0.0f, 1.0f, 1.0f}; }
         static constexpr Color Cyan() { return Color{0.0f, 1.0f, 1.0f, 1.0f}; }
+        static constexpr Color CornflowerBlue() { return Color{0.392156899f, 0.584313750f, 0.929411829f, 1.0f}; }
     };
 
     /// <summary>
@@ -90,33 +91,71 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
-    /// Rendering system for graphics output
+    /// Rendering system for graphics output.
+    /// Runs headless (queues and statistics only) unless initialized with a native window,
+    /// in which case frames are cleared and presented through a Direct3D 12 device.
     /// </summary>
     class RenderingSystem {
     public:
-        RenderingSystem() = default;
-        ~RenderingSystem() = default;
+        using DeviceCallback = std::function<void()>;
+
+        RenderingSystem();
+        ~RenderingSystem();
+
+        RenderingSystem(const RenderingSystem&) = delete;
+        RenderingSystem& operator=(const RenderingSystem&) = delete;
 
         /// <summary>
-        /// Initialize the rendering system
+        /// Initialize the rendering system without a GPU device (headless)
         /// </summary>
         bool Initialize(int32_t screenWidth, int32_t screenHeight) {
             screenWidth_ = screenWidth;
             screenHeight_ = screenHeight;
+            viewport_ = Rectangle{0, 0, screenWidth, screenHeight};
 
-            // TODO: Initialize DirectX 12 device and resources
             initialized_ = true;
 
             return true;
         }
 
         /// <summary>
-        /// Shutdown the rendering system
+        /// Initialize the rendering system with a Direct3D 12 device presenting to the given
+        /// native window (an HWND on Windows). A null window falls back to headless mode.
+        /// Returns false if the device could not be created.
         /// </summary>
-        void Shutdown() {
-            // TODO: Release DirectX resources
-            initialized_ = false;
+        bool Initialize(void* nativeWindow, int32_t screenWidth, int32_t screenHeight);
+
+        /// <summary>
+        /// Shutdown the rendering system, waiting for the GPU and releasing the device
+        /// </summary>
+        void Shutdown();
+
+        /// <summary>
+        /// True when frames are presented through a GPU device (false when headless)
+        /// </summary>
+        [[nodiscard]] bool HasGpuDevice() const noexcept {
+            return gpu_ != nullptr;
         }
+
+        /// <summary>
+        /// Notify the renderer that the output window was resized
+        /// </summary>
+        void OnWindowSizeChanged(int32_t width, int32_t height);
+
+        /// <summary>
+        /// Notify the renderer that the output window moved (may change display/HDR state)
+        /// </summary>
+        void OnWindowMoved();
+
+        /// <summary>
+        /// Notify the renderer that display settings changed
+        /// </summary>
+        void OnDisplayChange();
+
+        /// <summary>
+        /// Callbacks invoked when the GPU device is lost and after it has been recreated
+        /// </summary>
+        void SetDeviceCallbacks(DeviceCallback onDeviceLost, DeviceCallback onDeviceRestored);
 
         /// <summary>
         /// Begin a new frame
@@ -135,17 +174,9 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
-        /// End frame and present
+        /// End frame: render all queued items and present
         /// </summary>
-        void EndFrame() {
-            if (!initialized_) return;
-
-            // Sort and render all queued items
-            RenderSprites();
-            RenderText();
-
-            // TODO: Present DirectX frame
-        }
+        void EndFrame();
 
         /// <summary>
         /// Queue a sprite for rendering
@@ -185,8 +216,8 @@ export namespace LB::Systems::Rendering {
         /// </summary>
         void Clear(const Color& color) {
             if (!initialized_) return;
+            // Applied to the back buffer when the frame is recorded in EndFrame
             clearColor_ = color;
-            // TODO: Clear DirectX render target
         }
 
         /// <summary>
@@ -227,6 +258,12 @@ export namespace LB::Systems::Rendering {
         }
 
     private:
+        // Direct3D 12 backend, defined in RenderingSystem.cpp; null when headless
+        struct GpuBackend;
+        std::unique_ptr<GpuBackend> gpu_;
+        DeviceCallback onDeviceLost_;
+        DeviceCallback onDeviceRestored_;
+
         bool initialized_{false};
         int32_t screenWidth_{1920};
         int32_t screenHeight_{1080};
