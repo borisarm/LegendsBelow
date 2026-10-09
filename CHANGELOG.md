@@ -5,6 +5,8 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ## [Unreleased]
 
 ### Added
+- Gamepad support through GameInput: `LB.InputSystem:GameInputBackend` reads the most recently used gamepad (radial dead zones, Xbox button mapping); the engine polls it once per simulation step while focused. Start toggles the tactical pause alongside Esc. Without the GameInput runtime the game still starts, without gamepad support.
+- `InputSystem`: gamepad button transitions (`IsGamepadButtonPressed`/`Down`, `SetGamepadState`), gamepad action bindings, several bindings per action, `EnableDeviceInput`/`PollDevices`; `GameEngine::OnGamepadState` for hosts and tests.
 - Input wired into the engine: the shell forwards keyboard and mouse messages to `GameEngine` (`OnKeyDown`, `OnKeyUp`, `OnMouseMove`, `OnMouseButton`, `OnMouseWheel`); `LB.Engine` re-exports `LB.InputSystem`. Each simulation step reads input, then ends the input frame; losing focus releases all keys and buttons.
 - Tactical pause on Esc (design-ui-ux-and-audio.md): the simulation and game clock (`GetGameTimeSeconds`) stop while the loop keeps running; the background dims as placeholder feedback.
 - `LB::Systems::Input::Keys` key codes (matching Windows virtual-key codes), mouse setters, `IsMouseButtonPressed`, and `ReleaseAll`.

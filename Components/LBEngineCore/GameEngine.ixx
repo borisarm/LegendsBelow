@@ -47,6 +47,13 @@ export namespace LB::Engine {
             inputSystem_.Initialize();
             RegisterDefaultBindings();
 
+            // Gamepads are read from the platform only with a real window; headless runs
+            // (tests, tools) stay deterministic and receive input through the On* methods
+            if (nativeWindow != nullptr) {
+                inputSystem_.EnableDeviceInput();
+            }
+            active_ = true;
+
             renderingSystem_.SetDeviceCallbacks(
                 [this] { OnDeviceLost(); },
                 [this] { OnDeviceRestored(); });
@@ -91,11 +98,13 @@ export namespace LB::Engine {
 
         // Window events (forwarded by the host)
         void OnActivated() {
-            // TODO: Game is becoming active window.
+            active_ = true;
         }
 
         void OnDeactivated() {
-            // Key/button up events are not delivered while unfocused; avoid stuck input
+            // Key/button up events are not delivered while unfocused; avoid stuck input.
+            // Gamepads are not polled until the window is active again.
+            active_ = false;
             inputSystem_.ReleaseAll();
         }
 
@@ -146,6 +155,14 @@ export namespace LB::Engine {
             inputSystem_.AddMouseWheel(delta);
         }
 
+        /// <summary>
+        /// Push a gamepad state from the host (platforms without a device backend, replays, tests)
+        /// </summary>
+        void OnGamepadState(std::int32_t gamepadIndex, const Systems::Input::GamepadState& state) {
+            if (!initialized_) return;
+            inputSystem_.SetGamepadState(gamepadIndex, state);
+        }
+
         // Configuration
         void GetDefaultWindowSize(std::int32_t& width, std::int32_t& height) const noexcept {
             width = DefaultWindowWidth;
@@ -164,6 +181,11 @@ export namespace LB::Engine {
         [[nodiscard]] const Systems::Input::InputSystem& GetInput() const noexcept { return inputSystem_; }
 
         /// <summary>
+        /// True when gamepads are read from the platform (GameInput runtime available)
+        /// </summary>
+        [[nodiscard]] bool HasGamepadSupport() const noexcept { return inputSystem_.HasDeviceInput(); }
+
+        /// <summary>
         /// Tactical pause (design-combat-system.md): the loop keeps running and reading input,
         /// but the simulation and the game clock stop.
         /// </summary>
@@ -179,6 +201,10 @@ export namespace LB::Engine {
         /// Advance the simulation by one step.
         /// </summary>
         void Update(double elapsedSeconds) {
+            if (active_) {
+                inputSystem_.PollDevices();
+            }
+
             if (inputSystem_.IsActionTriggered(std::string(PauseAction))) {
                 paused_ = !paused_;
             }
@@ -221,6 +247,12 @@ export namespace LB::Engine {
             pause.deviceType = Systems::Input::InputDevice::Keyboard;
             pause.keyCode = Systems::Input::Keys::Escape;
             inputSystem_.RegisterAction(pause);
+
+            Systems::Input::InputAction pauseGamepad{};
+            pauseGamepad.name = std::string(PauseAction);
+            pauseGamepad.deviceType = Systems::Input::InputDevice::Gamepad;
+            pauseGamepad.gamepadButton = Systems::Input::GamepadButton::Start;
+            inputSystem_.RegisterAction(pauseGamepad);
         }
 
         void OnDeviceLost() {
@@ -236,6 +268,7 @@ export namespace LB::Engine {
         StepTimer timer_;
         double gameTimeSeconds_{0.0};
         bool paused_{false};
+        bool active_{true};
         bool initialized_{false};
     };
 

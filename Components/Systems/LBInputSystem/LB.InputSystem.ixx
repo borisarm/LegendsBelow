@@ -1,6 +1,8 @@
 // LB.InputSystem.ixx - Input handling and device management system
 export module LB.InputSystem;
 
+export import :GamepadTypes;
+
 import LB.Core;
 import std;
 
@@ -40,26 +42,6 @@ export namespace LB::Systems::Input {
         Middle,
         X1,
         X2
-    };
-
-    /// <summary>
-    /// Gamepad button enumeration
-    /// </summary>
-    enum class GamepadButton {
-        A = 0,
-        B,
-        X,
-        Y,
-        LeftShoulder,
-        RightShoulder,
-        Back,
-        Start,
-        LeftThumb,
-        RightThumb,
-        DPadUp,
-        DPadDown,
-        DPadLeft,
-        DPadRight
     };
 
     /// <summary>
@@ -106,20 +88,6 @@ export namespace LB::Systems::Input {
     };
 
     /// <summary>
-    /// Gamepad state information
-    /// </summary>
-    struct GamepadState {
-        float leftThumbX{0.0f};
-        float leftThumbY{0.0f};
-        float rightThumbX{0.0f};
-        float rightThumbY{0.0f};
-        float leftTrigger{0.0f};
-        float rightTrigger{0.0f};
-        uint32_t buttons{0};
-        bool connected{false};
-    };
-
-    /// <summary>
     /// Input action for mapping
     /// </summary>
     struct InputAction {
@@ -135,8 +103,11 @@ export namespace LB::Systems::Input {
     /// </summary>
     class InputSystem {
     public:
-        InputSystem() = default;
-        ~InputSystem() = default;
+        InputSystem();
+        ~InputSystem();
+
+        InputSystem(const InputSystem&) = delete;
+        InputSystem& operator=(const InputSystem&) = delete;
 
         /// <summary>
         /// Initialize the input system
@@ -150,10 +121,13 @@ export namespace LB::Systems::Input {
         /// Shutdown the input system
         /// </summary>
         void Shutdown() {
+            DisableDeviceInput();
             keyStates_.clear();
             pressedSinceUpdate_.clear();
             releasedSinceUpdate_.clear();
             mouseButtonsPressedSinceUpdate_.clear();
+            gamepadStates_.clear();
+            gamepadPressedSinceUpdate_.clear();
             actions_.clear();
             initialized_ = false;
         }
@@ -175,7 +149,33 @@ export namespace LB::Systems::Input {
             pressedSinceUpdate_.clear();
             releasedSinceUpdate_.clear();
             mouseButtonsPressedSinceUpdate_.clear();
+            gamepadPressedSinceUpdate_.clear();
         }
+
+        /// <summary>
+        /// Start reading platform input devices (gamepads through GameInput on Windows/Xbox).
+        /// Returns false if no device API is available; the system then keeps working with
+        /// host-pushed input only.
+        /// </summary>
+        bool EnableDeviceInput();
+
+        /// <summary>
+        /// Stop reading platform input devices
+        /// </summary>
+        void DisableDeviceInput();
+
+        /// <summary>
+        /// True when platform devices are being read
+        /// </summary>
+        [[nodiscard]] bool HasDeviceInput() const noexcept {
+            return devices_ != nullptr;
+        }
+
+        /// <summary>
+        /// Read platform devices into the current input frame (call before reading input).
+        /// No effect unless EnableDeviceInput succeeded.
+        /// </summary>
+        void PollDevices();
 
         /// <summary>
         /// Check if a key is currently pressed
@@ -241,10 +241,39 @@ export namespace LB::Systems::Input {
         }
 
         /// <summary>
-        /// Register an input action mapping
+        /// Check if a gamepad button is currently held
+        /// </summary>
+        bool IsGamepadButtonDown(GamepadButton button, int32_t gamepadIndex = 0) const {
+            return (GetGamepadState(gamepadIndex).buttons & ButtonMask(button)) != 0;
+        }
+
+        /// <summary>
+        /// Check if a gamepad button went down during this input frame
+        /// </summary>
+        bool IsGamepadButtonPressed(GamepadButton button, int32_t gamepadIndex = 0) const {
+            auto it = gamepadPressedSinceUpdate_.find(gamepadIndex);
+            return it != gamepadPressedSinceUpdate_.end() && (it->second & ButtonMask(button)) != 0;
+        }
+
+        /// <summary>
+        /// Set a gamepad's state (device backend, host input events, or tests).
+        /// Buttons that go down are recorded as presses for this input frame.
+        /// </summary>
+        void SetGamepadState(int32_t gamepadIndex, const GamepadState& state) {
+            auto& current = gamepadStates_[gamepadIndex];
+            const std::uint32_t newlyPressed = state.buttons & ~current.buttons;
+            if (newlyPressed != 0) {
+                gamepadPressedSinceUpdate_[gamepadIndex] |= newlyPressed;
+            }
+            current = state;
+        }
+
+        /// <summary>
+        /// Register an input action binding. Several bindings may share a name
+        /// (e.g. "Pause" on Escape and on gamepad Start); the action triggers on any of them.
         /// </summary>
         void RegisterAction(const InputAction& action) {
-            actions_[action.name] = action;
+            actions_[action.name].push_back(action);
         }
 
         /// <summary>
@@ -254,19 +283,18 @@ export namespace LB::Systems::Input {
             auto it = actions_.find(actionName);
             if (it == actions_.end()) return false;
 
-            const auto& action = it->second;
-
-            switch (action.deviceType) {
-                case InputDevice::Keyboard:
-                    return IsKeyPressed(action.keyCode);
-                case InputDevice::Mouse:
-                    return IsMouseButtonPressed(action.mouseButton);
-                case InputDevice::Gamepad:
-                    // TODO: Implement gamepad button check
-                    return false;
-                default:
-                    return false;
-            }
+            return std::ranges::any_of(it->second, [this](const InputAction& action) {
+                switch (action.deviceType) {
+                    case InputDevice::Keyboard:
+                        return IsKeyPressed(action.keyCode);
+                    case InputDevice::Mouse:
+                        return IsMouseButtonPressed(action.mouseButton);
+                    case InputDevice::Gamepad:
+                        return IsGamepadButtonPressed(action.gamepadButton);
+                    default:
+                        return false;
+                }
+            });
         }
 
         /// <summary>
@@ -329,6 +357,9 @@ export namespace LB::Systems::Input {
             currentMouseState_.leftButton = false;
             currentMouseState_.rightButton = false;
             currentMouseState_.middleButton = false;
+            for (auto& [index, gamepad] : gamepadStates_) {
+                gamepad.buttons = 0;
+            }
         }
 
         /// <summary>
@@ -339,6 +370,10 @@ export namespace LB::Systems::Input {
         }
 
     private:
+        // Platform device backend (GameInput), defined in InputSystem.cpp; null when disabled
+        struct DeviceBackend;
+        std::unique_ptr<DeviceBackend> devices_;
+
         bool initialized_{false};
         std::unordered_map<int32_t, KeyState> keyStates_;
         // Transitions since the last Update(), so taps shorter than a frame are not lost
@@ -348,7 +383,8 @@ export namespace LB::Systems::Input {
         MouseState currentMouseState_{};
         MouseState previousMouseState_{};
         std::unordered_map<int32_t, GamepadState> gamepadStates_;
-        std::unordered_map<String, InputAction> actions_;
+        std::unordered_map<int32_t, std::uint32_t> gamepadPressedSinceUpdate_;
+        std::unordered_map<String, std::vector<InputAction>> actions_;
     };
 
 } // namespace LB::Systems::Input

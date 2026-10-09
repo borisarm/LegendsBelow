@@ -458,3 +458,92 @@ TEST(GameEnginePauseTests, Shutdown_ClearsPause) {
 
     EXPECT_FALSE(engine.IsPaused());
 }
+
+// ============================================================================
+// GameEngine Gamepad Tests
+// ============================================================================
+
+namespace {
+    using LB::Systems::Input::ButtonMask;
+    using LB::Systems::Input::GamepadButton;
+    using LB::Systems::Input::GamepadState;
+
+    GamepadState PadWith(std::uint32_t buttons) {
+        GamepadState state{};
+        state.connected = true;
+        state.buttons = buttons;
+        return state;
+    }
+
+    void TapGamepadButton(GameEngine& engine, GamepadButton button) {
+        engine.OnGamepadState(0, PadWith(ButtonMask(button)));
+        engine.OnGamepadState(0, PadWith(0));
+    }
+}
+
+TEST(GameEngineGamepadTests, Headless_NoPlatformGamepadSupport) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    EXPECT_FALSE(engine.HasGamepadSupport());
+}
+
+TEST(GameEngineGamepadTests, OnGamepadState_ForwardsToInputSystem) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.OnGamepadState(0, PadWith(ButtonMask(GamepadButton::A)));
+
+    EXPECT_TRUE(engine.GetInput().IsGamepadButtonDown(GamepadButton::A));
+}
+
+TEST(GameEngineGamepadTests, OnGamepadState_BeforeInitialize_Ignored) {
+    GameEngine engine;
+
+    engine.OnGamepadState(0, PadWith(ButtonMask(GamepadButton::A)));
+    engine.Initialize(nullptr, 800, 600);
+
+    EXPECT_FALSE(engine.GetInput().GetGamepadState(0).connected);
+}
+
+TEST(GameEngineGamepadTests, StartTap_TogglesPause) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    TapGamepadButton(engine, GamepadButton::Start);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_TRUE(engine.IsPaused());
+}
+
+TEST(GameEngineGamepadTests, StartThenEscape_PauseThenResume) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    TapGamepadButton(engine, GamepadButton::Start);
+    engine.Tick(OneSixtieth);
+
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_FALSE(engine.IsPaused());
+}
+
+TEST(GameEngineGamepadTests, OtherButton_DoesNotPause) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    TapGamepadButton(engine, GamepadButton::A);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_FALSE(engine.IsPaused());
+}
+
+TEST(GameEngineGamepadTests, OnDeactivated_ReleasesGamepadButtons) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.OnGamepadState(0, PadWith(ButtonMask(GamepadButton::RightShoulder)));
+
+    engine.OnDeactivated();
+
+    EXPECT_FALSE(engine.GetInput().IsGamepadButtonDown(GamepadButton::RightShoulder));
+}
