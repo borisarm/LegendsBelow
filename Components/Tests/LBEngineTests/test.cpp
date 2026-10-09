@@ -691,7 +691,7 @@ TEST(GameEngineSaveTests, SaveDirectory_SavesSurviveRestart) {
     double savedTime = 0.0;
     {
         GameEngine engine;
-        engine.Initialize(nullptr, 800, 600, dir.Utf8());
+        engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8() });
         ASSERT_TRUE(engine.GetPersistence().IsPersistentStorage());
         RunSteps(engine, 45);
         savedTime = engine.GetGameTimeSeconds();
@@ -699,7 +699,7 @@ TEST(GameEngineSaveTests, SaveDirectory_SavesSurviveRestart) {
     }
 
     GameEngine restarted;
-    restarted.Initialize(nullptr, 800, 600, dir.Utf8());
+    restarted.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8() });
 
     ASSERT_TRUE(restarted.LoadGame(2));
     EXPECT_DOUBLE_EQ(restarted.GetGameTimeSeconds(), savedTime);
@@ -709,14 +709,14 @@ TEST(GameEngineSaveTests, VolumePreferences_SurviveRestart) {
     TempSaveDir dir;
     {
         GameEngine engine;
-        engine.Initialize(nullptr, 800, 600, dir.Utf8());
+        engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8() });
         engine.GetAudio().SetMasterVolume(0.35f);
         engine.GetAudio().SetChannelVolume(AudioChannel::Music, 0.2f);
         engine.Shutdown();
     }
 
     GameEngine restarted;
-    restarted.Initialize(nullptr, 800, 600, dir.Utf8());
+    restarted.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8() });
 
     EXPECT_FLOAT_EQ(restarted.GetAudio().GetMasterVolume(), 0.35f);
     EXPECT_FLOAT_EQ(restarted.GetAudio().GetChannelVolume(AudioChannel::Music), 0.2f);
@@ -729,7 +729,7 @@ TEST(GameEngineSaveTests, UnusableSaveDirectory_FallsBackToMemory) {
     const auto filePath = (dir.path / "file").u8string();
 
     GameEngine engine;
-    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, std::string(filePath.begin(), filePath.end())));
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = std::string(filePath.begin(), filePath.end()) }));
 
     EXPECT_FALSE(engine.GetPersistence().IsPersistentStorage());
     EXPECT_TRUE(engine.SaveGame(0));
@@ -920,4 +920,69 @@ TEST(GameEngineMovementTests, Shutdown_RemovesPlayer) {
 
     EXPECT_FALSE(engine.GetPlayerId().has_value());
     EXPECT_EQ(engine.GetCharacters().GetCharacterCount(), 0u);
+}
+
+// ============================================================================
+// GameEngine Content Tests
+// ============================================================================
+
+namespace {
+    std::optional<std::string> FindShippedContent() {
+        for (auto dir = std::filesystem::current_path(); ; dir = dir.parent_path()) {
+            const auto candidate = dir / "Assets" / "Data";
+            if (std::filesystem::exists(candidate / "spells.json")) {
+                const auto text = candidate.u8string();
+                return std::string(text.begin(), text.end());
+            }
+            if (dir == dir.root_path()) return std::nullopt;
+        }
+    }
+}
+
+TEST(GameEngineContentTests, NoContentDirectory_StartsWithEmptyContent) {
+    GameEngine engine;
+
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600));
+
+    ASSERT_NE(engine.GetContent(), nullptr);
+    EXPECT_TRUE(engine.GetContent()->IsEmpty());
+    EXPECT_TRUE(engine.GetInitializationError().empty());
+}
+
+TEST(GameEngineContentTests, ShippedContent_Loads) {
+    const auto dir = FindShippedContent();
+    ASSERT_TRUE(dir.has_value());
+    GameEngine engine;
+
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = *dir })) << engine.GetInitializationError();
+
+    EXPECT_EQ(engine.GetContent()->GetSpells().size(), 45u);
+    EXPECT_EQ(engine.GetContent()->GetWeapons().size(), 12u);
+    EXPECT_EQ(engine.GetContent()->GetArmour().size(), 15u);
+    EXPECT_NE(engine.GetContent()->FindWeapon("weapon_sword_rusted_shortsword_t1"), nullptr);
+}
+
+TEST(GameEngineContentTests, InvalidContent_FailsWithAllErrors) {
+    TempSaveDir dir;
+    std::filesystem::create_directories(dir.path);
+    std::ofstream(dir.path / "spells.json") << R"([{"id":"spell_a","name":"A","school":"Nope","level":1,"categories":["Damage"],"manaCost":5,"castTimeSeconds":1.0}])";
+    std::ofstream(dir.path / "weapons.json") << "[{";
+    std::ofstream(dir.path / "armour.json") << "[]";
+    GameEngine engine;
+
+    EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() }));
+
+    const auto& error = engine.GetInitializationError();
+    EXPECT_NE(error.find("invalid (2 problems)"), std::string::npos) << error;
+    EXPECT_NE(error.find("'school' has unknown value 'Nope'"), std::string::npos) << error;
+    EXPECT_NE(error.find("weapons.json: not valid JSON"), std::string::npos) << error;
+    EXPECT_FALSE(engine.IsInitialized());
+}
+
+TEST(GameEngineContentTests, MissingContentDirectory_Fails) {
+    GameEngine engine;
+
+    EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = "Z:/no/such/content" }));
+
+    EXPECT_NE(engine.GetInitializationError().find("file not found"), std::string::npos);
 }

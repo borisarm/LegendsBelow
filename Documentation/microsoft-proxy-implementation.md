@@ -77,7 +77,7 @@ using SpellRepository = pro::proxy<SpellRepositoryFacade>;
 - [x] `proxy` (4.1.0) declared in the root `vcpkg.json`; `LB.Repositories.ixx` includes `<proxy/proxy.h>` in its global module fragment
 - [x] Tests through the type-erased proxy with a duck-typed `MockSpellRepository` (all three factory functions, every query)
 - [ ] Weapon and armor facades (`WeaponRepository`, `ArmorRepository`) following the spell pattern
-- [ ] Concrete JSON-backed repository implementations wired to `LBAssetSystem`
+- [x] Content-backed spell repository: `LB::Content::ContentSpellRepository` / `MakeContentSpellRepository` (`LB.ContentRepositories`) over the loaded `ContentDatabase`
 - [ ] Inject repositories into services from `LB.Engine` (see `modularized-game-architecture.md`)
 
 ## Usage Examples

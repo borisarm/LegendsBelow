@@ -15,6 +15,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="LB.ContentRepositories.ixx" />
+    <ClCompile Include="ContentLoader.cpp" />
+    <ClCompile Include="LB.Content.ixx" />
     <ClCompile Include="LB.Repositories.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>

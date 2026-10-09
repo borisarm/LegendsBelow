@@ -84,7 +84,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 | LBInventoryService | `LB.InventoryService` | `LB::Services::Inventory` | Implemented and tested |
 | LBProgressionService | `LB.ProgressionService` (+5 sub-modules) | `LB::Services::Progression` | Implemented and tested |
 | LBDungeonService | `LB.DungeonService` | `LB::Services::Dungeon` | Implemented and tested |
-| LBAssetPersistenceService | `LB.Repositories` | `LB::Repositories` | Spell repository facade (Microsoft Proxy 4, from vcpkg); tested with a duck-typed mock. No JSON-backed implementation yet |
+| LBAssetPersistenceService | `LB.Repositories`, `LB.Content`, `LB.ContentRepositories` | `LB::Repositories`, `LB::Content` | Content definitions (`SpellDefinition`, `WeaponDefinition`, `ArmorDefinition`) loaded strictly from `Assets/Data` JSON (nlohmann-json); spell repository facade (Microsoft Proxy 4) with a content-backed implementation |
 
 ### Systems – `Components/Systems/`
 
@@ -100,7 +100,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 | Project | Status |
 |---------|--------|
-| `Components/LBEngineCore` | `LB.Engine` (`:StepTimer`, `:GameEngine`): fixed 60 Hz loop driving Rendering, Input, Audio, and Persistence; owns the player character (CharacterService) moving in a placeholder test arena; tactical pause (Esc/Start); quick save/load (F5/F9). No Win32 dependency. Asset system, combat, and dungeon generation are not wired in yet |
+| `Components/LBEngineCore` | `LB.Engine` (`:StepTimer`, `:GameEngine`): fixed 60 Hz loop driving Rendering, Input, Audio, and Persistence; loads content at startup (`EngineOptions`); owns the player character (CharacterService) moving in a placeholder test arena; tactical pause (Esc/Start); quick save/load (F5/F9). No Win32 dependency. Asset system, combat, and dungeon generation are not wired in yet |
 | `LegendsBelow` | Win32/GDK shell only: `Main.cpp` creates the window, runs the message loop, and forwards events to `LB::Engine::GameEngine` |
 
 The native window crosses module boundaries only as an opaque `void*`. Direct3D types stay inside LBRenderingSystem's internal partition `LB.RenderingSystem:DeviceResources` (`DeviceResources.cpp`), and GameInput types inside LBInputSystem's `LB.InputSystem:GameInputBackend` (`GameInputBackend.cpp`); consumers cannot import either. `gameinput.lib` is a static loader merged into `LBInputSystem.lib`, so the game starts without the GameInput runtime (it then runs without gamepad support).
@@ -120,7 +120,7 @@ One GoogleTest project per component under `Model/`, `Services/`, and `System/`,
 
 ### Data – `Assets/Data/`
 
-`spells.json` (45), `weapons.json` (12), `armour.json` (15). Not yet loaded by any runtime code.
+`spells.json` (45), `weapons.json` (12), `armour.json` (15). Loaded at startup by `LB::Content::ContentDatabase` from `<exe dir>/Assets/Data` (the build copies them there). Invalid content stops startup with every error listed; `ShippedContentTests` validate the files in the test run.
 
 ---
 
@@ -131,8 +131,8 @@ One GoogleTest project per component under `Model/`, `Services/`, and `System/`,
 The shell → engine → renderer split from `modularized-game-architecture.md` is done. Remaining responsibilities:
 - [x] Own the `StepTimer` and run `Tick → Update (fixed 60 Hz) → Render`
 - [x] Input: the host forwards keyboard/mouse events (`OnKeyDown`, `OnMouseMove`, …); each simulation step reads input, then ends the input frame
-- [x] Audio and Persistence systems; the player character through CharacterService
-- Construct the remaining Services (combat, inventory, progression, dungeon) and inject repositories
+- [x] Audio and Persistence systems; content loading; the player character through CharacterService
+- Construct the remaining Services (combat, inventory, progression, dungeon) and inject repositories over `GetContent()`
 - [x] Gamepad input through GameInput: `LB.InputSystem:GameInputBackend` (`GameInputBackend.cpp`) reads the most recently used gamepad; the engine enables it only with a real window and polls once per simulation step while focused
 - Game state machine (main menu, town, dungeon, pause)
 - Cross-system events (`EventBus`) so Services never call Systems directly
@@ -180,5 +180,6 @@ LB.Engine::Save → collect state from Services
 - **Stub module.** LBModel.Progression has three files all declaring `export module LB;`; it needs proper `LB.Progression*` names when implemented.
 - **No vcpkg baseline.** The root `vcpkg.json` has no `builtin-baseline`, so a fresh install takes whatever port versions the local vcpkg provides (GDK, Agility SDK). Pin a baseline for reproducible builds.
 - **Release|Win32 / ARM64 configurations** of the component projects are untested; build Debug|x64 or Release|x64.
+- **Shadow spells have no class.** The six Shadow spells in `spells.json` have no `requiredClass`, and design-spells-system.md does not assign the school, so any class (including Warrior) can cast them. Decide which class owns them.
 - **Placeholder tuning in code.** Class base movement speeds (`CharacterService::getClassBaseSpeed`) should move to a class data file; armour movement penalties are not applied until equipment is modelled.
 - **Placeholder rendering.** The arena and player are solid rectangles drawn with render-target clears in a top-down view; isometric sprite rendering is still to be built.

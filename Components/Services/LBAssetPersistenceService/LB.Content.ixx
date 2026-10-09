@@ -1,0 +1,210 @@
+// LB.Content.ixx - Game content definitions loaded from Assets/Data JSON
+//
+// Definitions are the static, data-driven description of content (what a Fireball is);
+// runtime state (a character's equipped sword) lives in the domain modules.
+export module LB.Content;
+
+import LB.Core;
+import LB.Character;
+import LB.Combat;
+import std;
+
+using namespace std;
+
+export namespace LB::Content {
+    using LB::String;
+    using LB::Character::CharacterClass;
+    using LB::Combat::ArmorCategory;
+    using LB::Combat::DamageType;
+    using LB::Combat::EquipmentSlot;
+    using LB::Combat::SpellCategory;
+    using LB::Combat::SpellSchool;
+    using LB::Combat::WeaponType;
+
+    /// <summary>
+    /// Numeric id assigned at load time (1-based, in file order). Stable for a given data file;
+    /// anything persisted (saves) should store the string key instead.
+    /// </summary>
+    using ContentId = LB::Id;
+
+    /// <summary>
+    /// Spell definition (Assets/Data/spells.json, design-spells-system.md)
+    /// </summary>
+    struct SpellDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "spell_evocation_arcane_bolt_l1"
+        String name;
+        SpellSchool school{SpellSchool::None};
+        int32_t level{1};
+        std::vector<SpellCategory> categories;
+        std::optional<CharacterClass> requiredClass;  // empty: usable by any class
+        int32_t requiredLevel{1};
+        int32_t manaCost{0};
+        float castTimeSeconds{0.0f};
+        float cooldownSeconds{0.0f};
+        float range{0.0f};
+        float radius{0.0f};
+        int32_t baseDamage{0};
+        int32_t baseHeal{0};
+        float powerCoefficient{0.0f};
+        DamageType damageType{DamageType::None};
+        float durationSeconds{0.0f};
+        float lifestealFraction{0.0f};
+        std::vector<String> appliedStatusIds;
+        std::vector<String> scalingAttributes;
+        String notes;
+
+        [[nodiscard]] bool HasCategory(SpellCategory category) const {
+            return std::ranges::find(categories, category) != categories.end();
+        }
+
+        [[nodiscard]] bool CanBeCastBy(CharacterClass characterClass) const {
+            return !requiredClass || *requiredClass == characterClass;
+        }
+    };
+
+    /// <summary>
+    /// Weapon definition (Assets/Data/weapons.json, design-weapons-system.md)
+    /// </summary>
+    struct WeaponDefinition {
+        ContentId id{0};
+        String key;
+        String name;
+        WeaponType category{WeaponType::None};
+        EquipmentSlot slot{EquipmentSlot::MainHand};
+        int32_t requiredLevel{1};
+        std::vector<CharacterClass> allowedClasses;
+        LB::Dice damageDice{};
+        int32_t damageBonus{0};
+        std::vector<DamageType> damageTypes;
+        float attackTimeSeconds{1.0f};
+        int32_t critRangeMin{20};                     // "19-20" -> 19
+        float critMultiplier{2.0f};
+        String attributeScale;                        // "STR", "DEX", "INT", ...
+        float scaleFactor{1.0f};
+        bool isTwoHanded{false};
+        std::vector<String> specialProperties;
+        int32_t affixSlots{0};
+        String ammoType;                              // ranged weapons only
+
+        [[nodiscard]] bool IsUsableBy(CharacterClass characterClass) const {
+            return std::ranges::find(allowedClasses, characterClass) != allowedClasses.end();
+        }
+    };
+
+    /// <summary>
+    /// Armour definition (Assets/Data/armour.json, design-armour-system.md)
+    /// </summary>
+    struct ArmorDefinition {
+        ContentId id{0};
+        String key;
+        String name;
+        EquipmentSlot slot{EquipmentSlot::None};
+        ArmorCategory category{ArmorCategory::None};
+        int32_t requiredLevel{1};
+        std::vector<CharacterClass> allowedClasses;
+        int32_t physicalAR{0};
+        std::map<DamageType, int32_t> elementalAR;    // Fire, Cold, Lightning, Acid
+        std::map<DamageType, int32_t> spiritualAR;    // Holy (radiant), Shadow (necrotic), Psychic
+        int32_t armorBonus{0};                        // shields
+        float blockChance{0.0f};                      // shields; percent (design-armour-system.md, 7)
+        int32_t blockValue{0};                        // shields
+        float weight{0.0f};
+        float movementPenalty{0.0f};                  // fraction of speed, e.g. 0.10
+        float castPenalty{0.0f};
+        int32_t affixSlots{0};
+
+        [[nodiscard]] bool IsUsableBy(CharacterClass characterClass) const {
+            return std::ranges::find(allowedClasses, characterClass) != allowedClasses.end();
+        }
+    };
+
+    /// <summary>
+    /// Outcome of loading content: every problem found, so data authors can fix them in one pass
+    /// </summary>
+    struct ContentLoadResult {
+        std::vector<String> errors;
+
+        [[nodiscard]] bool Succeeded() const noexcept { return errors.empty(); }
+    };
+
+    /// <summary>
+    /// All loaded game content, with lookups by key and id
+    /// </summary>
+    class ContentDatabase {
+    public:
+        /// <summary>
+        /// Load spells.json, weapons.json and armour.json from a directory (UTF-8 path).
+        /// On any error the database is left empty and every error is reported.
+        /// </summary>
+        ContentLoadResult LoadFromDirectory(const String& directory);
+
+        /// <summary>
+        /// Load from JSON text (one array per content type). Used by tests and tools; source
+        /// names appear in error messages.
+        /// </summary>
+        ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson);
+
+        void Clear() {
+            spells_.clear();
+            weapons_.clear();
+            armour_.clear();
+        }
+
+        [[nodiscard]] bool IsEmpty() const noexcept {
+            return spells_.empty() && weapons_.empty() && armour_.empty();
+        }
+
+        [[nodiscard]] const std::vector<SpellDefinition>& GetSpells() const noexcept { return spells_; }
+        [[nodiscard]] const std::vector<WeaponDefinition>& GetWeapons() const noexcept { return weapons_; }
+        [[nodiscard]] const std::vector<ArmorDefinition>& GetArmour() const noexcept { return armour_; }
+
+        [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
+        [[nodiscard]] const SpellDefinition* FindSpell(std::string_view key) const { return FindByKey(spells_, key); }
+        [[nodiscard]] const WeaponDefinition* FindWeapon(ContentId id) const { return FindById(weapons_, id); }
+        [[nodiscard]] const WeaponDefinition* FindWeapon(std::string_view key) const { return FindByKey(weapons_, key); }
+        [[nodiscard]] const ArmorDefinition* FindArmor(ContentId id) const { return FindById(armour_, id); }
+        [[nodiscard]] const ArmorDefinition* FindArmor(std::string_view key) const { return FindByKey(armour_, key); }
+
+        /// <summary>
+        /// Weapons a class may wield at a given character level
+        /// </summary>
+        [[nodiscard]] std::vector<const WeaponDefinition*> GetWeaponsFor(CharacterClass characterClass, int32_t characterLevel) const {
+            std::vector<const WeaponDefinition*> result;
+            for (const auto& weapon : weapons_) {
+                if (weapon.IsUsableBy(characterClass) && weapon.requiredLevel <= characterLevel) result.push_back(&weapon);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Armour pieces a class may wear in a slot
+        /// </summary>
+        [[nodiscard]] std::vector<const ArmorDefinition*> GetArmourFor(CharacterClass characterClass, EquipmentSlot slot) const {
+            std::vector<const ArmorDefinition*> result;
+            for (const auto& armor : armour_) {
+                if (armor.IsUsableBy(characterClass) && armor.slot == slot) result.push_back(&armor);
+            }
+            return result;
+        }
+
+    private:
+        // ids are 1-based positions, so lookups by id are direct
+        template<typename T>
+        static const T* FindById(const std::vector<T>& items, ContentId id) {
+            if (id < 1 || static_cast<std::size_t>(id) > items.size()) return nullptr;
+            return &items[static_cast<std::size_t>(id - 1)];
+        }
+
+        template<typename T>
+        static const T* FindByKey(const std::vector<T>& items, std::string_view key) {
+            auto it = std::ranges::find(items, key, &T::key);
+            return it != items.end() ? &*it : nullptr;
+        }
+
+        std::vector<SpellDefinition> spells_;
+        std::vector<WeaponDefinition> weapons_;
+        std::vector<ArmorDefinition> armour_;
+    };
+
+} // namespace LB::Content

@@ -5,6 +5,7 @@ import std;
 import LB.Core;
 import LB.Character;
 import LB.CharacterService;
+import LB.Content;
 import LB.AudioSystem;
 import LB.InputSystem;
 import LB.PersistenceSystem;
@@ -19,6 +20,16 @@ export namespace LB::Engine {
     struct WorldPoint {
         float x{0.0f};
         float y{0.0f};
+    };
+
+    /// <summary>
+    /// Startup configuration supplied by the host. Paths are UTF-8; empty means "not used".
+    /// </summary>
+    struct EngineOptions {
+        // Saves and preferences; empty keeps them in memory only
+        std::string saveDirectory;
+        // Game content (spells.json, weapons.json, armour.json); empty starts without content
+        std::string contentDirectory;
     };
 
     /// <summary>
@@ -61,16 +72,24 @@ export namespace LB::Engine {
         GameEngine& operator=(const GameEngine&) = delete;
 
         /// <summary>
-        /// Initialize the engine and its systems. Returns false if the graphics device could not be created.
-        /// saveDirectory (UTF-8) holds saves and preferences; empty keeps them in memory only.
+        /// Initialize the engine and its systems. Returns false if the graphics device could not
+        /// be created or the game content is invalid; GetInitializationError() explains why.
         /// </summary>
-        bool Initialize(void* nativeWindow, std::int32_t width, std::int32_t height, const std::string& saveDirectory = {}) {
+        bool Initialize(void* nativeWindow, std::int32_t width, std::int32_t height, const EngineOptions& options = {}) {
+            initializationError_.clear();
+
+            // Content first: invalid data is a fatal authoring error (fail fast, report everything)
+            if (!LoadContent(options.contentDirectory)) {
+                return false;
+            }
+
             if (!renderingSystem_.Initialize(nativeWindow, width, height)) {
+                initializationError_ = "Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.";
                 return false;
             }
 
             // An unusable save directory should not stop the game; fall back to memory only
-            if (!persistenceSystem_.Initialize(saveDirectory)) {
+            if (!persistenceSystem_.Initialize(options.saveDirectory)) {
                 persistenceSystem_.Initialize({});
             }
 
@@ -234,6 +253,17 @@ export namespace LB::Engine {
         [[nodiscard]] const Systems::Rendering::RenderingSystem& GetRendering() const noexcept { return renderingSystem_; }
 
         /// <summary>
+        /// Loaded game content (never null; empty when started without a content directory).
+        /// Shared and immutable, so services and repositories can hold on to it.
+        /// </summary>
+        [[nodiscard]] std::shared_ptr<const Content::ContentDatabase> GetContent() const noexcept { return content_; }
+
+        /// <summary>
+        /// Why the last Initialize failed (empty if it succeeded)
+        /// </summary>
+        [[nodiscard]] const std::string& GetInitializationError() const noexcept { return initializationError_; }
+
+        /// <summary>
         /// The player character, once the engine is initialized
         /// </summary>
         [[nodiscard]] std::optional<LB::Character::CharacterId> GetPlayerId() const noexcept { return playerId_; }
@@ -354,6 +384,22 @@ export namespace LB::Engine {
             DrawPlayer(shade);
 
             renderingSystem_.EndFrame();
+        }
+
+        bool LoadContent(const std::string& contentDirectory) {
+            auto content = std::make_shared<Content::ContentDatabase>();
+            if (!contentDirectory.empty()) {
+                const auto result = content->LoadFromDirectory(contentDirectory);
+                if (!result.Succeeded()) {
+                    initializationError_ = std::format("Game content in '{}' is invalid ({} problems):", contentDirectory, result.errors.size());
+                    for (const auto& error : result.errors) {
+                        initializationError_ += "\n" + error;
+                    }
+                    return false;
+                }
+            }
+            content_ = std::move(content);
+            return true;
         }
 
         bool SpawnPlayer() {
@@ -546,6 +592,8 @@ export namespace LB::Engine {
         Systems::Persistence::PersistenceSystem persistenceSystem_;
         Services::Character::CharacterService characterService_;
         std::optional<LB::Character::CharacterId> playerId_;
+        std::shared_ptr<const Content::ContentDatabase> content_ = std::make_shared<Content::ContentDatabase>();
+        std::string initializationError_;
         WorldPoint playerPosition_{};
         StepTimer timer_;
         double gameTimeSeconds_{0.0};

@@ -33,6 +33,28 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 namespace
 {
+    std::string ToUtf8(const std::wstring& text)
+    {
+        const int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+        if (size <= 0)
+            return {};
+
+        std::string utf8(static_cast<size_t>(size), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), utf8.data(), size, nullptr, nullptr);
+        return utf8;
+    }
+
+    std::wstring FromUtf8(const std::string& text)
+    {
+        const int size = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0);
+        if (size <= 0)
+            return {};
+
+        std::wstring wide(static_cast<size_t>(size), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), wide.data(), size);
+        return wide;
+    }
+
     // %LOCALAPPDATA%\LegendsBelow\Saves as UTF-8, or empty (saves kept in memory) if unavailable
     std::string GetSaveDirectory()
     {
@@ -42,15 +64,20 @@ namespace
 
         std::wstring path = localAppData;
         CoTaskMemFree(localAppData);
-        path += L"\\LegendsBelow\\Saves";
+        return ToUtf8(path + L"\\LegendsBelow\\Saves");
+    }
 
-        const int size = WideCharToMultiByte(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()), nullptr, 0, nullptr, nullptr);
-        if (size <= 0)
-            return {};
+    // <directory of the executable>\Assets\Data as UTF-8 (copied there by the build)
+    std::string GetContentDirectory()
+    {
+        std::wstring path(MAX_PATH, L'\0');
+        DWORD length = 0;
+        while ((length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()))) == path.size())
+            path.resize(path.size() * 2);
+        path.resize(length);
 
-        std::string utf8(static_cast<size_t>(size), '\0');
-        WideCharToMultiByte(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()), utf8.data(), size, nullptr, nullptr);
-        return utf8;
+        path.resize(path.find_last_of(L'\\') + 1);
+        return ToUtf8(path + L"Assets\\Data");
     }
 
     // Translate a WM_*BUTTONDOWN/UP message into an engine mouse event
@@ -137,9 +164,13 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
         GetClientRect(hwnd, &rc);
 
-        if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top, GetSaveDirectory()))
+        LB::Engine::EngineOptions options;
+        options.saveDirectory = GetSaveDirectory();
+        options.contentDirectory = GetContentDirectory();
+
+        if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top, options))
         {
-            std::ignore = MessageBoxW(hwnd, L"Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.", g_szAppName, MB_ICONERROR | MB_OK);
+            std::ignore = MessageBoxW(hwnd, FromUtf8(g_engine->GetInitializationError()).c_str(), g_szAppName, MB_ICONERROR | MB_OK);
             // Destroy the window first: it holds a pointer to the engine
             DestroyWindow(hwnd);
             g_engine.reset();
