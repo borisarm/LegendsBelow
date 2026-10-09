@@ -14,12 +14,12 @@ An isometric, D&D-inspired dungeon crawler for Xbox and Windows, built on a cust
 
 ```
 LegendsBelow.slnx          Solution
-LegendsBelow/              Win32/GDK executable (still the DirectX 12 template; migration pending)
+LegendsBelow/              Win32/GDK shell: window, message loop, forwards events to LB.Engine
 Components/
 ├── Model/                 Domain modules: LB.Core, LB.Character, LB.Combat, LB.Inventory, LB.Dungeon
 ├── Services/              Gameplay rules: Character, Combat, Inventory, Progression, Dungeon, Repositories
 ├── Systems/               Technical systems: Rendering, Input, Audio, Asset, Persistence
-├── LBEngineCore/          LB.Engine game loop and orchestration (placeholder)
+├── LBEngineCore/          LB.Engine: fixed 60 Hz game loop and system orchestration
 └── Tests/                 GoogleTest project per component (Model/, Services/, System/)
 Tools/
 ├── LBAssetProcessor/      JSON validation and binary packing (empty project)
@@ -34,9 +34,9 @@ Documentation/             Game design and architecture documents
 |------|-------|
 | Domain model | Implemented as C++20 modules, unit tested |
 | Services (Character, Combat, Inventory, Progression, Dungeon) | Implemented, unit tested |
-| Systems | Platform-neutral APIs and state, unit tested; no DX12, GameInput, audio, or file I/O backends yet |
+| Systems | Unit tested. Rendering has a Direct3D 12 backend (device, swap chain, clear/present); Input, Audio, Asset, and Persistence have no platform backends yet |
 | Repositories | Spell facade via Microsoft Proxy 4; no concrete JSON-backed implementation yet |
-| Engine / game loop | Not started (see `Documentation/modularized-game-architecture.md`) |
+| Engine / game loop | `LB.Engine` runs the loop and drives rendering; the game opens a window and clears it each frame. Services are not wired in yet |
 | Asset pipeline | Not started (see `Documentation/asset-preprocesing-strategy-instructions.md`) |
 | Content | 45 spells, 12 weapons, 15 armour pieces authored in JSON |
 
@@ -49,8 +49,9 @@ Documentation/             Game design and architecture documents
 
 ### Build
 1. Open `LegendsBelow.slnx` in Visual Studio.
-2. vcpkg packages restore automatically from `LegendsBelow/vcpkg.json`.
-3. Build the `x64` platform. Profile configurations map to Release for the component libraries.
+2. vcpkg packages restore automatically from the root `vcpkg.json` on first build.
+3. Restore the test projects' NuGet packages (GoogleTest) via Visual Studio's package restore, or `msbuild LegendsBelow.slnx -t:restore -p:RestorePackagesConfig=true`.
+4. Build the `x64` platform. Profile configurations map to Release for the component libraries.
 
 ### Tests
 Run the projects under `Components/Tests/` from Test Explorer. Each Model, Service, and System component has its own GoogleTest project.

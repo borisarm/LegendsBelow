@@ -2,16 +2,32 @@
 
 ## Executive Summary
 
-This document proposes a clear separation of concerns between three key projects:
+This document describes a clear separation of concerns between three key projects:
 - **LegendsBelow**: Win32 application shell (module consumer)
 - **LBEngineCore**: Game logic orchestration (C++20 module)
 - **LBRenderingSystem**: DirectX rendering abstraction (C++20 module)
 
 ---
 
-## Current State Analysis
+## As Built (2026-10-09)
 
-### LegendsBelow (Current)
+The migration is implemented. Differences from the proposal below:
+
+- **No Win32 types in module interfaces.** `GameEngine::Initialize` and `RenderingSystem::Initialize` take the window as an opaque `void*` (an `HWND` on Windows). A null window runs headless, which is how the engine and renderer are unit tested.
+- **DeviceResources is an internal partition**, `LB.RenderingSystem:DeviceResources` in `DeviceResources.cpp` (MSVC requires internal partitions to use a non-`.ixx` extension and `CompileAsCppModuleInternalPartition`). It also contains `GpuRenderer`, a thin wrapper exposing only plain types. `RenderingSystem` holds it through a pimpl (`GpuBackend`) defined in the implementation unit `RenderingSystem.cpp`, so consumers never see Direct3D types.
+- **Frame recording happens in `EndFrame`.** `BeginFrame` resets the queues, `Clear` records the clear color, and `EndFrame` prepares the command list, clears, renders the queues, and presents.
+- **StepTimer uses `std::chrono::steady_clock`** instead of `QueryPerformanceCounter`, and adds `Advance(delta, update)` for deterministic stepping. It is exported from `LB.Engine` so it can be tested.
+- **The engine defaults to a fixed 60 Hz timestep** (the template defaulted to variable).
+- **Not created:** `RenderContext`, `GraphicsTypes`, `SystemManager`, `GameState`, and `WindowsPlatform.h/cpp`. They will be added when there is something to put in them; graphics types stay in `LB.RenderingSystem.ixx`.
+- **LBEngineCore references only what it imports** (LBRenderingSystem, LBModel.Core). The other Systems and Services get referenced when they are wired in.
+- **vcpkg manifest moved to the repository root** so LBRenderingSystem and the executable share the DirectX headers and the Agility SDK version.
+- **Main.cpp is about 310 lines**, most of it the template's `WndProc`. The <200-line target would need the window code split into its own file.
+
+---
+
+## Original State (Before Migration)
+
+### LegendsBelow (Template)
 ```
 LegendsBelow/
 ├─ Main.cpp          # Win32 entry point, message loop
@@ -483,46 +499,44 @@ StepTimer is an implementation detail of GameEngine. External consumers don't ne
 ## File Move Checklist
 
 ### From LegendsBelow → LBRenderingSystem:
-- [ ] `DeviceResources.h/cpp` → `DeviceResources.ixx`
-- [ ] DirectX initialization code from `Game.cpp`
-- [ ] `Clear()`, `CreateDeviceDependentResources()`, `CreateWindowSizeDependentResources()`
+- [x] `DeviceResources.h/cpp` → `DeviceResources.cpp` (internal partition)
+- [x] DirectX initialization code from `Game.cpp`
+- [x] `Clear()`, `CreateDeviceDependentResources()`, `CreateWindowSizeDependentResources()`
 
 ### From LegendsBelow → LBEngineCore:
-- [ ] `StepTimer.h` → `StepTimer.ixx`
-- [ ] `Game.h/cpp` → `GameEngine.ixx` (refactored)
-- [ ] `Update()`, `Render()` logic
-- [ ] System initialization code
+- [x] `StepTimer.h` → `StepTimer.ixx`
+- [x] `Game.h/cpp` → `GameEngine.ixx` (refactored)
+- [x] `Update()`, `Render()` logic
+- [ ] System initialization code (only RenderingSystem so far)
 
 ### Stays in LegendsBelow:
-- [ ] `Main.cpp` (Win32 entry point)
-- [ ] `WndProc()` (Windows message handling)
-- [ ] Window creation code
-- [ ] Platform initialization (XGameRuntime, COM)
+- [x] `Main.cpp` (Win32 entry point)
+- [x] `WndProc()` (Windows message handling)
+- [x] Window creation code
+- [x] Platform initialization (XGameRuntime, COM)
 
 ---
 
 ## Success Criteria
 
-- [ ] LegendsBelow has <200 lines of code (Win32 shell only)
-- [ ] LBEngineCore has no Win32 dependencies
-- [ ] LBRenderingSystem has no game logic
-- [ ] All projects compile as C++20 modules
-- [ ] Separation of concerns is clear and maintainable
-- [ ] Module boundaries prevent unwanted dependencies
+- [ ] LegendsBelow has <200 lines of code (Win32 shell only); about 310 today, see As Built
+- [x] LBEngineCore has no Win32 dependencies
+- [x] LBRenderingSystem has no game logic
+- [ ] All projects compile as C++20 modules (LegendsBelow's `Main.cpp` imports `LB.Engine` but still uses `pch.h` for Win32/GDK headers)
+- [x] Separation of concerns is clear and maintainable
+- [x] Module boundaries prevent unwanted dependencies
 
 ---
 
 ## Next Steps
 
-1. **Review this architecture** - Approve/modify proposal
-2. **Implement Phase 1** - Move DeviceResources
-3. **Implement Phase 2** - Move StepTimer
-4. **Implement Phase 3** - Create GameEngine
-5. **Implement Phase 4** - Simplify LegendsBelow
-6. **Test and validate** - Ensure everything compiles and runs
+1. Wire Input, Audio, Asset, and Persistence systems into `GameEngine`
+2. Implement sprite/text rendering behind `RenderingSystem::EndFrame`
+3. Inject Services and repositories
+4. Optionally move window management out of `Main.cpp` into `WindowsPlatform.cpp`
 
 ---
 
-**Document Status**: Accepted direction, implementation not started. The target `.ixx` files in LBEngineCore and LBRenderingSystem exist as empty placeholders; `LegendsBelow/` still contains `Game`, `DeviceResources`, and `StepTimer`.  
+**Document Status**: Implemented (see As Built).  
 **Last Updated**: 2026-10-09  
 **Author**: GitHub Copilot (based on project analysis)

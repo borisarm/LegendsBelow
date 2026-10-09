@@ -4,7 +4,5 @@
     <ClCompile Include="LB.Engine.ixx" />
     <ClCompile Include="GameEngine.ixx" />
     <ClCompile Include="StepTimer.ixx" />
-    <ClCompile Include="SystemManager.ixx" />
-    <ClCompile Include="GameState.ixx" />
   </ItemGroup>
 </Project>

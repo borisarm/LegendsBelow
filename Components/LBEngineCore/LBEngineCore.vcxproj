@@ -77,7 +77,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
@@ -126,10 +126,11 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
@@ -140,56 +141,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="GameEngine.ixx" />
-    <ClCompile Include="GameState.ixx" />
     <ClCompile Include="LB.Engine.ixx" />
     <ClCompile Include="StepTimer.ixx" />
-    <ClCompile Include="SystemManager.ixx" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Model\LBModel.Character\LBModel.Character.vcxproj">
-      <Project>{fbb9b480-2be7-44ac-8d85-7431db9b6959}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Model\LBModel.Combat\LBModel.Combat.vcxproj">
-      <Project>{c259bb9e-7a4a-44c2-9a54-aefffa5228e3}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\Model\LBModel.Core\LBModel.Core.vcxproj">
       <Project>{990b9ac5-23ad-45d1-b267-5bef0a4c6ebf}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Model\LBModel.Dungeon\LBModel.Dungeon.vcxproj">
-      <Project>{4c51a10e-e6dd-4b60-9c5b-b5fc1d27c6b6}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Model\LBModel.Inventory\LBModel.Inventory.vcxproj">
-      <Project>{9a682277-90f2-4283-8946-08694c37fc55}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Services\LBAssetPersistenceService\LBAssetPersistenceService.vcxproj">
-      <Project>{cc3058fb-9cf7-4f26-b020-5d8ee70368a3}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Services\LBCharacterService\LBCharacterService.vcxproj">
-      <Project>{54cb0c98-89a4-472b-b184-98bc3c368f4e}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Services\LBCombatService\LBCombatService.vcxproj">
-      <Project>{6404607a-1507-4842-a231-e7761a80b19d}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Services\LBDungeonService\LBDungeonService.vcxproj">
-      <Project>{dc0d706c-8aec-44d1-a396-c1e82dfbabe6}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Services\LBInventoryService\LBInventoryService.vcxproj">
-      <Project>{0660e29a-5d0d-4024-bca2-70d97491cf45}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Services\LBProgressionService\LBProgressionService.vcxproj">
-      <Project>{2b639d8e-e937-4271-b15a-3de571899be1}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Systems\LBAssetSystem\LBAssetSystem.vcxproj">
-      <Project>{0ff082cc-529b-4105-9a04-8d4a109e3de5}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Systems\LBAudioSystem\LBAudioSystem.vcxproj">
-      <Project>{280d6694-757a-485e-b410-9b4a4301aac8}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Systems\LBInputSystem\LBInputSystem.vcxproj">
-      <Project>{a9e225ac-4060-4f56-b359-0eacddb08670}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Systems\LBPersistenceSystem\LBPersistenceSystem.vcxproj">
-      <Project>{69fecce1-3522-4e3b-ae96-8af3e92b23bb}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Systems\LBRenderingSystem\LBRenderingSystem.vcxproj">
       <Project>{f1adc28a-d281-4796-a358-c4005d37160b}</Project>

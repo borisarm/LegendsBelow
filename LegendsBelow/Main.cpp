@@ -3,9 +3,10 @@
 //
 
 #include "pch.h"
-#include "Game.h"
 
-using namespace DirectX;
+import LB.Engine;
+
+using LB::Engine::GameEngine;
 
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Wcovered-switch-default"
@@ -23,13 +24,12 @@ extern "C"
 
 namespace
 {
-    std::unique_ptr<Game> g_game;
+    std::unique_ptr<GameEngine> g_engine;
 }
 
 LPCWSTR g_szAppName = L"LegendsBelow";
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-void ExitGame() noexcept;
 
 // Entry point
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
@@ -37,7 +37,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    if (!XMVerifyCPUSupport())
+    if (!DirectX::XMVerifyCPUSupport())
         return 1;
 
     // Initialize COM for WIC usage
@@ -56,7 +56,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
     }
 
-    g_game = std::make_unique<Game>();
+    g_engine = std::make_unique<GameEngine>();
 
     // Register class and create window
     {
@@ -76,7 +76,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
         // Create window
         int w, h;
-        g_game->GetDefaultSize(w, h);
+        g_engine->GetDefaultWindowSize(w, h);
 
         RECT rc = { 0, 0, static_cast<LONG>(w), static_cast<LONG>(h) };
 
@@ -85,7 +85,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         HWND hwnd = CreateWindowExW(0, L"LegendsBelowWindowClass", g_szAppName, WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
             nullptr, nullptr, hInstance,
-            g_game.get());
+            g_engine.get());
         // TODO: Change to CreateWindowExW(WS_EX_TOPMOST, L"LegendsBelowWindowClass", g_szAppName, WS_POPUP,
         // to default to fullscreen.
 
@@ -97,7 +97,15 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
         GetClientRect(hwnd, &rc);
 
-        g_game->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top);
+        if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top))
+        {
+            std::ignore = MessageBoxW(hwnd, L"Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.", g_szAppName, MB_ICONERROR | MB_OK);
+            // Destroy the window first: it holds a pointer to the engine
+            DestroyWindow(hwnd);
+            g_engine.reset();
+            XGameRuntimeUninitialize();
+            return 1;
+        }
     }
 
     // Main message loop
@@ -111,12 +119,12 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         }
         else
         {
-            g_game->Tick();
+            g_engine->Tick();
         }
     }
 
 
-    g_game.reset();
+    g_engine.reset();
 
     XGameRuntimeUninitialize();
 
@@ -132,7 +140,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     static bool s_fullscreen = false;
     // TODO: Set s_fullscreen to true if defaulting to fullscreen.
 
-    auto game = reinterpret_cast<Game*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    auto engine = reinterpret_cast<GameEngine*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 
     switch (message)
     {
@@ -145,9 +153,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_PAINT:
-        if (s_in_sizemove && game)
+        if (s_in_sizemove && engine)
         {
-            game->Tick();
+            engine->Tick();
         }
         else
         {
@@ -158,16 +166,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_DISPLAYCHANGE:
-        if (game)
+        if (engine)
         {
-            game->OnDisplayChange();
+            engine->OnDisplayChange();
         }
         break;
 
     case WM_MOVE:
-        if (game)
+        if (engine)
         {
-            game->OnWindowMoved();
+            engine->OnWindowMoved();
         }
         break;
 
@@ -177,21 +185,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (!s_minimized)
             {
                 s_minimized = true;
-                if (!s_in_suspend && game)
-                    game->OnSuspending();
+                if (!s_in_suspend && engine)
+                    engine->OnSuspending();
                 s_in_suspend = true;
             }
         }
         else if (s_minimized)
         {
             s_minimized = false;
-            if (s_in_suspend && game)
-                game->OnResuming();
+            if (s_in_suspend && engine)
+                engine->OnResuming();
             s_in_suspend = false;
         }
-        else if (!s_in_sizemove && game)
+        else if (!s_in_sizemove && engine)
         {
-            game->OnWindowSizeChanged(LOWORD(lParam), HIWORD(lParam));
+            engine->OnWindowSizeChanged(LOWORD(lParam), HIWORD(lParam));
         }
         break;
 
@@ -201,12 +209,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_EXITSIZEMOVE:
         s_in_sizemove = false;
-        if (game)
+        if (engine)
         {
             RECT rc;
             GetClientRect(hWnd, &rc);
 
-            game->OnWindowSizeChanged(rc.right - rc.left, rc.bottom - rc.top);
+            engine->OnWindowSizeChanged(rc.right - rc.left, rc.bottom - rc.top);
         }
         break;
 
@@ -220,15 +228,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_ACTIVATEAPP:
-        if (game)
+        if (engine)
         {
             if (wParam)
             {
-                game->OnActivated();
+                engine->OnActivated();
             }
             else
             {
-                game->OnDeactivated();
+                engine->OnDeactivated();
             }
         }
         break;
@@ -237,16 +245,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         switch (wParam)
         {
         case PBT_APMQUERYSUSPEND:
-            if (!s_in_suspend && game)
-                game->OnSuspending();
+            if (!s_in_suspend && engine)
+                engine->OnSuspending();
             s_in_suspend = true;
             return TRUE;
 
         case PBT_APMRESUMESUSPEND:
             if (!s_minimized)
             {
-                if (s_in_suspend && game)
-                    game->OnResuming();
+                if (s_in_suspend && engine)
+                    engine->OnResuming();
                 s_in_suspend = false;
             }
             return TRUE;
@@ -271,8 +279,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
                 int width = 800;
                 int height = 600;
-                if (game)
-                    game->GetDefaultSize(width, height);
+                if (engine)
+                    engine->GetDefaultWindowSize(width, height);
 
                 ShowWindow(hWnd, SW_SHOWNORMAL);
 
@@ -302,10 +310,4 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     }
 
     return DefWindowProc(hWnd, message, wParam, lParam);
-}
-
-// Exit helper
-void ExitGame() noexcept
-{
-    PostQuitMessage(0);
 }

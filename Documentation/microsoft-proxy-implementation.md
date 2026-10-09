@@ -72,7 +72,7 @@ using SpellRepository = pro::proxy<SpellRepositoryFacade>;
 ## Status and Next Steps
 
 - [x] Microsoft Proxy v4 facade for spells
-- [ ] Declare `proxy` as a vcpkg manifest dependency. `LB.Repositories.ixx` does `import <proxy/proxy.h>;` but no `vcpkg.json` in the repo lists it, so the header currently resolves from a machine-wide vcpkg install.
+- [ ] Declare `proxy` as a vcpkg manifest dependency. `LB.Repositories.ixx` does `import <proxy/proxy.h>;` but no `vcpkg.json` in the repo lists it, so LBAssetPersistenceService currently fails to build (header not found).
 - [ ] Weapon and armor facades (`WeaponRepository`, `ArmorRepository`) following the spell pattern
 - [ ] Concrete JSON-backed repository implementations wired to `LBAssetSystem`
 - [ ] Inject repositories into services from `LB.Engine` (see `modularized-game-architecture.md`)

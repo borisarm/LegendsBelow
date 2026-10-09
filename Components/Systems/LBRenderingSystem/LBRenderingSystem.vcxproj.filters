@@ -8,8 +8,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LB.RenderingSystem.ixx" />
-    <ClCompile Include="DeviceResources.ixx" />
-    <ClCompile Include="RenderContext.ixx" />
-    <ClCompile Include="GraphicsTypes.ixx" />
+    <ClCompile Include="DeviceResources.cpp" />
+    <ClCompile Include="RenderingSystem.cpp" />
   </ItemGroup>
 </Project>
