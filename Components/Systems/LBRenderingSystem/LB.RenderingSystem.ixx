@@ -68,6 +68,15 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
+    /// Solid rectangle render data (screen space, pixels)
+    /// </summary>
+    struct RectangleRenderData {
+        Rectangle rect{};
+        Color color{Color::White()};
+        int32_t layerDepth{0};
+    };
+
+    /// <summary>
     /// Text render data
     /// </summary>
     struct TextRenderData {
@@ -166,8 +175,8 @@ export namespace LB::Systems::Rendering {
             // Clear render queues
             spriteQueue_.clear();
             textQueue_.clear();
+            rectangleQueue_.clear();
 
-            // TODO: Begin DirectX frame
             stats_.drawCalls = 0;
             stats_.spritesRendered = 0;
             stats_.textRendered = 0;
@@ -209,6 +218,15 @@ export namespace LB::Systems::Rendering {
             sprite.layerDepth = layerDepth;
 
             spriteQueue_.push_back(sprite);
+
+            rectangleQueue_.push_back(RectangleRenderData{rect, color, layerDepth});
+        }
+
+        /// <summary>
+        /// Rectangles queued this frame (in submission order)
+        /// </summary>
+        const std::vector<RectangleRenderData>& GetQueuedRectangles() const {
+            return rectangleQueue_;
         }
 
         /// <summary>
@@ -273,6 +291,7 @@ export namespace LB::Systems::Rendering {
 
         std::vector<SpriteRenderData> spriteQueue_;
         std::vector<TextRenderData> textQueue_;
+        std::vector<RectangleRenderData> rectangleQueue_;
         RenderStats stats_{};
 
         void RenderSprites() {

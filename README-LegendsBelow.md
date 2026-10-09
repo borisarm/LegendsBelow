@@ -33,10 +33,10 @@ Documentation/             Game design and architecture documents
 | Area | State |
 |------|-------|
 | Domain model | Implemented as C++20 modules, unit tested |
-| Services (Character, Combat, Inventory, Progression, Dungeon) | Implemented, unit tested |
-| Systems | Unit tested. Rendering: Direct3D 12 (clear and present). Input: keyboard/mouse from the window, gamepads through GameInput. Audio: XAudio2 output device. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
+| Services (Character, Combat, Inventory, Progression, Dungeon) | Implemented, unit tested; CharacterService drives player movement |
+| Systems | Unit tested. Rendering: Direct3D 12 (clear, solid rectangles, present). Input: keyboard/mouse from the window, gamepads through GameInput. Audio: XAudio2 output device. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
 | Repositories | Spell facade via Microsoft Proxy 4; no concrete JSON-backed implementation yet |
-| Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: Esc/Start toggles the tactical pause; F5/F9 quick save and load. Services are not wired in yet |
+| Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: a Warrior moves around a test arena with WASD/arrows or the left stick; Esc/Start toggles the tactical pause; F5/F9 quick save and load |
 | Asset pipeline | Not started (see `Documentation/asset-preprocesing-strategy-instructions.md`) |
 | Content | 45 spells, 12 weapons, 15 armour pieces authored in JSON |
 

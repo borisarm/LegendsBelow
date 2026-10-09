@@ -2,6 +2,9 @@
 export module LB.Engine:GameEngine;
 
 import std;
+import LB.Core;
+import LB.Character;
+import LB.CharacterService;
 import LB.AudioSystem;
 import LB.InputSystem;
 import LB.PersistenceSystem;
@@ -9,6 +12,14 @@ import LB.RenderingSystem;
 import :StepTimer;
 
 export namespace LB::Engine {
+
+    /// <summary>
+    /// Continuous position in world tiles (tile (0, 0) covers [0, 1) x [0, 1))
+    /// </summary>
+    struct WorldPoint {
+        float x{0.0f};
+        float y{0.0f};
+    };
 
     /// <summary>
     /// Main game engine: owns the frame timer and the systems, and runs Tick → Update → Render.
@@ -30,6 +41,12 @@ export namespace LB::Engine {
 
         // Save slot used by quick save/load (F5/F9)
         static constexpr std::int32_t QuickSaveSlot = 0;
+
+        // Placeholder test arena until dungeon generation is wired in: centered on the origin
+        static constexpr float ArenaHalfWidth = 10.0f;
+        static constexpr float ArenaHalfHeight = 7.0f;
+        static constexpr float PlayerSizeTiles = 0.75f;
+        static constexpr std::int32_t TileSizePixels = 32;
 
         GameEngine() {
             timer_.SetFixedTimeStep(true);
@@ -63,6 +80,10 @@ export namespace LB::Engine {
             }
             ApplyPreferences(persistenceSystem_.LoadPreferences());
 
+            if (!SpawnPlayer()) {
+                return false;
+            }
+
             inputSystem_.Initialize();
             RegisterDefaultBindings();
 
@@ -94,6 +115,8 @@ export namespace LB::Engine {
             inputSystem_.Shutdown();
             audioSystem_.Shutdown();
             persistenceSystem_.Shutdown();
+            characterService_.ClearAll();
+            playerId_.reset();
             renderingSystem_.Shutdown();
             paused_ = false;
             initialized_ = false;
@@ -207,6 +230,18 @@ export namespace LB::Engine {
         [[nodiscard]] const Systems::Audio::AudioSystem& GetAudio() const noexcept { return audioSystem_; }
         [[nodiscard]] Systems::Audio::AudioSystem& GetAudio() noexcept { return audioSystem_; }
         [[nodiscard]] const Systems::Persistence::PersistenceSystem& GetPersistence() const noexcept { return persistenceSystem_; }
+        [[nodiscard]] const Services::Character::CharacterService& GetCharacters() const noexcept { return characterService_; }
+        [[nodiscard]] const Systems::Rendering::RenderingSystem& GetRendering() const noexcept { return renderingSystem_; }
+
+        /// <summary>
+        /// The player character, once the engine is initialized
+        /// </summary>
+        [[nodiscard]] std::optional<LB::Character::CharacterId> GetPlayerId() const noexcept { return playerId_; }
+
+        /// <summary>
+        /// Player position in world tiles
+        /// </summary>
+        [[nodiscard]] WorldPoint GetPlayerPosition() const noexcept { return playerPosition_; }
 
         /// <summary>
         /// True when gamepads are read from the platform (GameInput runtime available)
@@ -236,6 +271,8 @@ export namespace LB::Engine {
 
             Systems::Persistence::SaveData data;
             data["gameTimeSeconds"] = std::format("{}", gameTimeSeconds_);
+            data["player.x"] = std::format("{}", playerPosition_.x);
+            data["player.y"] = std::format("{}", playerPosition_.y);
 
             return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
         }
@@ -251,9 +288,17 @@ export namespace LB::Engine {
             if (!result.success) return false;
 
             double gameTime = 0.0;
-            if (!ParseDouble(result.data, "gameTimeSeconds", gameTime)) return false;
+            double playerX = 0.0;
+            double playerY = 0.0;
+            if (!ParseDouble(result.data, "gameTimeSeconds", gameTime) ||
+                !ParseDouble(result.data, "player.x", playerX) ||
+                !ParseDouble(result.data, "player.y", playerY)) {
+                return false;
+            }
 
             gameTimeSeconds_ = gameTime;
+            playerPosition_ = ClampToArena(WorldPoint{ static_cast<float>(playerX), static_cast<float>(playerY) });
+            characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
             return true;
         }
 
@@ -279,7 +324,8 @@ export namespace LB::Engine {
 
             if (!paused_) {
                 gameTimeSeconds_ += elapsedSeconds;
-                // TODO: Add game logic here (services, AI).
+                MovePlayer(static_cast<float>(elapsedSeconds));
+                // TODO: Add game logic here (combat, AI).
             }
 
             // This step has consumed the input frame; presses are seen by exactly one step
@@ -297,16 +343,132 @@ export namespace LB::Engine {
 
             renderingSystem_.BeginFrame();
 
-            // Placeholder pause feedback until there is a pause menu: dim the background
-            auto clearColor = Systems::Rendering::Color::CornflowerBlue();
-            if (paused_) {
-                clearColor = Systems::Rendering::Color{ clearColor.r * 0.4f, clearColor.g * 0.4f, clearColor.b * 0.4f, clearColor.a };
-            }
-            renderingSystem_.Clear(clearColor);
+            // Placeholder pause feedback until there is a pause menu: dim the whole frame
+            const float dim = paused_ ? 0.4f : 1.0f;
+            const auto shade = [dim](float r, float g, float b) {
+                return Systems::Rendering::Color{ r * dim, g * dim, b * dim, 1.0f };
+            };
 
-            // TODO: Queue world, characters, and UI draws here.
+            renderingSystem_.Clear(shade(0.392156899f, 0.584313750f, 0.929411829f));  // CornflowerBlue
+            DrawArena(shade);
+            DrawPlayer(shade);
 
             renderingSystem_.EndFrame();
+        }
+
+        bool SpawnPlayer() {
+            // Warrior starting stats from game-design.md (Character Classes)
+            Services::Character::CharacterCreationRequest request(
+                "Hero", LB::Character::CharacterClass::Warrior, LB::Attributes{ 16, 12, 14, 8, 10, 10 });
+
+            playerId_ = characterService_.CreateCharacter(request);
+            if (!playerId_) return false;
+
+            playerPosition_ = WorldPoint{};
+            characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
+            return true;
+        }
+
+        /// <summary>
+        /// Real-time movement for one simulation step: WASD/arrow keys (screen directions,
+        /// diagonals normalized) or the left stick (analog). Speed comes from CharacterService.
+        /// </summary>
+        void MovePlayer(float elapsedSeconds) {
+            if (!playerId_) return;
+
+            namespace Keys = Systems::Input::Keys;
+            const auto held = [this](std::int32_t a, std::int32_t b) {
+                return inputSystem_.IsKeyDown(a) || inputSystem_.IsKeyDown(b);
+            };
+
+            float dx = 0.0f;
+            float dy = 0.0f;
+            if (held(Keys::FromChar('D'), Keys::Right)) dx += 1.0f;
+            if (held(Keys::FromChar('A'), Keys::Left)) dx -= 1.0f;
+            if (held(Keys::FromChar('S'), Keys::Down)) dy += 1.0f;
+            if (held(Keys::FromChar('W'), Keys::Up)) dy -= 1.0f;
+
+            if (dx != 0.0f || dy != 0.0f) {
+                const float length = std::sqrt(dx * dx + dy * dy);
+                dx /= length;
+                dy /= length;
+            }
+            else {
+                // Stick up is +Y; screen up is -Y. Dead zones are applied by the input backend.
+                const auto& pad = inputSystem_.GetGamepadState(0);
+                dx = pad.leftThumbX;
+                dy = -pad.leftThumbY;
+                const float magnitude = std::sqrt(dx * dx + dy * dy);
+                if (magnitude > 1.0f) {
+                    dx /= magnitude;
+                    dy /= magnitude;
+                }
+            }
+
+            if (dx == 0.0f && dy == 0.0f) return;
+
+            const float speed = characterService_.GetMovementSpeed(*playerId_).value_or(0.0f);
+            playerPosition_ = ClampToArena(WorldPoint{
+                playerPosition_.x + dx * speed * elapsedSeconds,
+                playerPosition_.y + dy * speed * elapsedSeconds });
+
+            // Keep the domain's tile position in sync (at most one tile per step at these speeds)
+            const auto tile = ToTile(playerPosition_);
+            if (!characterService_.MoveCharacter(*playerId_, tile)) {
+                characterService_.PlaceCharacter(*playerId_, tile);
+            }
+        }
+
+        static WorldPoint ClampToArena(WorldPoint point) noexcept {
+            constexpr float halfPlayer = PlayerSizeTiles * 0.5f;
+            point.x = std::clamp(point.x, -ArenaHalfWidth + halfPlayer, ArenaHalfWidth - halfPlayer);
+            point.y = std::clamp(point.y, -ArenaHalfHeight + halfPlayer, ArenaHalfHeight - halfPlayer);
+            return point;
+        }
+
+        static LB::Position ToTile(WorldPoint point) noexcept {
+            return LB::Position{ static_cast<std::int32_t>(std::floor(point.x)), static_cast<std::int32_t>(std::floor(point.y)) };
+        }
+
+        // World tiles -> screen pixels; the arena is centered in the window (placeholder top-down
+        // view until the isometric renderer exists)
+        Systems::Rendering::Rectangle ToScreen(float x, float y, float width, float height) const {
+            std::int32_t screenWidth = 0;
+            std::int32_t screenHeight = 0;
+            renderingSystem_.GetScreenSize(screenWidth, screenHeight);
+
+            const float originX = static_cast<float>(screenWidth) * 0.5f;
+            const float originY = static_cast<float>(screenHeight) * 0.5f;
+            const auto px = [](float value) { return static_cast<std::int32_t>(std::lround(value)); };
+
+            const std::int32_t left = px(originX + x * TileSizePixels);
+            const std::int32_t top = px(originY + y * TileSizePixels);
+            const std::int32_t right = px(originX + (x + width) * TileSizePixels);
+            const std::int32_t bottom = px(originY + (y + height) * TileSizePixels);
+            return Systems::Rendering::Rectangle{ left, top, right - left, bottom - top };
+        }
+
+        template<typename Shade>
+        void DrawArena(const Shade& shade) {
+            const auto tilesX = static_cast<std::int32_t>(ArenaHalfWidth);
+            const auto tilesY = static_cast<std::int32_t>(ArenaHalfHeight);
+            for (std::int32_t ty = -tilesY; ty < tilesY; ++ty) {
+                for (std::int32_t tx = -tilesX; tx < tilesX; ++tx) {
+                    const bool light = ((tx + ty) & 1) == 0;
+                    const auto color = light ? shade(0.30f, 0.29f, 0.27f) : shade(0.24f, 0.23f, 0.22f);
+                    renderingSystem_.DrawRectangle(ToScreen(static_cast<float>(tx), static_cast<float>(ty), 1.0f, 1.0f), color, 0);
+                }
+            }
+        }
+
+        template<typename Shade>
+        void DrawPlayer(const Shade& shade) {
+            if (!playerId_) return;
+
+            constexpr float half = PlayerSizeTiles * 0.5f;
+            renderingSystem_.DrawRectangle(
+                ToScreen(playerPosition_.x - half, playerPosition_.y - half, PlayerSizeTiles, PlayerSizeTiles),
+                shade(0.95f, 0.75f, 0.20f), 10);
         }
 
         void SetPaused(bool paused) {
@@ -382,6 +544,9 @@ export namespace LB::Engine {
         Systems::Input::InputSystem inputSystem_;
         Systems::Audio::AudioSystem audioSystem_;
         Systems::Persistence::PersistenceSystem persistenceSystem_;
+        Services::Character::CharacterService characterService_;
+        std::optional<LB::Character::CharacterId> playerId_;
+        WorldPoint playerPosition_{};
         StepTimer timer_;
         double gameTimeSeconds_{0.0};
         bool paused_{false};
