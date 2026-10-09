@@ -25,7 +25,9 @@ export namespace LB::Combat {
         // Spiritual damage types
         Holy = 7,           // Extra damage to undead
         Shadow = 8,         // Drains life force
-        Arcane = 9          // Raw magical energy
+        Arcane = 9,         // Raw magical energy
+        Acid = 10,          // Elemental: corrodes armour (design-combat-system.md, 5.1)
+        Psychic = 11        // Spiritual: mental damage (design-combat-system.md, 5.1)
     };
 
     /// <summary>
@@ -65,7 +67,8 @@ export namespace LB::Combat {
         Frost = 2,          // Cold-based magic with slowing effects
         Holy = 3,           // Divine magic for healing and protection
         Shadow = 4,         // Dark magic affecting life force
-        Utility = 5         // Non-combat spells for exploration
+        Utility = 5,        // Non-combat spells for exploration
+        Generic = 6         // Usable by any class (e.g. Haste, Shield)
     };
 
     /// <summary>
@@ -94,7 +97,8 @@ export namespace LB::Combat {
         OffHand = 6,
         Ring1 = 7,
         Ring2 = 8,
-        Necklace = 9
+        Necklace = 9,
+        Hands = 10          // Gloves, gauntlets (design-armour-system.md, 2.1)
     };
 
 } // namespace LB::Combat

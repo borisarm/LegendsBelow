@@ -52,7 +52,9 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <!-- No /GL: with /GL + /Zi the compiler writes corrupt debug info for the LB.Content module
+         units (LNK4020, or LNK1103 with /Z7). This library only runs at load time. -->
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -136,6 +138,8 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ControlFlowGuard>Guard</ControlFlowGuard>
+      <!-- The game links with /guard:ehcont; without /GL the objects need it at compile time -->
+      <GuardEHContMetadata>true</GuardEHContMetadata>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -144,6 +148,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="LB.ContentRepositories.ixx" />
+    <ClCompile Include="ContentLoader.cpp" />
+    <ClCompile Include="LB.Content.ixx" />
     <ClCompile Include="LB.Repositories.ixx" />
   </ItemGroup>
   <ItemGroup>

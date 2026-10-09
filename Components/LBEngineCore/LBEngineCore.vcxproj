@@ -151,6 +151,12 @@
     <ProjectReference Include="..\Model\LBModel.Character\LBModel.Character.vcxproj">
       <Project>{fbb9b480-2be7-44ac-8d85-7431db9b6959}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\Model\LBModel.Combat\LBModel.Combat.vcxproj">
+      <Project>{c259bb9e-7a4a-44c2-9a54-aefffa5228e3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Services\LBAssetPersistenceService\LBAssetPersistenceService.vcxproj">
+      <Project>{cc3058fb-9cf7-4f26-b020-5d8ee70368a3}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Services\LBCharacterService\LBCharacterService.vcxproj">
       <Project>{54cb0c98-89a4-472b-b184-98bc3c368f4e}</Project>
     </ProjectReference>
