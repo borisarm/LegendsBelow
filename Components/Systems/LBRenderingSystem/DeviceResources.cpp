@@ -269,6 +269,18 @@ namespace LB::Systems::Rendering::Detail
             commandList->RSSetScissorRects(1, &scissorRect);
         }
 
+        // Fill a screen-space rectangle with a solid color. Uses a render-target clear limited to
+        // the rectangle, so no pipeline state or shaders are needed. Call between BeginFrame and
+        // EndFrame with a rectangle inside the back buffer.
+        void FillRectangle(int left, int top, int right, int bottom, float r, float g, float b, float a)
+        {
+            auto commandList = m_deviceResources->GetCommandList();
+            const auto rtvDescriptor = m_deviceResources->GetRenderTargetView();
+            const float color[4] = { r, g, b, a };
+            const D3D12_RECT rect = { left, top, right, bottom };
+            commandList->ClearRenderTargetView(rtvDescriptor, color, 1, &rect);
+        }
+
         // Submits the frame's command list and presents the back buffer.
         void EndFrame()
         {

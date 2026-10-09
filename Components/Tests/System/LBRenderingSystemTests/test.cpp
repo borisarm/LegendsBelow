@@ -414,3 +414,55 @@ TEST(RenderingSystemTests, Color_CornflowerBlue_CorrectValues) {
     EXPECT_NEAR(color.b, 237.0f / 255.0f, 1e-3f);
     EXPECT_EQ(color.a, 1.0f);
 }
+
+// ============================================================================
+// Solid Rectangle Tests
+// ============================================================================
+
+TEST(RenderingSystemTests, DrawRectangle_KeepsExactGeometryAndColor) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+
+    system.DrawRectangle(Rectangle{10, 20, 30, 5}, Color::Red(), 3);
+
+    const auto& rects = system.GetQueuedRectangles();
+    ASSERT_EQ(rects.size(), 1u);
+    EXPECT_EQ(rects[0].rect.x, 10);
+    EXPECT_EQ(rects[0].rect.y, 20);
+    EXPECT_EQ(rects[0].rect.width, 30);
+    EXPECT_EQ(rects[0].rect.height, 5);
+    EXPECT_EQ(rects[0].color.r, 1.0f);
+    EXPECT_EQ(rects[0].layerDepth, 3);
+}
+
+TEST(RenderingSystemTests, BeginFrame_ClearsRectangles) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+    system.DrawRectangle(Rectangle{0, 0, 10, 10}, Color::Blue());
+
+    system.BeginFrame();
+
+    EXPECT_TRUE(system.GetQueuedRectangles().empty());
+}
+
+TEST(RenderingSystemTests, DrawRectangle_BeforeInitialize_NotQueued) {
+    RenderingSystem system;
+
+    system.DrawRectangle(Rectangle{0, 0, 10, 10}, Color::Blue());
+
+    EXPECT_TRUE(system.GetQueuedRectangles().empty());
+}
+
+TEST(RenderingSystemTests, EndFrame_Headless_RectanglesOffScreen_NoError) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+    system.DrawRectangle(Rectangle{-50, -50, 20, 20}, Color::Green());
+    system.DrawRectangle(Rectangle{790, 590, 100, 100}, Color::Green());
+
+    system.EndFrame();
+
+    EXPECT_EQ(system.GetStats().spritesRendered, 2u);
+}

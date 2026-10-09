@@ -545,3 +545,79 @@ TEST(CharacterServiceTests, RogueClass_HasHighDexterity) {
 
     EXPECT_GT(status->currentAttributes.dexterity, baseAttribs.dexterity);
 }
+// ============================================================================
+// Movement Speed Tests
+// ============================================================================
+
+namespace {
+    CharacterId CreateTestCharacter(CharacterService& service, CharacterClass characterClass, int32_t dexterity) {
+        Attributes attributes{10, dexterity, 10, 10, 10, 10};
+        CharacterCreationRequest request("Mover", characterClass, attributes);
+        return *service.CreateCharacter(request);
+    }
+
+    // Expected speed from the created character's actual (class-adjusted) DEX
+    float ExpectedSpeed(const CharacterService& service, CharacterId id, float classBaseSpeed) {
+        const auto& character = service.GetCharacter(id)->get();
+        return classBaseSpeed + static_cast<float>(character.GetAttributes().GetDexterityModifier()) * 0.1f;
+    }
+}
+
+TEST(CharacterServiceTests, GetMovementSpeed_UnknownCharacter_Nullopt) {
+    CharacterService service;
+
+    EXPECT_FALSE(service.GetMovementSpeed(999).has_value());
+}
+
+TEST(CharacterServiceTests, GetMovementSpeed_Warrior_UsesBaseSpeedAndDex) {
+    CharacterService service;
+    auto id = CreateTestCharacter(service, CharacterClass::Warrior, 14);
+
+    auto speed = service.GetMovementSpeed(id);
+
+    ASSERT_TRUE(speed.has_value());
+    EXPECT_FLOAT_EQ(*speed, ExpectedSpeed(service, id, 4.0f));
+}
+
+TEST(CharacterServiceTests, GetMovementSpeed_HigherDex_Faster) {
+    CharacterService service;
+    auto slow = CreateTestCharacter(service, CharacterClass::Warrior, 8);
+    auto fast = CreateTestCharacter(service, CharacterClass::Warrior, 18);
+
+    EXPECT_GT(*service.GetMovementSpeed(fast), *service.GetMovementSpeed(slow));
+}
+
+TEST(CharacterServiceTests, GetMovementSpeed_Rogue_FasterBaseThanWarrior) {
+    CharacterService service;
+    auto rogue = CreateTestCharacter(service, CharacterClass::Rogue, 12);
+
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(rogue), ExpectedSpeed(service, rogue, 5.0f));
+}
+
+TEST(CharacterServiceTests, GetMovementSpeed_NeverBelowMinimum) {
+    CharacterService service;
+    auto id = CreateTestCharacter(service, CharacterClass::Mage, 1);
+
+    EXPECT_GE(*service.GetMovementSpeed(id), 1.0f);
+}
+
+// ============================================================================
+// Placement Tests
+// ============================================================================
+
+TEST(CharacterServiceTests, PlaceCharacter_FarPosition_BypassesMoveValidation) {
+    CharacterService service;
+    auto id = CreateTestCharacter(service, CharacterClass::Warrior, 10);
+    const Position far{50, -40};
+
+    EXPECT_FALSE(service.MoveCharacter(id, far));  // too far for one move
+    EXPECT_TRUE(service.PlaceCharacter(id, far));
+
+    EXPECT_EQ(service.GetCharacter(id)->get().GetPosition(), far);
+}
+
+TEST(CharacterServiceTests, PlaceCharacter_UnknownCharacter_Fails) {
+    CharacterService service;
+
+    EXPECT_FALSE(service.PlaceCharacter(999, Position{1, 1}));
+}
