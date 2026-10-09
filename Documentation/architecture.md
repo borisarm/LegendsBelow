@@ -91,7 +91,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 | Project | Module | Namespace | Status |
 |---------|--------|-----------|--------|
 | LBRenderingSystem | `LB.RenderingSystem` | `LB::Systems::Rendering` | Draw-command API with a Direct3D 12 backend (device, swap chain, clear/present); headless when no window is given. Sprite/text drawing not implemented yet |
-| LBInputSystem | `LB.InputSystem` | `LB::Systems::Input` | State tracking (keyboard/mouse/gamepad); no GameInput yet |
+| LBInputSystem | `LB.InputSystem` | `LB::Systems::Input` | Keyboard/mouse state pushed by the host, transition-based edge detection (no lost taps), action mapping. Gamepad state exists but nothing feeds it yet (GameInput planned) |
 | LBAudioSystem | `LB.AudioSystem` | `LB::Systems::Audio` | Channel/clip bookkeeping; no audio API yet |
 | LBAssetSystem | `LB.AssetSystem` | `LB::Systems::Asset` | Asset registry/lifecycle; no file I/O yet |
 | LBPersistenceSystem | `LB.PersistenceSystem` | `LB::Systems::Persistence` | Save-slot model; no storage backend yet |
@@ -100,7 +100,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 | Project | Status |
 |---------|--------|
-| `Components/LBEngineCore` | `LB.Engine` (`:StepTimer`, `:GameEngine`): fixed 60 Hz loop driving LBRenderingSystem; no Win32 dependency. Services and the other Systems are not wired in yet |
+| `Components/LBEngineCore` | `LB.Engine` (`:StepTimer`, `:GameEngine`): fixed 60 Hz loop driving LBRenderingSystem and LBInputSystem; tactical pause (Esc) with a game clock that stops while paused. No Win32 dependency. Services and the Audio/Asset/Persistence systems are not wired in yet |
 | `LegendsBelow` | Win32/GDK shell only: `Main.cpp` creates the window, runs the message loop, and forwards events to `LB::Engine::GameEngine` |
 
 The native window crosses module boundaries only as an opaque `void*`. Direct3D types stay inside LBRenderingSystem's internal partition `LB.RenderingSystem:DeviceResources` (`DeviceResources.cpp`), which consumers cannot import.
@@ -130,7 +130,9 @@ One GoogleTest project per component under `Model/`, `Services/`, and `System/`,
 
 The shell → engine → renderer split from `modularized-game-architecture.md` is done. Remaining responsibilities:
 - [x] Own the `StepTimer` and run `Tick → Update (fixed 60 Hz) → Render`
-- Construct the remaining Systems (Input, Audio, Asset, Persistence) and Services, and inject dependencies (repositories into services)
+- [x] Input: the host forwards keyboard/mouse events (`OnKeyDown`, `OnMouseMove`, …); each simulation step reads input, then ends the input frame
+- Construct the remaining Systems (Audio, Asset, Persistence) and Services, and inject dependencies (repositories into services)
+- Gamepad input through GameInput (needs a platform backend inside LBInputSystem, like the renderer's)
 - Game state machine (main menu, town, dungeon, pause)
 - Cross-system events (`EventBus`) so Services never call Systems directly
 

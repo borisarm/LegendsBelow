@@ -95,6 +95,16 @@ export namespace LB::Services::Combat {
     class CombatService {
     public:
         /// <summary>
+        /// Create a service with nondeterministic dice
+        /// </summary>
+        CombatService() : rng_(std::random_device{}()) {}
+
+        /// <summary>
+        /// Create a service whose dice are reproducible for a given seed (tests, replays)
+        /// </summary>
+        explicit CombatService(std::uint32_t seed) : rng_(seed) {}
+
+        /// <summary>
         /// Perform a melee attack from attacker to target
         /// Uses D&D-style attack roll vs armor class
         /// </summary>
@@ -403,7 +413,7 @@ export namespace LB::Services::Combat {
         /// Roll a d20 with optional advantage or disadvantage
         /// </summary>
         int32_t rollD20(bool advantage = false, bool disadvantage = false) const {
-            static thread_local std::mt19937 gen{std::random_device{}()};
+            auto& gen = rng_;
             std::uniform_int_distribution<int32_t> dist(1, 20);
 
             if (advantage && !disadvantage) {
@@ -419,6 +429,10 @@ export namespace LB::Services::Combat {
                 return dist(gen);
             }
         }
+
+        // Dice state; mutable so rolls stay available from const queries.
+        // One instance must not be used from several threads at once.
+        mutable std::mt19937 rng_;
     };
 
 } // namespace LB::Services::Combat
