@@ -734,3 +734,190 @@ TEST(GameEngineSaveTests, UnusableSaveDirectory_FallsBackToMemory) {
     EXPECT_FALSE(engine.GetPersistence().IsPersistentStorage());
     EXPECT_TRUE(engine.SaveGame(0));
 }
+
+// ============================================================================
+// GameEngine Player Movement Tests
+// ============================================================================
+
+namespace {
+    float PlayerSpeed(const GameEngine& engine) {
+        return *engine.GetCharacters().GetMovementSpeed(*engine.GetPlayerId());
+    }
+
+    double StepSeconds(const GameEngine& engine) {
+        return StepTimer::TicksToSeconds(engine.GetTimer().GetTargetElapsedTicks());
+    }
+
+    void HoldKeysFor(GameEngine& engine, std::initializer_list<std::int32_t> keys, int steps) {
+        for (auto key : keys) engine.OnKeyDown(key);
+        RunSteps(engine, steps);
+        for (auto key : keys) engine.OnKeyUp(key);
+    }
+
+    GamepadState Stick(float x, float y) {
+        GamepadState state{};
+        state.connected = true;
+        state.leftThumbX = x;
+        state.leftThumbY = y;
+        return state;
+    }
+}
+
+TEST(GameEngineMovementTests, Initialize_SpawnsPlayerAtOrigin) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    ASSERT_TRUE(engine.GetPlayerId().has_value());
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().y, 0.0f);
+    const auto& character = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    EXPECT_EQ(character.GetClass(), LB::Character::CharacterClass::Warrior);
+    EXPECT_EQ(character.GetPosition(), (LB::Position{0, 0}));
+}
+
+TEST(GameEngineMovementTests, HoldD_MovesRightAtCharacterSpeed) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
+
+    EXPECT_NEAR(engine.GetPlayerPosition().x, PlayerSpeed(engine) * 30 * StepSeconds(engine), 1e-4);
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().y, 0.0f);
+}
+
+TEST(GameEngineMovementTests, HoldW_MovesUpTheScreen) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    HoldKeysFor(engine, { Keys::FromChar('W') }, 20);
+
+    EXPECT_LT(engine.GetPlayerPosition().y, 0.0f);
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+}
+
+TEST(GameEngineMovementTests, ArrowKeys_AlsoMove) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    HoldKeysFor(engine, { Keys::Left, Keys::Down }, 20);
+
+    EXPECT_LT(engine.GetPlayerPosition().x, 0.0f);
+    EXPECT_GT(engine.GetPlayerPosition().y, 0.0f);
+}
+
+TEST(GameEngineMovementTests, Diagonal_NotFasterThanStraight) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    HoldKeysFor(engine, { Keys::FromChar('D'), Keys::FromChar('S') }, 30);
+
+    const auto p = engine.GetPlayerPosition();
+    EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y), PlayerSpeed(engine) * 30 * StepSeconds(engine), 1e-4);
+    EXPECT_NEAR(p.x, p.y, 1e-6);
+}
+
+TEST(GameEngineMovementTests, OppositeKeys_Cancel) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    HoldKeysFor(engine, { Keys::FromChar('A'), Keys::FromChar('D') }, 20);
+
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+}
+
+TEST(GameEngineMovementTests, LeftStick_AnalogSpeed) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.OnGamepadState(0, Stick(0.5f, 0.0f));
+    RunSteps(engine, 30);
+
+    EXPECT_NEAR(engine.GetPlayerPosition().x, 0.5 * PlayerSpeed(engine) * 30 * StepSeconds(engine), 1e-4);
+}
+
+TEST(GameEngineMovementTests, LeftStickUp_MovesUpTheScreen) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.OnGamepadState(0, Stick(0.0f, 1.0f));
+    RunSteps(engine, 10);
+
+    EXPECT_LT(engine.GetPlayerPosition().y, 0.0f);
+}
+
+TEST(GameEngineMovementTests, Paused_DoesNotMove) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
+
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+}
+
+TEST(GameEngineMovementTests, ArenaEdge_StopsPlayer) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 60 * 10);  // far longer than needed to cross
+
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, GameEngine::ArenaHalfWidth - GameEngine::PlayerSizeTiles * 0.5f);
+}
+
+TEST(GameEngineMovementTests, DomainTilePosition_FollowsPlayer) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 45);  // ~2.7 tiles at Warrior speed
+
+    const auto expectedTileX = static_cast<std::int32_t>(std::floor(engine.GetPlayerPosition().x));
+    const auto& character = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    EXPECT_GE(expectedTileX, 2);
+    EXPECT_EQ(character.GetPosition(), (LB::Position{expectedTileX, 0}));
+}
+
+TEST(GameEngineMovementTests, SaveLoad_RestoresPlayerPosition) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    HoldKeysFor(engine, { Keys::FromChar('D'), Keys::FromChar('W') }, 20);
+    const auto saved = engine.GetPlayerPosition();
+    ASSERT_TRUE(engine.SaveGame(1));
+
+    HoldKeysFor(engine, { Keys::FromChar('A') }, 40);
+    ASSERT_TRUE(engine.LoadGame(1));
+
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, saved.x);
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().y, saved.y);
+    const auto& character = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    EXPECT_EQ(character.GetPosition().x, static_cast<std::int32_t>(std::floor(saved.x)));
+}
+
+TEST(GameEngineMovementTests, Render_DrawsArenaAndCenteredPlayer) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.Tick(OneSixtieth);
+
+    const auto& rects = engine.GetRendering().GetQueuedRectangles();
+    const auto arenaTiles = static_cast<std::size_t>(GameEngine::ArenaHalfWidth * 2 * GameEngine::ArenaHalfHeight * 2);
+    ASSERT_EQ(rects.size(), arenaTiles + 1);
+
+    // Player is drawn last, centered in the 800x600 window, 0.75 tiles of 32 px = 24 px
+    const auto& player = rects.back();
+    EXPECT_EQ(player.rect.x, 388);
+    EXPECT_EQ(player.rect.y, 288);
+    EXPECT_EQ(player.rect.width, 24);
+    EXPECT_EQ(player.rect.height, 24);
+    EXPECT_GT(player.layerDepth, rects.front().layerDepth);
+}
+
+TEST(GameEngineMovementTests, Shutdown_RemovesPlayer) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.Shutdown();
+
+    EXPECT_FALSE(engine.GetPlayerId().has_value());
+    EXPECT_EQ(engine.GetCharacters().GetCharacterCount(), 0u);
+}

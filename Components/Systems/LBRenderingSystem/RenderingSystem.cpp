@@ -48,6 +48,19 @@ namespace LB::Systems::Rendering {
 
         if (gpu_) {
             gpu_->renderer.BeginFrame(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
+
+            // Solid rectangles, back to front; clipped to the back buffer
+            auto rectangles = rectangleQueue_;
+            std::ranges::stable_sort(rectangles, {}, &RectangleRenderData::layerDepth);
+            for (const auto& item : rectangles) {
+                const int32_t left = std::clamp(item.rect.x, 0, screenWidth_);
+                const int32_t top = std::clamp(item.rect.y, 0, screenHeight_);
+                const int32_t right = std::clamp(item.rect.x + item.rect.width, 0, screenWidth_);
+                const int32_t bottom = std::clamp(item.rect.y + item.rect.height, 0, screenHeight_);
+                if (right <= left || bottom <= top) continue;
+
+                gpu_->renderer.FillRectangle(left, top, right, bottom, item.color.r, item.color.g, item.color.b, item.color.a);
+            }
         }
 
         // Sort and render all queued items

@@ -330,6 +330,37 @@ export namespace LB::Services::Character {
         }
 
         /// <summary>
+        /// Real-time movement speed in tiles per second (design-character-system.md, 4.2):
+        /// TilesPerSecond = ClassBaseSpeed + DEX_mod * 0.1
+        /// Armour penalties (design-armour-system.md, 4.2) apply once equipment data is modelled.
+        /// </summary>
+        std::optional<float> GetMovementSpeed(CharacterId id) const {
+            auto it = characters_.find(id);
+            if (it == characters_.end()) {
+                return std::nullopt;
+            }
+
+            const auto& character = it->second;
+            const float speed = getClassBaseSpeed(character.GetClass())
+                + static_cast<float>(character.GetAttributes().GetDexterityModifier()) * 0.1f;
+            return std::max(MinimumMovementSpeed, speed);
+        }
+
+        /// <summary>
+        /// Place a character at a position without movement validation
+        /// (spawning, teleports, restoring a saved game)
+        /// </summary>
+        bool PlaceCharacter(CharacterId id, const Position& position) {
+            auto it = characters_.find(id);
+            if (it == characters_.end()) {
+                return false;
+            }
+
+            it->second.SetPosition(position);
+            return true;
+        }
+
+        /// <summary>
         /// Rest character to restore health and mana
         /// Simulates short or long rest mechanics
         /// </summary>
@@ -676,6 +707,20 @@ export namespace LB::Services::Character {
             }
 
             return (baseGainPerLevel + intelligenceGain * 2) * levels;
+        }
+
+        // Slowest a character can move, however low its DEX
+        static constexpr float MinimumMovementSpeed = 1.0f;
+
+        // Tiles per second before DEX and armour. Placeholder tuning until class data files exist.
+        static float getClassBaseSpeed(CharacterClass charClass) {
+            switch (charClass) {
+                case CharacterClass::Rogue: return 5.0f;
+                case CharacterClass::Warrior:
+                case CharacterClass::Mage:
+                case CharacterClass::Cleric:
+                default: return 4.0f;
+            }
         }
 
         int32_t getMaxMoveDistance(CharacterClass charClass, const Attributes& attributes) const {
