@@ -1,4 +1,4 @@
-# LegendsBelow – Combat System Design
+# LegendsBelow â€“ Combat System Design
 
 ## 1. Purpose
 
@@ -41,10 +41,10 @@ The actual order may be tuned, but should remain consistent across runs.
 
 Each ability defines an `actionType`:
 
-- Standard Action – primary combat action (weapon attack, major spell, heavy item use).
-- Move Action – movement up to move allowance for the current time slice.
-- Bonus Action – minor actions (small buffs, quick strikes, slides).
-- Reaction – triggered actions based on events (e.g., enemy leaving melee range).
+- Standard Action â€“ primary combat action (weapon attack, major spell, heavy item use).
+- Move Action â€“ movement up to move allowance for the current time slice.
+- Bonus Action â€“ minor actions (small buffs, quick strikes, slides).
+- Reaction â€“ triggered actions based on events (e.g., enemy leaving melee range).
 
 Even in real-time, internal logic should ensure characters do not exceed allowed actions per time window.
 
@@ -82,7 +82,7 @@ else:
 ### 4.2 Critical Hits
 
 - Crit range: baseline 20, expanded by gear/perks.
-- Crit effect: multiplier on final damage (e.g., 1.5× or 2×).
+- Crit effect: multiplier on final damage (e.g., 1.5Ã— or 2Ã—).
 
 ### 4.3 Damage Calculation
 
@@ -146,8 +146,8 @@ else:
 
 Each character has:
 
-- `ArmorPhysical` – flat physical mitigation.
-- `Resist[DamageType]` – percentage modifier per type.
+- `ArmorPhysical` â€“ flat physical mitigation.
+- `Resist[DamageType]` â€“ percentage modifier per type.
 
 Example application:
 
@@ -177,18 +177,18 @@ On hit:
 
 ### 6.1 Basic Actions
 
-- Attack – use current weapon profile.
-- Defend – raise AC/DR for a short duration.
-- Use Item – consume potion or activate usable.
-- Cast Spell – execute an ability from spell list.
-- Special Ability – class-specific action.
-- Move – pathfind and step towards desired location.
+- Attack â€“ use current weapon profile.
+- Defend â€“ raise AC/DR for a short duration.
+- Use Item â€“ consume potion or activate usable.
+- Cast Spell â€“ execute an ability from spell list.
+- Special Ability â€“ class-specific action.
+- Move â€“ pathfind and step towards desired location.
 
 ### 6.2 Advanced/Contextual
 
-- Interact – doors, levers, shrines, destructible props.
-- Push/Pull – context-sensitive knockback/kick abilities.
-- Swap Loadout – change between defined equipment sets.
+- Interact â€“ doors, levers, shrines, destructible props.
+- Push/Pull â€“ context-sensitive knockback/kick abilities.
+- Swap Loadout â€“ change between defined equipment sets.
 
 Each action is represented by a command object with:
 
@@ -321,10 +321,10 @@ All abilities (attacks, spells, specials) are defined in data:
 
 Core systems involved:
 
-- Input/Command system – translates player input into action commands.
-- Action/Ability system – validates and executes commands.
-- Combat resolution system – hit/miss, damage, status.
-- AI system – chooses abilities and targets.
-- Status effect system – manages buffs/debuffs over time.
+- Input/Command system â€“ translates player input into action commands.
+- Action/Ability system â€“ validates and executes commands.
+- Combat resolution system â€“ hit/miss, damage, status.
+- AI system â€“ chooses abilities and targets.
+- Status effect system â€“ manages buffs/debuffs over time.
 
 These should be modular so they can be unit-tested where possible.

@@ -1,4 +1,4 @@
-# LegendsBelow – Spells System Design
+# LegendsBelow â€“ Spells System Design
 
 ## 1. Purpose
 
@@ -18,11 +18,11 @@ Defines the spells system for LegendsBelow, including:
 
 Core spell schools:
 
-- `Evocation` – direct damage (fire, lightning, force).
-- `Frost/Control` – slows, roots, freezes, battlefield control.
-- `Holy` – healing, protection, radiant damage.
-- `Shadow/Necrotic` – curses, drains, necrotic damage.
-- `Utility` – movement, vision, detection, teleportation.
+- `Evocation` â€“ direct damage (fire, lightning, force).
+- `Frost/Control` â€“ slows, roots, freezes, battlefield control.
+- `Holy` â€“ healing, protection, radiant damage.
+- `Shadow/Necrotic` â€“ curses, drains, necrotic damage.
+- `Utility` â€“ movement, vision, detection, teleportation.
 
 ### 2.2 Categories
 
@@ -47,8 +47,8 @@ These categories help UI presentation and AI decision-making.
 Spells are grouped into levels indicating power and access requirements:
 
 - Level 1: basic spells, available early.
-- Level 2–3: stronger core spells.
-- Level 4–5: high-impact abilities, limited slots.
+- Level 2â€“3: stronger core spells.
+- Level 4â€“5: high-impact abilities, limited slots.
 
 This is a **design-level** grouping, not necessarily a strict D&D slot system. In-game, access can be based on:
 - Character level
@@ -58,7 +58,7 @@ This is a **design-level** grouping, not necessarily a strict D&D slot system. I
 ### 3.2 Access Rules (Example)
 
 - Mage:
-  - Gains access to new spell level every few character levels (e.g., L3 ? Spell Level 2, L7 ? Spell Level 3, etc.).
+  - Gains access to new spell level every few character levels (e.g., L3 â†’ Spell Level 2, L7 â†’ Spell Level 3, etc.).
 - Cleric:
   - Unlocks Holy spells by character level and via devotion quests.
 - Scrolls and items:
@@ -72,17 +72,17 @@ This is a **design-level** grouping, not necessarily a strict D&D slot system. I
 
 Spells generally cost mana (`MP`), and may have secondary costs:
 
-- `manaCost` – primary cost.
-- `hpCost` – optional, for blood magic.
-- `reagentCost` – optional item consumed.
+- `manaCost` â€“ primary cost.
+- `hpCost` â€“ optional, for blood magic.
+- `reagentCost` â€“ optional item consumed.
 
 ### 4.2 Cast Time and Cooldown
 
 Each spell defines:
 
-- `castTimeSeconds` – time from begin-cast to effect.
-- `recoveryTimeSeconds` – post-cast delay before next standard action.
-- `cooldownSeconds` – global delay before that spell can be cast again.
+- `castTimeSeconds` â€“ time from begin-cast to effect.
+- `recoveryTimeSeconds` â€“ post-cast delay before next standard action.
+- `cooldownSeconds` â€“ global delay before that spell can be cast again.
 
 Instant spells may still have small recovery times.
 
@@ -144,10 +144,10 @@ For damage-over-time (DoT) and heal-over-time (HoT):
 
 ## 6. Example Spell Lists
 
-### 6.1 Mage – Evocation (Damage)
+### 6.1 Mage â€“ Evocation (Damage)
 
 Level 1:
-- `Arcane Bolt` – single-target magic damage.
+- `Arcane Bolt` â€“ single-target magic damage.
   - Base: 8
   - Coeff: 0.8
   - Cost: 10 MP
@@ -155,7 +155,7 @@ Level 1:
   - Cooldown: 0s (spammable basic attack replacement)
 
 Level 2:
-- `Fireball` – AoE fire damage with burn chance.
+- `Fireball` â€“ AoE fire damage with burn chance.
   - Base: 25
   - Coeff: 1.1
   - Cost: 25 MP
@@ -164,7 +164,7 @@ Level 2:
   - Effect: 20% chance to apply Burning DoT.
 
 Level 3:
-- `Chain Lightning` – jumps between multiple enemies.
+- `Chain Lightning` â€“ jumps between multiple enemies.
   - Base: 30
   - Coeff: 1.0
   - Cost: 30 MP
@@ -172,10 +172,10 @@ Level 3:
   - Cooldown: 8s
   - Effect: arcs up to 3 additional targets with diminishing damage.
 
-### 6.2 Mage – Frost/Control
+### 6.2 Mage â€“ Frost/Control
 
 Level 1:
-- `Frost Bolt` – damage + slow.
+- `Frost Bolt` â€“ damage + slow.
   - Base: 6
   - Coeff: 0.7
   - Cost: 8 MP
@@ -183,7 +183,7 @@ Level 1:
   - Slow: -25% movement for 4s.
 
 Level 2:
-- `Frost Nova` – point-blank AoE slow/freeze.
+- `Frost Nova` â€“ point-blank AoE slow/freeze.
   - Base: 12
   - Coeff: 0.6
   - Cost: 22 MP
@@ -191,10 +191,10 @@ Level 2:
   - Cooldown: 10s
   - Effect: briefly roots or heavily slows nearby enemies.
 
-### 6.3 Cleric – Holy (Heal/Protect)
+### 6.3 Cleric â€“ Holy (Heal/Protect)
 
 Level 1:
-- `Divine Light` – single-target heal.
+- `Divine Light` â€“ single-target heal.
   - Base Heal: 15
   - Coeff: 0.9
   - Cost: 12 MP
@@ -202,14 +202,14 @@ Level 1:
   - Cooldown: 2s
 
 Level 2:
-- `Bless` – party-wide buff.
+- `Bless` â€“ party-wide buff.
   - Effect: +10% hit chance and +5% saves for 15s.
   - Cost: 20 MP
   - Cast Time: 1.0s
   - Cooldown: 20s
 
 Level 3:
-- `Sanctuary` – AoE protective field.
+- `Sanctuary` â€“ AoE protective field.
   - Effect: reduces incoming damage by 20% for allies in area.
   - Duration: 10s
   - Cost: 35 MP
@@ -219,13 +219,13 @@ Level 3:
 ### 6.4 Shadow/Necrotic Spells
 
 Level 1:
-- `Weakening Curse` – debuff.
+- `Weakening Curse` â€“ debuff.
   - Effect: -10% damage dealt and -10% PhysicalSave.
   - Cost: 10 MP
   - Duration: 12s
 
 Level 2:
-- `Life Drain` – damage + self-heal.
+- `Life Drain` â€“ damage + self-heal.
   - Base Damage: 14
   - Coeff: 0.9
   - Cost: 20 MP
@@ -241,9 +241,9 @@ Level 2:
 
 Many spells are primarily about applying statuses:
 
-- `Fear` – forces enemies to flee for a short time.
-- `Silence` – prevents spellcasting.
-- `Stun` – completely disables actions.
+- `Fear` â€“ forces enemies to flee for a short time.
+- `Silence` â€“ prevents spellcasting.
+- `Stun` â€“ completely disables actions.
 
 These use the shared status effect model (see character system) with spell-specific DCs and durations.
 
@@ -251,13 +251,13 @@ These use the shared status effect model (see character system) with spell-speci
 
 Examples:
 
-- `Blink` – short-range teleport.
+- `Blink` â€“ short-range teleport.
   - Fixed distance or cursor-targeted within a radius.
   - Cost: moderate MP, medium cooldown.
 
-- `Arcane Sight` – temporarily reveals traps and secret doors.
+- `Arcane Sight` â€“ temporarily reveals traps and secret doors.
 
-- `Portal` (late-game) – create temporary link between two dungeon points or dungeon ? town.
+- `Portal` (late-game) â€“ create temporary link between two dungeon points or dungeon â†” town.
 
 ---
 
@@ -267,9 +267,9 @@ Spell record fields:
 
 - `id`
 - `name`
-- `school` – `Evocation`, `Frost`, `Holy`, `Shadow`, `Utility`, etc.
-- `level` – design-level grouping (1–5)
-- `categories` – `["Damage", "Control"]`, etc.
+- `school` â€“ `Evocation`, `Frost`, `Holy`, `Shadow`, `Utility`, etc.
+- `level` â€“ design-level grouping (1â€“5)
+- `categories` â€“ `["Damage", "Control"]`, etc.
 - `requiredClass` (optional)
 - `requiredLevel` (character level)
 - `manaCost`

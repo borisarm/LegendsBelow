@@ -1,4 +1,4 @@
-# LegendsBelow – Loot and Progression Design
+# LegendsBelow â€“ Loot and Progression Design
 
 ## 1. Purpose
 
@@ -15,13 +15,13 @@ Defines:
 
 ### 2.1 Categories
 
-- Weapons – melee and ranged.
-- Armor – helmets, chest pieces, gloves, boots, shields.
-- Accessories – rings, amulets, trinkets.
-- Consumables – potions, scrolls, temporary buffs.
-- Magical Items – unique effects, artifacts.
-- Quest Items – non-droppable, used for objectives.
-- Materials (future) – crafting components, upgrade reagents.
+- Weapons â€“ melee and ranged.
+- Armor â€“ helmets, chest pieces, gloves, boots, shields.
+- Accessories â€“ rings, amulets, trinkets.
+- Consumables â€“ potions, scrolls, temporary buffs.
+- Magical Items â€“ unique effects, artifacts.
+- Quest Items â€“ non-droppable, used for objectives.
+- Materials (future) â€“ crafting components, upgrade reagents.
 
 ### 2.2 Base Item Definition
 
@@ -52,21 +52,21 @@ Example:
 
 ### 3.1 Rarity Tiers
 
-- Common (White) – base stats only.
-- Uncommon (Green) – 1 affix.
-- Rare (Blue) – 2–3 affixes.
-- Epic (Purple) – 3–4 strong affixes.
-- Legendary (Orange) – custom effects and hand-authored behavior.
+- Common (White) â€“ base stats only.
+- Uncommon (Green) â€“ 1 affix.
+- Rare (Blue) â€“ 2â€“3 affixes.
+- Epic (Purple) â€“ 3â€“4 strong affixes.
+- Legendary (Orange) â€“ custom effects and hand-authored behavior.
 
 ### 3.2 Affix Types
 
 Affix examples:
 - Prefix:
-  - Fiery – adds fire damage and chance to burn.
-  - Stalwart – adds armor and CON.
+  - Fiery â€“ adds fire damage and chance to burn.
+  - Stalwart â€“ adds armor and CON.
 - Suffix:
-  - of the Bear – adds STR and max HP.
-  - of Focus – adds INT and spell power.
+  - of the Bear â€“ adds STR and max HP.
+  - of Focus â€“ adds INT and spell power.
 
 Data example:
 
@@ -134,8 +134,8 @@ Higher depths and contract difficulties:
 
 ### 5.1 Grid Inventory
 
-- Player inventory is a grid (e.g., 8×10 cells).
-- Items have sizes (1×1 up to 2×4 or similar).
+- Player inventory is a grid (e.g., 8Ã—10 cells).
+- Items have sizes (1Ã—1 up to 2Ã—4 or similar).
 - Player must arrange items to fit available space.
 
 ### 5.2 Weight System
@@ -152,7 +152,7 @@ Effects of over-encumbrance:
 - Head, Chest, Hands, Legs/Feet.
 - Weapon main hand.
 - Off-hand (shield, weapon, focus).
-- 2× Ring, 1× Amulet.
+- 2Ã— Ring, 1Ã— Amulet.
 
 Equipped items contribute directly to stats and derived stats.
 
@@ -183,7 +183,7 @@ Once unlocked, player chooses a subclass that unlocks additional skill tree node
 
 Small, global upgrades that persist across characters (keep them modest):
 
-- +1% gold find per unlocked milestone (max 5–10%).
+- +1% gold find per unlocked milestone (max 5â€“10%).
 - +1 shared stash tab.
 - Unlocking new dungeon contracts or challenge modes.
 

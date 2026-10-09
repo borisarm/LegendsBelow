@@ -1,4 +1,4 @@
-# LegendsBelow – Armour System Design
+# LegendsBelow â€“ Armour System Design
 
 ## 1. Purpose
 
@@ -19,21 +19,21 @@ This document should guide both gameplay tuning and C++/data implementation.
 
 Armour occupies these core equipment slots:
 
-- `Head` – helmets, hoods, circlets
-- `Chest` – cuirasses, robes, leathers
-- `Hands` – gloves, gauntlets
-- `Feet` – boots, greaves
-- `OffHand` – shields, tomes, foci (also considered in armour system)
+- `Head` â€“ helmets, hoods, circlets
+- `Chest` â€“ cuirasses, robes, leathers
+- `Hands` â€“ gloves, gauntlets
+- `Feet` â€“ boots, greaves
+- `OffHand` â€“ shields, tomes, foci (also considered in armour system)
 
 ### 2.2 Armour Categories
 
 Armour pieces are assigned to broad categories:
 
-- `Cloth` – minimal physical protection, no movement penalty
-- `Light` – leathers and padded armour, low penalties
-- `Medium` – chain and scale, noticeable penalties
-- `Heavy` – plate, highest protection and penalties
-- `Shield` – separate category that stacks with body armour
+- `Cloth` â€“ minimal physical protection, no movement penalty
+- `Light` â€“ leathers and padded armour, low penalties
+- `Medium` â€“ chain and scale, noticeable penalties
+- `Heavy` â€“ plate, highest protection and penalties
+- `Shield` â€“ separate category that stacks with body armour
 
 Each category defines:
 
@@ -50,11 +50,11 @@ Each category defines:
 
 Each armour piece provides:
 
-- `PhysicalAR` – mitigates physical damage (slashing, piercing, bludgeoning)
-- `ElementalAR` – may mitigate elemental damage (fire, cold, lightning, acid)
-- `SpiritualAR` – rare; mitigates radiant/necrotic/psychic damage
+- `PhysicalAR` â€“ mitigates physical damage (slashing, piercing, bludgeoning)
+- `ElementalAR` â€“ may mitigate elemental damage (fire, cold, lightning, acid)
+- `SpiritualAR` â€“ rare; mitigates radiant/necrotic/psychic damage
 
-The character’s total AR is the sum of piece contributions plus any buffs:
+The characterâ€™s total AR is the sum of piece contributions plus any buffs:
 
 ```
 TotalPhysicalAR = sum(piece.PhysicalAR) + BuffsPhysicalAR
@@ -91,8 +91,8 @@ For elemental/spiritual damage, armour typically contributes to resistances rath
 
 Each piece has:
 
-- `Weight` – numeric value representing encumbrance
-- `Category` – Cloth/Light/Medium/Heavy/Shield
+- `Weight` â€“ numeric value representing encumbrance
+- `Category` â€“ Cloth/Light/Medium/Heavy/Shield
 
 Character has a `CarryCapacity` derived from STR and background.
 
@@ -153,10 +153,10 @@ Proficiency is stored per-class and can be extended by perks/feats.
 
 Armour is grouped into level bands:
 
-- Tier 1: levels 1–5
-- Tier 2: levels 6–10
-- Tier 3: levels 11–15
-- Tier 4: levels 16–20
+- Tier 1: levels 1â€“5
+- Tier 2: levels 6â€“10
+- Tier 3: levels 11â€“15
+- Tier 4: levels 16â€“20
 
 Each tier increases base AR and weight slightly.
 
@@ -173,7 +173,7 @@ Example (Chest, Warrior-focused):
 
 ### 6.2 Rarity Interaction
 
-Rarity from the loot system (Common ? Legendary) adds affixes:
+Rarity from the loot system (Common â†’ Legendary) adds affixes:
 
 - Increased AR
 - Resistance bonuses (fire, cold, etc.)
@@ -190,10 +190,10 @@ Affixes must not break core class identity (e.g., Mages should not easily reach 
 Shields are treated as part of the armour system but equipped in `OffHand`:
 
 Key stats:
-- `BlockChance` – % chance to block a physical hit when blocking.
-- `BlockValue` – amount of damage absorbed on a successful block.
-- `ArmorBonus` – additional AR even when not actively blocking.
-- `Weight` – contributes to encumbrance and casting penalties.
+- `BlockChance` â€“ % chance to block a physical hit when blocking.
+- `BlockValue` â€“ amount of damage absorbed on a successful block.
+- `ArmorBonus` â€“ additional AR even when not actively blocking.
+- `Weight` â€“ contributes to encumbrance and casting penalties.
 
 Example tiers:
 
@@ -209,10 +209,10 @@ Example tiers:
 
 Suggested data fields for an armour item record:
 
-- `id` – unique string
-- `name` – display name
-- `slot` – `Head`, `Chest`, `Hands`, `Feet`, `OffHand`
-- `category` – `Cloth`, `Light`, `Medium`, `Heavy`, `Shield`
+- `id` â€“ unique string
+- `name` â€“ display name
+- `slot` â€“ `Head`, `Chest`, `Hands`, `Feet`, `OffHand`
+- `category` â€“ `Cloth`, `Light`, `Medium`, `Heavy`, `Shield`
 - `requiredLevel`
 - `allowedClasses` (optional, for class-specific sets)
 - `physicalAR`

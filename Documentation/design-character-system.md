@@ -1,4 +1,4 @@
-# LegendsBelow – Character System Design
+# LegendsBelow â€“ Character System Design
 
 ## 1. Purpose
 
@@ -94,7 +94,7 @@ All numbers here are first-pass targets and will be tuned later. Tables below ar
 **Role:** Frontline tank / melee DPS  
 **Primary attributes:** STR, CON
 
-#### 3.1.1 Progression Table (Levels 1–20)
+#### 3.1.1 Progression Table (Levels 1â€“20)
 
 | Lvl | Max HP Gain | Max MP/Stam Gain | Melee Atk Bonus | Ranged Atk Bonus | Phys Save Bonus | Mental Save Bonus |
 |-----|-------------|-------------------|-----------------|------------------|-----------------|-------------------|
@@ -143,7 +143,7 @@ Interpretation:
 
 - Shield Bash  
   - Type: Melee attack + crowd control  
-  - Damage: `0.8 × weaponDamage + STR_mod`  
+  - Damage: `0.8 Ã— weaponDamage + STR_mod`  
   - Additional: 1.0s stun on hit (subject to target CC resistance)  
   - Requirements: Shield equipped
 
@@ -161,29 +161,29 @@ Two trees; each node costs 1 skill point.
 **Defender Tree**
 
 - Iron Wall  
-  - Requirements: Warrior level ? 3  
+  - Requirements: Warrior level â‰¥ 3  
   - Effect: +10% shield block chance.
 
 - Unyielding Guard  
   - Requires: Iron Wall  
-  - Effect: when you successfully block, gain +5% damage reduction for 3s (stacks up to 3×).
+  - Effect: when you successfully block, gain +5% damage reduction for 3s (stacks up to 3Ã—).
 
 - Last Stand  
-  - Requires: Unyielding Guard, level ? 10  
+  - Requires: Unyielding Guard, level â‰¥ 10  
   - Effect: once per encounter, on taking lethal damage, stay at 1 HP and gain +30% damage reduction for 5s.
 
 **Weapon Master Tree**
 
 - Heavy Swing  
-  - Requirements: Warrior level ? 3  
-  - Effect: charged attack that deals `1.5×` weapon damage and has +10% crit chance.
+  - Requirements: Warrior level â‰¥ 3  
+  - Effect: charged attack that deals `1.5Ã—` weapon damage and has +10% crit chance.
 
 - Cleave  
   - Requires: Heavy Swing  
   - Effect: attacks hit up to 3 enemies in a frontal arc.
 
 - Executioner  
-  - Requires: Cleave, level ? 10  
+  - Requires: Cleave, level â‰¥ 10  
   - Effect: deal +25% damage to enemies below 25% HP.
 
 ### 3.2 Rogue
@@ -191,7 +191,7 @@ Two trees; each node costs 1 skill point.
 **Role:** Single-target burst, traps and utility  
 **Primary attributes:** DEX, INT
 
-#### 3.2.1 Progression Table (Levels 1–20)
+#### 3.2.1 Progression Table (Levels 1â€“20)
 
 | Lvl | Max HP Gain | Max MP Gain | Melee Atk Bonus | Ranged Atk Bonus | Phys Save Bonus | Mental Save Bonus |
 |-----|-------------|-------------|-----------------|------------------|-----------------|-------------------|
@@ -226,15 +226,15 @@ Notes:
 - Higher detection for traps and secrets via perception-like stat/skill.
 
 Rogue trees:
-- Assassin – amplifies sneak attack, crit chance, damage from stealth.
-- Trickster – emphasizes debuffs, decoys, mobility.
+- Assassin â€“ amplifies sneak attack, crit chance, damage from stealth.
+- Trickster â€“ emphasizes debuffs, decoys, mobility.
 
 ### 3.3 Mage
 
 **Role:** Ranged caster, AoE and control  
 **Primary attributes:** INT, WIS
 
-#### 3.3.1 Progression Table (Levels 1–20)
+#### 3.3.1 Progression Table (Levels 1â€“20)
 
 | Lvl | Max HP Gain | Max MP Gain | Melee Atk Bonus | Ranged/Spell Atk Bonus | Phys Save Bonus | Mental Save Bonus |
 |-----|-------------|-------------|-----------------|------------------------|-----------------|-------------------|
@@ -264,9 +264,9 @@ Notes:
 - "Ranged/Spell Atk Bonus" applies to spell hit chance or save DC where appropriate.
 
 Spell schools:
-- Evocation – direct damage (Fireball, Lightning Bolt).
-- Frost/Control – slows, roots, freezes (Frost Nova, Ice Wall).
-- Utility – teleport, detection, defensive wards.
+- Evocation â€“ direct damage (Fireball, Lightning Bolt).
+- Frost/Control â€“ slows, roots, freezes (Frost Nova, Ice Wall).
+- Utility â€“ teleport, detection, defensive wards.
 
 Each spell defines base damage, coefficient on `SpellPower`, cast time, cooldown, mana cost, and damage tags.
 
@@ -275,7 +275,7 @@ Each spell defines base damage, coefficient on `SpellPower`, cast time, cooldown
 **Role:** Healer, buffer, hybrid frontliner  
 **Primary attributes:** WIS, CON
 
-#### 3.4.1 Progression Table (Levels 1–20)
+#### 3.4.1 Progression Table (Levels 1â€“20)
 
 | Lvl | Max HP Gain | Max MP Gain | Melee Atk Bonus | Spell Atk/Heal Bonus | Phys Save Bonus | Mental Save Bonus |
 |-----|-------------|-------------|-----------------|----------------------|-----------------|-------------------|
@@ -305,8 +305,8 @@ Notes:
 - Strong Mental saves and moderate Physical saves reflect their hybrid role.
 
 Specialization paths:
-- Guardian – shields, barriers, group mitigation.
-- Inquisitor – holy damage, anti-undead/demon bonuses.
+- Guardian â€“ shields, barriers, group mitigation.
+- Inquisitor â€“ holy damage, anti-undead/demon bonuses.
 
 Cleric healing spells scale mainly with WIS and may consume mana or a separate "Faith" resource (to be finalized).
 
@@ -316,7 +316,7 @@ Cleric healing spells scale mainly with WIS and may consume mana or a separate "
 
 ### 4.1 Attribute Ranges
 
-- Base creation range: 6–18.
+- Base creation range: 6â€“18.
 - Absolute cap (including gear/perks): 25 (tunable).
 - Attributes stored as integers; modifiers derived as:
 
@@ -470,10 +470,10 @@ Example (Poison):
 
 ### 6.2 Categories
 
-- Buffs – positive modifiers (stats, speed, resistances).
-- Debuffs – negative modifiers (DoTs, stat reductions).
-- Control – Stun, Root, Silence, Fear.
-- Elemental – tags like Fire, Frost, Lightning, used for resist logic.
+- Buffs â€“ positive modifiers (stats, speed, resistances).
+- Debuffs â€“ negative modifiers (DoTs, stat reductions).
+- Control â€“ Stun, Root, Silence, Fear.
+- Elemental â€“ tags like Fire, Frost, Lightning, used for resist logic.
 
 ### 6.3 Saving Throws and Resistance
 

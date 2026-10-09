@@ -14,10 +14,10 @@ This document proposes a clear separation of concerns between three key projects
 ### LegendsBelow (Current)
 ```
 LegendsBelow/
-?? Main.cpp          # Win32 entry point, message loop
-?? Game.h/Game.cpp   # DirectX 12 initialization, game loop, rendering
-?? DeviceResources   # DirectX device/swapchain management
-?? StepTimer         # Fixed/variable timestep timing
+├─ Main.cpp          # Win32 entry point, message loop
+├─ Game.h/Game.cpp   # DirectX 12 initialization, game loop, rendering
+├─ DeviceResources   # DirectX device/swapchain management
+└─ StepTimer         # Fixed/variable timestep timing
 ```
 
 **Problems:**
@@ -37,9 +37,9 @@ LegendsBelow/
 **Contents:**
 ```
 LegendsBelow/
-?? Main.cpp                    # Win32 entry point (wWinMain)
-?? WindowsPlatform.h/cpp       # Win32 window management, message loop
-?? [imports LB.Engine module]
+├─ Main.cpp                    # Win32 entry point (wWinMain)
+├─ WindowsPlatform.h/cpp       # Win32 window management, message loop
+└─ [imports LB.Engine module]
 ```
 
 **Code Ownership:**
@@ -47,13 +47,13 @@ LegendsBelow/
 - `WndProc()` - Windows message handling
 - Window creation/management
 - Platform-specific initialization (XGameRuntime, COM)
-- Message translation (WM_* ? engine events)
+- Message translation (WM_* → engine events)
 
 **What Moves OUT:**
-- ? Game logic ? LBEngineCore
-- ? DirectX initialization ? LBRenderingSystem
-- ? DeviceResources ? LBRenderingSystem
-- ? StepTimer ? LBEngineCore
+- ❌ Game logic → LBEngineCore
+- ❌ DirectX initialization → LBRenderingSystem
+- ❌ DeviceResources → LBRenderingSystem
+- ❌ StepTimer → LBEngineCore
 
 **Example Main.cpp (Simplified):**
 ```cpp
@@ -108,10 +108,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, ...)
 **Contents:**
 ```
 Components/Systems/LBRenderingSystem/
-?? LB.RenderingSystem.ixx      # Module interface
-?? DeviceResources.ixx         # DirectX device/swapchain management
-?? RenderContext.ixx           # Per-frame rendering context
-?? GraphicsTypes.ixx           # Rendering primitives (Color, Rectangle, etc.)
+├─ LB.RenderingSystem.ixx      # Module interface
+├─ DeviceResources.ixx         # DirectX device/swapchain management
+├─ RenderContext.ixx           # Per-frame rendering context
+└─ GraphicsTypes.ixx           # Rendering primitives (Color, Rectangle, etc.)
 ```
 
 **Module Interface:**
@@ -174,21 +174,21 @@ export namespace LB::Systems::Rendering {
 ```
 
 **Code Ownership:**
-- ? DeviceResources (from LegendsBelow/Common)
-- ? DirectX 12 device initialization
-- ? Swapchain management
-- ? Command list/queue management
-- ? Viewport/scissor rect management
-- ? RTV/DSV management
-- ? Shader compilation and loading
-- ? Texture/sprite rendering
-- ? Text rendering (DirectXTK integration)
+- ✅ DeviceResources (from LegendsBelow/Common)
+- ✅ DirectX 12 device initialization
+- ✅ Swapchain management
+- ✅ Command list/queue management
+- ✅ Viewport/scissor rect management
+- ✅ RTV/DSV management
+- ✅ Shader compilation and loading
+- ✅ Texture/sprite rendering
+- ✅ Text rendering (DirectXTK integration)
 
 **What Stays OUT:**
-- ? Game loop timing (belongs in LBEngineCore)
-- ? Game state management
-- ? Input handling
-- ? Audio management
+- ❌ Game loop timing (belongs in LBEngineCore)
+- ❌ Game state management
+- ❌ Input handling
+- ❌ Audio management
 
 ---
 
@@ -199,11 +199,11 @@ export namespace LB::Systems::Rendering {
 **Contents:**
 ```
 Components/LBEngineCore/
-?? LB.Engine.ixx                 # Primary module
-?? GameEngine.ixx                # Main game engine class
-?? StepTimer.ixx                 # Frame timing (from LegendsBelow/Common)
-?? SystemManager.ixx             # Manages all game systems
-?? GameState.ixx                 # Game state machine
+├─ LB.Engine.ixx                 # Primary module
+├─ GameEngine.ixx                # Main game engine class
+├─ StepTimer.ixx                 # Frame timing (from LegendsBelow/Common)
+├─ SystemManager.ixx             # Manages all game systems
+└─ GameState.ixx                 # Game state machine
 ```
 
 **Module Interface:**
@@ -291,18 +291,18 @@ export namespace LB::Engine {
 ```
 
 **Code Ownership:**
-- ? Game loop orchestration (Tick ? Update ? Render)
-- ? StepTimer (from LegendsBelow/Common)
-- ? System initialization and coordination
-- ? Service initialization and coordination
-- ? Game state management
-- ? Window event translation to game events
-- ? Frame timing (fixed/variable timestep)
+- ✅ Game loop orchestration (Tick → Update → Render)
+- ✅ StepTimer (from LegendsBelow/Common)
+- ✅ System initialization and coordination
+- ✅ Service initialization and coordination
+- ✅ Game state management
+- ✅ Window event translation to game events
+- ✅ Frame timing (fixed/variable timestep)
 
 **What Stays OUT:**
-- ? Win32 message loop (belongs in LegendsBelow)
-- ? Window creation (belongs in LegendsBelow)
-- ? DirectX device management (belongs in LBRenderingSystem)
+- ❌ Win32 message loop (belongs in LegendsBelow)
+- ❌ Window creation (belongs in LegendsBelow)
+- ❌ DirectX device management (belongs in LBRenderingSystem)
 
 ---
 
@@ -310,28 +310,28 @@ export namespace LB::Engine {
 
 | Component | Win32 Entry | Message Loop | Window Mgmt | DirectX Init | Game Loop | Systems | Services | Game Logic |
 |-----------|-------------|--------------|-------------|--------------|-----------|---------|----------|------------|
-| **LegendsBelow** | ? | ? | ? | ? | ? | ? | ? | ? |
-| **LBEngineCore** | ? | ? | ? | ? | ? | ? | ? | ? |
-| **LBRenderingSystem** | ? | ? | ? | ? | ? | ? | ? | ? |
+| **LegendsBelow** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **LBEngineCore** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **LBRenderingSystem** | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ---
 
 ## Migration Plan
 
 ### Phase 1: Move DeviceResources to LBRenderingSystem
-1. Copy `LegendsBelow/DeviceResources.h/cpp` ? `LBRenderingSystem/DeviceResources.ixx`
+1. Copy `LegendsBelow/DeviceResources.h/cpp` → `LBRenderingSystem/DeviceResources.ixx`
 2. Convert to C++20 module
 3. Integrate with existing `RenderingSystem` class
 4. Update `LBRenderingSystem.ixx` to export `DeviceResources`
 
 ### Phase 2: Move StepTimer to LBEngineCore
-1. Copy `LegendsBelow/StepTimer.h` ? `LBEngineCore/StepTimer.ixx`
+1. Copy `LegendsBelow/StepTimer.h` → `LBEngineCore/StepTimer.ixx`
 2. Convert to C++20 module
 3. Export from `LB.Engine` module
 
 ### Phase 3: Create GameEngine in LBEngineCore
 1. Create `LBEngineCore/GameEngine.ixx`
-2. Move game logic from `LegendsBelow/Game.cpp` ? `GameEngine`
+2. Move game logic from `LegendsBelow/Game.cpp` → `GameEngine`
 3. Initialize all systems (rendering, input, audio, etc.)
 4. Implement Update/Render loop
 
@@ -363,22 +363,22 @@ export namespace LB::Engine {
 
 ```
 LegendsBelow (Win32 app)
-    ?? imports LB.Engine
-                ?? imports LB.RenderingSystem
-                ?? imports LB.InputSystem
-                ?? imports LB.AudioSystem
-                ?? imports LB.AssetSystem
-                ?? imports LB.PersistenceSystem
-                ?? imports LB.CharacterService
-                ?? imports LB.CombatService
-                ?? imports LB.InventoryService
-                ?? imports LB.ProgressionService
-                ?? imports LB.DungeonService
-                        ?? imports LB.Core
-                        ?? imports LB.Character
-                        ?? imports LB.Combat
-                        ?? imports LB.Inventory
-                        ?? imports LB.Dungeon
+    └─ imports LB.Engine
+                ├─ imports LB.RenderingSystem
+                ├─ imports LB.InputSystem
+                ├─ imports LB.AudioSystem
+                ├─ imports LB.AssetSystem
+                ├─ imports LB.PersistenceSystem
+                ├─ imports LB.CharacterService
+                ├─ imports LB.CombatService
+                ├─ imports LB.InventoryService
+                ├─ imports LB.ProgressionService
+                └─ imports LB.DungeonService
+                        ├─ imports LB.Core
+                        ├─ imports LB.Character
+                        ├─ imports LB.Combat
+                        ├─ imports LB.Inventory
+                        └─ imports LB.Dungeon
 ```
 
 ---
@@ -459,13 +459,13 @@ void RenderingSystem::EndFrame() {
 **Recommendation**: Keep it internal (information hiding)
 
 ```cpp
-// ? Preferred - DeviceResources is implementation detail
+// ✅ Preferred - DeviceResources is implementation detail
 class RenderingSystem {
 private:
     std::unique_ptr<DeviceResources> m_deviceResources;
 };
 
-// ? Avoid - Leaking DirectX types
+// ❌ Avoid - Leaking DirectX types
 class RenderingSystem {
 public:
     DeviceResources* GetDeviceResources();  // Exposes DirectX internals
@@ -482,14 +482,14 @@ StepTimer is an implementation detail of GameEngine. External consumers don't ne
 
 ## File Move Checklist
 
-### From LegendsBelow ? LBRenderingSystem:
-- [ ] `DeviceResources.h/cpp` ? `DeviceResources.ixx`
+### From LegendsBelow → LBRenderingSystem:
+- [ ] `DeviceResources.h/cpp` → `DeviceResources.ixx`
 - [ ] DirectX initialization code from `Game.cpp`
 - [ ] `Clear()`, `CreateDeviceDependentResources()`, `CreateWindowSizeDependentResources()`
 
-### From LegendsBelow ? LBEngineCore:
-- [ ] `StepTimer.h` ? `StepTimer.ixx`
-- [ ] `Game.h/cpp` ? `GameEngine.ixx` (refactored)
+### From LegendsBelow → LBEngineCore:
+- [ ] `StepTimer.h` → `StepTimer.ixx`
+- [ ] `Game.h/cpp` → `GameEngine.ixx` (refactored)
 - [ ] `Update()`, `Render()` logic
 - [ ] System initialization code
 
@@ -503,12 +503,12 @@ StepTimer is an implementation detail of GameEngine. External consumers don't ne
 
 ## Success Criteria
 
-? LegendsBelow has <200 lines of code (Win32 shell only)  
-? LBEngineCore has no Win32 dependencies  
-? LBRenderingSystem has no game logic  
-? All projects compile as C++20 modules  
-? Separation of concerns is clear and maintainable  
-? Module boundaries prevent unwanted dependencies  
+- [ ] LegendsBelow has <200 lines of code (Win32 shell only)
+- [ ] LBEngineCore has no Win32 dependencies
+- [ ] LBRenderingSystem has no game logic
+- [ ] All projects compile as C++20 modules
+- [ ] Separation of concerns is clear and maintainable
+- [ ] Module boundaries prevent unwanted dependencies
 
 ---
 
@@ -523,6 +523,6 @@ StepTimer is an implementation detail of GameEngine. External consumers don't ne
 
 ---
 
-**Document Status**: Draft v1.0  
-**Last Updated**: 2024  
+**Document Status**: Accepted direction, implementation not started. The target `.ixx` files in LBEngineCore and LBRenderingSystem exist as empty placeholders; `LegendsBelow/` still contains `Game`, `DeviceResources`, and `StepTimer`.  
+**Last Updated**: 2026-10-09  
 **Author**: GitHub Copilot (based on project analysis)

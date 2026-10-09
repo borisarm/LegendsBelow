@@ -1,4 +1,4 @@
-# LegendsBelow – Weapons System Design
+# LegendsBelow â€“ Weapons System Design
 
 ## 1. Purpose
 
@@ -17,22 +17,22 @@ Defines the weapons system for LegendsBelow, including:
 
 Weapons occupy the `Weapon` slot; some may also use `OffHand` (dual wield, two-handed in a single slot, etc.).
 
-- `MainHand` – primary weapon slot.
-- `OffHand` – secondary weapon for dual wield or shields/focus.
+- `MainHand` â€“ primary weapon slot.
+- `OffHand` â€“ secondary weapon for dual wield or shields/focus.
 
 ### 2.2 Categories
 
 Weapon categories define basic behavior:
 
-- `Sword` – balanced melee, slashing.
-- `Axe` – high damage, higher variance, slashing.
-- `Mace/Hammer` – bludgeoning, better vs. armored targets.
-- `Dagger` – low damage, high crit chance, piercing.
-- `Spear/Polearm` – extended reach melee.
-- `Bow` – ranged, requires arrows.
-- `Crossbow` – ranged, slower but higher impact.
-- `Staff` – melee + spell focus for casters.
-- `Wand` – purely spell focus, low melee damage.
+- `Sword` â€“ balanced melee, slashing.
+- `Axe` â€“ high damage, higher variance, slashing.
+- `Mace/Hammer` â€“ bludgeoning, better vs. armored targets.
+- `Dagger` â€“ low damage, high crit chance, piercing.
+- `Spear/Polearm` â€“ extended reach melee.
+- `Bow` â€“ ranged, requires arrows.
+- `Crossbow` â€“ ranged, slower but higher impact.
+- `Staff` â€“ melee + spell focus for casters.
+- `Wand` â€“ purely spell focus, low melee damage.
 
 Each category has default:
 - Damage dice
@@ -80,7 +80,7 @@ Each weapon has an `attackTimeSeconds` value representing the base time between 
 
 - Daggers: fast (e.g., 0.7s)
 - Swords: medium (e.g., 1.0s)
-- Axes/Maces: slower (e.g., 1.2–1.4s)
+- Axes/Maces: slower (e.g., 1.2â€“1.4s)
 - Bows: moderate (e.g., 1.3s)
 - Crossbows: slower but heavier hits (e.g., 1.6s)
 
@@ -92,11 +92,11 @@ Attack speed can be modified by:
 ### 3.4 Two-Handed vs One-Handed
 
 - Two-handed weapons generally:
-  - Deal ~30–40% more base damage.
+  - Deal ~30â€“40% more base damage.
   - Cannot be paired with a shield or off-hand.
 
 Flags:
-- `isTwoHanded` – if true, occupies both main and off-hand.
+- `isTwoHanded` â€“ if true, occupies both main and off-hand.
 
 ---
 
@@ -105,14 +105,14 @@ Flags:
 ### 4.1 Critical Hit Profiles
 
 Each weapon type defines:
-- `critRange` – natural roll range on d20 (e.g., 20; or 19–20 for daggers).
-- `critMultiplier` – damage multiplier (e.g., 1.5× or 2×).
+- `critRange` â€“ natural roll range on d20 (e.g., 20; or 19â€“20 for daggers).
+- `critMultiplier` â€“ damage multiplier (e.g., 1.5Ã— or 2Ã—).
 
 ### 4.2 Special Properties
 
 Examples:
 - Daggers:
-  - Higher crit range (19–20).
+  - Higher crit range (19â€“20).
   - Bonus Sneak Attack damage when used by Rogue.
 - Maces/Hammers:
   - Increased damage vs. heavily armored or construct enemies.
@@ -156,10 +156,10 @@ Using weapons without proficiency:
 
 Weapons are grouped into tiers similar to armour:
 
-- Tier 1: levels 1–5
-- Tier 2: levels 6–10
-- Tier 3: levels 11–15
-- Tier 4: levels 16–20
+- Tier 1: levels 1â€“5
+- Tier 2: levels 6â€“10
+- Tier 3: levels 11â€“15
+- Tier 4: levels 16â€“20
 
 Each tier increases base damage and may unlock new special properties.
 
@@ -167,20 +167,20 @@ Example (Swords):
 
 | Tier | Example Name       | Required Level | Damage Dice | Damage Bonus | CritRange | CritMult |
 |------|--------------------|----------------|------------:|------------: |---------: |--------:|
-| 1    | Rusted Shortsword  | 1              | 1d6         | 0           | 20        | 1.5×    |
-| 1    | Iron Longsword     | 4              | 1d8         | 1           | 20        | 1.5×    |
-| 2    | Steel Longsword    | 7              | 1d8         | 3           | 20        | 1.5×    |
-| 2    | Knight's Blade     | 10             | 1d10        | 2           | 19–20     | 1.5×    |
+| 1    | Rusted Shortsword  | 1              | 1d6         | 0           | 20        | 1.5Ã—    |
+| 1    | Iron Longsword     | 4              | 1d8         | 1           | 20        | 1.5Ã—    |
+| 2    | Steel Longsword    | 7              | 1d8         | 3           | 20        | 1.5Ã—    |
+| 2    | Knight's Blade     | 10             | 1d10        | 2           | 19â€“20     | 1.5Ã—    |
 
 ### 6.2 Rarity Integration
 
 Rarity tiers from the loot system modify base weapons:
 
-- Common – base stats only.
-- Uncommon – +small flat damage, minor stat bonus.
-- Rare – +moderate damage, 1–2 affixes.
-- Epic – stronger base damage, 2–3 powerful affixes.
-- Legendary – unique effects and named items.
+- Common â€“ base stats only.
+- Uncommon â€“ +small flat damage, minor stat bonus.
+- Rare â€“ +moderate damage, 1â€“2 affixes.
+- Epic â€“ stronger base damage, 2â€“3 powerful affixes.
+- Legendary â€“ unique effects and named items.
 
 Affixes can add:
 - Elemental damage
@@ -194,8 +194,8 @@ Affixes can add:
 
 ### 7.1 Ammo Types
 
-- Arrows – used by bows.
-- Bolts – used by crossbows.
+- Arrows â€“ used by bows.
+- Bolts â€“ used by crossbows.
 
 Ammo properties:
 - Base damage modifier (adds or multiplies base weapon damage).
@@ -217,8 +217,8 @@ Fields for a weapon item record:
 
 - `id`
 - `name`
-- `category` – `Sword`, `Axe`, etc.
-- `slot` – `MainHand`, optionally flags for `isTwoHanded`
+- `category` â€“ `Sword`, `Axe`, etc.
+- `slot` â€“ `MainHand`, optionally flags for `isTwoHanded`
 - `requiredLevel`
 - `allowedClasses`
 - `damageDice`

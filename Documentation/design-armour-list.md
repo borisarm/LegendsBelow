@@ -1,4 +1,4 @@
-# LegendsBelow – Armour List
+# LegendsBelow â€“ Armour List
 
 This file defines an example, reasonably exhaustive armour list across tiers, slots, and categories. Values are **design starting points** and should be tuned during implementation.
 
@@ -10,7 +10,7 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 
 - Novice Hood (T1)
 - Apprentice Cowl (T1)
-- Scholar’s Circlet (T2)
+- Scholarâ€™s Circlet (T2)
 - Mystic Hood (T2)
 - Archmage Circlet (T3)
 - Veil of the Deep (T4, Legendary)
@@ -19,9 +19,9 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 
 - Leather Cap (T1)
 - Studded Coif (T1)
-- Ranger’s Hood (T2)
-- Hunter’s Visor (T2)
-- Scout’s Helm (T3)
+- Rangerâ€™s Hood (T2)
+- Hunterâ€™s Visor (T2)
+- Scoutâ€™s Helm (T3)
 - Shadowmask Helm (T3)
 - Nightstalker Hood (T4, Epic)
 
@@ -30,9 +30,9 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Chain Coif (T1)
 - Mail Hood (T1)
 - Reinforced Chain Coif (T2)
-- Soldier’s Helm (T2)
+- Soldierâ€™s Helm (T2)
 - Battleforged Helm (T3)
-- Guardian’s Coif (T3)
+- Guardianâ€™s Coif (T3)
 - Helm of the Vanguard (T4, Rare)
 
 ### 1.4 Heavy
@@ -40,9 +40,9 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Rusted Sallet (T1)
 - Iron Helm (T1)
 - Steel Greathelm (T2)
-- Knight’s Greathelm (T2)
+- Knightâ€™s Greathelm (T2)
 - Templar Helm (T3)
-- Warlord’s Visor (T3)
+- Warlordâ€™s Visor (T3)
 - Crown of the Depths (T4, Legendary)
 
 ---
@@ -63,9 +63,9 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Leather Jerkin (T1)
 - Padded Vest (T1)
 - Studded Leather (T2)
-- Ranger’s Coat (T2)
+- Rangerâ€™s Coat (T2)
 - Shadow Leather (T3)
-- Stalker’s Harness (T3)
+- Stalkerâ€™s Harness (T3)
 - Nightblade Jerkin (T4, Epic)
 
 ### 2.3 Medium
@@ -73,19 +73,19 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Chain Shirt (T1)
 - Ring Mail Hauberk (T1)
 - Reinforced Chain (T2)
-- Soldier’s Hauberk (T2)
+- Soldierâ€™s Hauberk (T2)
 - Scale Mail (T3)
 - Vanguard Hauberk (T3)
-- Marshal’s Cuirass (T4, Rare)
+- Marshalâ€™s Cuirass (T4, Rare)
 
 ### 2.4 Heavy
 
 - Rusted Breastplate (T1)
 - Iron Cuirass (T1)
 - Steel Breastplate (T2)
-- Knight’s Cuirass (T2)
+- Knightâ€™s Cuirass (T2)
 - Templar Plate (T3)
-- Warlord’s Plate (T3)
+- Warlordâ€™s Plate (T3)
 - Heart of Stone Plate (T4, Legendary)
 
 ---
@@ -105,7 +105,7 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Leather Gloves (T1)
 - Scout Bracers (T1)
 - Studded Gloves (T2)
-- Ranger’s Grips (T2)
+- Rangerâ€™s Grips (T2)
 - Shadowgrip Gloves (T3)
 - Nightstalker Bracers (T4)
 
@@ -114,7 +114,7 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Chain Gloves (T1)
 - Mail Gauntlets (T1)
 - Reinforced Gauntlets (T2)
-- Soldier’s Gauntlets (T2)
+- Soldierâ€™s Gauntlets (T2)
 - Vanguard Gauntlets (T3)
 
 ### 3.4 Heavy
@@ -122,9 +122,9 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Rusted Gauntlets (T1)
 - Iron Gauntlets (T1)
 - Steel Gauntlets (T2)
-- Knight’s Gauntlets (T2)
+- Knightâ€™s Gauntlets (T2)
 - Templar Gauntlets (T3)
-- Warlord’s Gauntlets (T4)
+- Warlordâ€™s Gauntlets (T4)
 
 ---
 
@@ -141,8 +141,8 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 
 - Leather Boots (T1)
 - Scout Boots (T1)
-- Tracker’s Boots (T2)
-- Ranger’s Boots (T2)
+- Trackerâ€™s Boots (T2)
+- Rangerâ€™s Boots (T2)
 - Shadowstep Boots (T3)
 - Nightstalker Boots (T4)
 
@@ -158,9 +158,9 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Rusted Greaves (T1)
 - Iron Greaves (T1)
 - Steel Greaves (T2)
-- Knight’s Greaves (T2)
+- Knightâ€™s Greaves (T2)
 - Templar Greaves (T3)
-- Warlord’s Greaves (T4)
+- Warlordâ€™s Greaves (T4)
 
 ---
 
@@ -171,7 +171,7 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 - Iron Shield (T2)
 - Tower Shield (T3, Heavy)
 - Reinforced Kite Shield (T3)
-- Guardian’s Bulwark (T4, Epic)
+- Guardianâ€™s Bulwark (T4, Epic)
 - Aegis of the Below (T4, Legendary)
 
 ---
@@ -180,28 +180,28 @@ This file defines an example, reasonably exhaustive armour list across tiers, sl
 
 These are thematic set groupings referencing items above. Actual set bonuses should be defined in the loot/progression design.
 
-- Warrior – "Vanguard" Set (Medium/Heavy)
+- Warrior â€“ "Vanguard" Set (Medium/Heavy)
   - Vanguard Helm
   - Vanguard Hauberk
   - Vanguard Gauntlets
   - Vanguard Greaves
   - Any Tier 3+ Shield
 
-- Rogue – "Shadowstalker" Set (Light)
+- Rogue â€“ "Shadowstalker" Set (Light)
   - Shadowmask Helm
   - Shadow Leather
   - Shadowgrip Gloves
   - Shadowstep Boots
 
-- Mage – "Archmage" Set (Cloth)
+- Mage â€“ "Archmage" Set (Cloth)
   - Archmage Circlet
   - Archmage Vestments
   - Archmage Mitts
   - Battlemage Boots
 
-- Cleric – "Templar" Set (Medium/Heavy)
+- Cleric â€“ "Templar" Set (Medium/Heavy)
   - Templar Helm
   - Templar Plate
   - Templar Gauntlets
   - Templar Greaves
-  - Guardian’s Bulwark
+  - Guardianâ€™s Bulwark

@@ -10,7 +10,8 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 - Use meaningful variable and function names
 
 ## Project Structure
-- **Components/Model**: Domain models (Character, Combat, Core, Dungeon, Inventory)
+- **Components/Model**: Domain models (Core, Character, Combat, Dungeon, Inventory; Progression is a stub)
+- **Components/LBEngineCore**: Game loop and system/service orchestration (`LB.Engine` module; migration in progress, see `Documentation/modularized-game-architecture.md`)
 - **Components/Services**: Business logic services (Character, Combat, Inventory, Progression, Dungeon, AssetPersistence)
 - **Components/Systems**: Technical systems (Asset, Audio, Input, Persistence, Rendering)
 - **Components/Tests**: Unit tests for all components (Model, Services, Systems)
@@ -40,7 +41,7 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 ## Best Practices
 - Keep DirectX resource management patterns consistent with DeviceResources
 - Follow the existing game loop structure in Game class
-- Use precompiled headers (pch.h) for commonly included headers
+- Module projects do not use precompiled headers; `pch.h` remains only in the LegendsBelow shell, test projects, and LBGameEditor
 - Maintain Xbox compatibility when adding features
 
 ## Suggested Patterns
@@ -57,7 +58,7 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 - Avoid coupling UI directly to gameplay data; use view models or thin adapters where possible.
 
 ## Coding Design Guidelines
-- Follow the patterns and terminology defined in `.github/design-*.md` documents when adding gameplay features.
+- Follow the patterns and terminology defined in `Documentation/design-*.md` documents when adding gameplay features.
 - Assume C++20 as the baseline language standard and use its features where they improve clarity and safety (e.g., `enum class`, `std::optional`, ranges, `std::span`), while remaining consistent with existing code.
 - Prefer clear, explicit functions for gameplay rules (e.g., damage, saves, XP) over inlined magic numbers.
 - Keep configuration constants and tables (XP curve, class growth, loot tables) in data files rather than hard-coded.
@@ -66,27 +67,20 @@ LegendsBelow is a DirectX game project built with C++ for Xbox/Windows platforms
 
 ## C++20 Module Guidelines
 
-## C++20 Module Guidelines
-
 ### Module Usage Policy
 
 **All code should use C++20 modules EXCEPT:**
-- ? **LBGameEditor** (editor tool) - May consume modules but uses traditional headers due to UI framework limitations
+- ❌ **LBGameEditor** (editor tool) - May consume modules but uses traditional headers due to UI framework limitations
 
 **These projects MUST use modules:**
-- ? **All Model projects** (LBModel.*)
-- ? **All Service projects** (LB*Service)
-- ? **All System projects** (LB*System)
-- ? **LBEngineCore** (core game engine)
-- ? **LBAssetProcessor** (asset processing tool)
-- ? **LegendsBelow** (main game executable) - Can be refactored to use modules
+- ✅ **All Model projects** (LBModel.*)
+- ✅ **All Service projects** (LB*Service)
+- ✅ **All System projects** (LB*System)
+- ✅ **LBEngineCore** (core game engine)
+- ✅ **LBAssetProcessor** (asset processing tool)
+- ✅ **LegendsBelow** (main game executable) - Can be refactored to use modules
 
 **Rationale**: Modern C++20 modules work with Win32 applications. Only LBGameEditor has tooling limitations.
-
-### Module Naming Conventions
-- Use dot notation for module names: `LB.ModuleName` (e.g., `LB.Core`, `LB.Character`)
-- Use Pascal case for module names: `LB.CharacterService`, `LB.ValueObjects`
-- Module files use `.ixx` extension for interface modules
 
 ### Module Naming Conventions
 - Use dot notation for module names: `LB.ModuleName` (e.g., `LB.Core`, `LB.Character`)
@@ -160,11 +154,11 @@ export import :Spell;
 ### Example: LB.Entities Module Structure
 
 ```
-Components/LBModel/
-??? LB.Entities.ixx      // Primary module (exports all partitions)
-??? Entity.ixx           // Partition: LB.Entities:Entity
-??? Character.ixx        // Partition: LB.Entities:Character (imports :Entity)
-??? Spell.ixx            // Partition: LB.Entities:Spell (imports :Entity)
+Components/Model/LBModel.Example/
+├── LB.Entities.ixx      // Primary module (exports all partitions)
+├── Entity.ixx           // Partition: LB.Entities:Entity
+├── Character.ixx        // Partition: LB.Entities:Character (imports :Entity)
+├── Spell.ixx            // Partition: LB.Entities:Spell (imports :Entity)
 ```
 
 ### When to Use Module Partitions
@@ -185,8 +179,8 @@ Partitions are for **organizing a single cohesive module** into multiple files, 
 - There's no shared internal coupling between the types
 
 **Key Question**: Would a consumer ever want to import just ONE of these types independently?
-- **Yes** ? Separate modules (`LB.Character`, `LB.Spell`)
-- **No** ? Partitions within one module (`LB.Entities:Character`, `LB.Entities:Spell`)
+- **Yes** → Separate modules (`LB.Character`, `LB.Spell`)
+- **No** → Partitions within one module (`LB.Entities:Character`, `LB.Entities:Spell`)
 
 **Information Hiding Example**:
 ```cpp
@@ -225,62 +219,62 @@ export import :Character;  // Export Character
 
 ## Critical Development Principles (Lessons Learned)
 
-### ?? Module Import Rules (IMPORTANT)
+### ⚠️ Module Import Rules (IMPORTANT)
 **Problem**: Systems fail to compile with "Position not found" errors
 
 **Rule**: Systems and Services must import `LB.Core`, NOT `LB.Common`
 ```cpp
-// ? CORRECT - LB.Core provides all core types
+// ✅ CORRECT - LB.Core provides all core types
 import LB.Core;  // Exports: LB::String, LB::Position, LB::Id, LB::Attributes, LB::Entity
 
-// ? WRONG - LB.Common is too limited
+// ❌ WRONG - LB.Common is too limited
 import LB.Common;  // Only exports: LB::String, LB::Id (missing Position!)
 ```
 
-### ?? No LB::Domain Namespace (IMPORTANT)
+### ⚠️ No LB::Domain Namespace (IMPORTANT)
 **Problem**: Compilation errors about `LB::Domain` not existing
 
 **Rule**: Use specific domain namespaces, not `LB::Domain`
 ```cpp
-// ? CORRECT - Use specific namespaces
+// ✅ CORRECT - Use specific namespaces
 using LB::Character::CharacterId;
 using LB::Character::CharacterClass;
 using LB::Combat::DamageType;
 using LB::Combat::EquipmentSlot;
 using LB::Inventory::InventoryItem;
 
-// ? WRONG - This namespace doesn't exist!
+// ❌ WRONG - This namespace doesn't exist!
 using LB::Domain::CharacterId;
 using LB::Domain::ItemId;
 ```
 
-### ?? Never Redefine Domain Types in Services
+### ⚠️ Never Redefine Domain Types in Services
 **Problem**: "Symbol cannot be defined" compilation errors
 
 **Rule**: Re-export domain types, never redefine them
 ```cpp
-// ? CORRECT - Re-export existing types from domain modules
+// ✅ CORRECT - Re-export existing types from domain modules
 using LB::Inventory::InventoryItem;
 using LB::Inventory::Equipment;
 using LB::Inventory::EquippedItems;
 
-// ? WRONG - These already exist in LB.Inventory module!
+// ❌ WRONG - These already exist in LB.Inventory module!
 struct InventoryItem { ... };  // Duplicate definition error
 struct Equipment { ... };
 ```
 
-### ?? Input System Frame Logic
+### ⚠️ Input System Frame Logic
 **Problem**: `IsKeyReleased()` tests fail unexpectedly
 
 **Rule**: Check input state BEFORE calling Update(), not after
 ```cpp
-// ? CORRECT - Check state before Update() overwrites previous
+// ✅ CORRECT - Check state before Update() overwrites previous
 system.SetKeyState(key, KeyState::Pressed);
-system.Update();  // Copies current state ? previous state
+system.Update();  // Copies current state → previous state
 system.SetKeyState(key, KeyState::Released);
-EXPECT_TRUE(system.IsKeyReleased(key));  // current=Released, previous=Pressed ?
+EXPECT_TRUE(system.IsKeyReleased(key));  // current=Released, previous=Pressed ✓
 
-// ? WRONG - Second Update() makes previous=Released too!
+// ❌ WRONG - Second Update() makes previous=Released too!
 system.SetKeyState(key, KeyState::Released);
 system.Update();  // Now previous = Released
 EXPECT_TRUE(system.IsKeyReleased(key));  // FAILS: both states are Released
@@ -315,53 +309,53 @@ Every new project MUST have these in `.vcxproj`:
 
 ```
 LB::                                    # Root namespace
-??? String, Id, InvalidId               # from LB.Common
-??? Position, Dice, Attributes          # from LB.CoreValueObjects
-??? Entity                              # from LB.Entity
-?
-??? Character::                         # Character domain (LB.Character)
-?   ??? CharacterClass
-?   ??? CharacterId, SpellId, ItemId
-?   ??? Character
-?
-??? Combat::                            # Combat domain (LB.Combat)
-?   ??? DamageType, WeaponType, ArmorCategory
-?   ??? SpellSchool, SpellCategory
-?   ??? EquipmentSlot
-?
-??? Inventory::                         # Inventory domain (LB.Inventory)
-?   ??? InventoryItem, Equipment
-?   ??? EquippedItems
-?   ??? InventoryOperationResult
-?
-??? Dungeon::                           # Dungeon domain (LB.Dungeon)
-?   ??? RoomType, RoomDifficulty
-?   ??? Direction
-?
-??? Services::                          # Business logic layer
-?   ??? Character::CharacterService
-?   ??? Combat::CombatService
-?   ??? Inventory::InventoryService
-?   ??? Progression::ProgressionService
-?   ??? Dungeon::DungeonService
-?
-??? Systems::                           # Technical systems layer
-    ??? Asset::AssetSystem
-    ??? Audio::AudioSystem
-    ??? Input::InputSystem
-    ??? Persistence::PersistenceSystem
-    ??? Rendering::RenderingSystem
+├── String, Id, InvalidId               # from LB.Common
+├── Position, Dice, Attributes          # from LB.CoreValueObjects
+├── Entity                              # from LB.Entity
+│
+├── Character::                         # Character domain (LB.Character)
+│   ├── CharacterClass
+│   ├── CharacterId, SpellId, ItemId
+│   └── Character
+│
+├── Combat::                            # Combat domain (LB.Combat)
+│   ├── DamageType, WeaponType, ArmorCategory
+│   ├── SpellSchool, SpellCategory
+│   └── EquipmentSlot
+│
+├── Inventory::                         # Inventory domain (LB.Inventory)
+│   ├── InventoryItem, Equipment
+│   ├── EquippedItems
+│   └── InventoryOperationResult
+│
+├── Dungeon::                           # Dungeon domain (LB.Dungeon)
+│   ├── RoomType, RoomDifficulty
+│   └── Direction
+│
+├── Services::                          # Business logic layer
+│   ├── Character::CharacterService
+│   ├── Combat::CombatService
+│   ├── Inventory::InventoryService
+│   ├── Progression::ProgressionService
+│   └── Dungeon::DungeonService
+│
+└── Systems::                           # Technical systems layer
+    ├── Asset::AssetSystem
+    ├── Audio::AudioSystem
+    ├── Input::InputSystem
+    ├── Persistence::PersistenceSystem
+    └── Rendering::RenderingSystem
 ```
 
 ### Module Dependency Rules
 
 ```
 Layer           Allowed Imports
-?????????????????????????????????????????????????
-Systems      ?  LB.Core ONLY (no domain knowledge)
-Services     ?  LB.Core + Domain modules
-Domains      ?  LB.Core ONLY (no cross-domain)
-Tests        ?  Component under test + LB.Core
+─────────────────────────────────────────────────
+Systems      →  LB.Core ONLY (no domain knowledge)
+Services     →  LB.Core + Domain modules
+Domains      →  LB.Core ONLY (no cross-domain)
+Tests        →  Component under test + LB.Core
 ```
 
 ### Quick Error Solutions Reference

@@ -1,4 +1,4 @@
-# LegendsBelow – Weapons List
+# LegendsBelow â€“ Weapons List
 
 This file defines an example, reasonably exhaustive weapons list across tiers and categories. Values and availability are **design starting points**.
 
@@ -13,10 +13,10 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Rusted Longsword (T1)
 - Iron Longsword (T1)
 - Steel Longsword (T2)
-- Soldier’s Blade (T2)
-- Knight’s Blade (T2)
+- Soldierâ€™s Blade (T2)
+- Knightâ€™s Blade (T2)
 - Vanguard Sabre (T3)
-- Warlord’s Edge (T3)
+- Warlordâ€™s Edge (T3)
 - Blade of the Below (T4, Legendary)
 
 ### 1.2 Two-Handed Swords
@@ -26,7 +26,7 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Steel Greatsword (T2)
 - Claymore of Resolve (T2)
 - Templar Greatblade (T3)
-- Warlord’s Greatsword (T3)
+- Warlordâ€™s Greatsword (T3)
 - Doomcleaver (T4, Legendary)
 
 ---
@@ -38,18 +38,18 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Splintered Hatchet (T1)
 - Iron Hatchet (T1)
 - Steel Hand Axe (T2)
-- Raider’s Axe (T2)
-- Berserker’s Axe (T3)
-- Reaver’s Bite (T3)
+- Raiderâ€™s Axe (T2)
+- Berserkerâ€™s Axe (T3)
+- Reaverâ€™s Bite (T3)
 
 ### 2.2 Two-Handed Axes
 
 - Rusted Greataxe (T1)
 - Iron Greataxe (T1)
 - Steel Greataxe (T2)
-- Lumberer’s Axe (T2)
-- Berserker’s Cleaver (T3)
-- Executioner’s Axe (T3)
+- Lumbererâ€™s Axe (T2)
+- Berserkerâ€™s Cleaver (T3)
+- Executionerâ€™s Axe (T3)
 - Worldsplitter (T4, Legendary)
 
 ---
@@ -62,8 +62,8 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Iron Mace (T1)
 - Spiked Mace (T2)
 - Morningstar (T2)
-- Templar’s Mace (T3)
-- Inquisitor’s Hammer (T3)
+- Templarâ€™s Mace (T3)
+- Inquisitorâ€™s Hammer (T3)
 - Maul of Judgment (T4, Legendary)
 
 ### 3.2 Two-Handed
@@ -71,7 +71,7 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Rusted Warhammer (T1)
 - Iron Warhammer (T1)
 - Steel Maul (T2)
-- Giant’s Maul (T3)
+- Giantâ€™s Maul (T3)
 - Earthshaker Hammer (T4, Legendary)
 
 ---
@@ -81,9 +81,9 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Rusted Dagger (T1)
 - Iron Dagger (T1)
 - Twin Daggers (T1)
-- Assassin’s Knife (T2)
+- Assassinâ€™s Knife (T2)
 - Shadow Dagger (T2)
-- Nightstalker’s Fang (T3)
+- Nightstalkerâ€™s Fang (T3)
 - Fang of the Below (T4, Legendary)
 
 ---
@@ -93,7 +93,7 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Wooden Spear (T1)
 - Iron Spear (T1)
 - Steel Spear (T2)
-- Guard’s Halberd (T2)
+- Guardâ€™s Halberd (T2)
 - Vanguard Pike (T3)
 - Templar Halberd (T3)
 - Spear of the Deepwatch (T4, Legendary)
@@ -103,10 +103,10 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 ## 6. Bows
 
 - Worn Shortbow (T1)
-- Hunter’s Shortbow (T1)
+- Hunterâ€™s Shortbow (T1)
 - Reinforced Shortbow (T2)
 - Longbow (T2)
-- Ranger’s Longbow (T3)
+- Rangerâ€™s Longbow (T3)
 - Shadowbow (T3)
 - Bow of Endless Arrows (T4, Legendary)
 
@@ -118,7 +118,7 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Light Crossbow (T1)
 - Reinforced Crossbow (T2)
 - Heavy Crossbow (T2)
-- Sharpshooter’s Crossbow (T3)
+- Sharpshooterâ€™s Crossbow (T3)
 - Siege Crossbow (T3)
 - Boltstorm (T4, Legendary)
 
@@ -127,7 +127,7 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 ## 8. Staves
 
 - Cracked Staff (T1)
-- Apprentice’s Staff (T1)
+- Apprenticeâ€™s Staff (T1)
 - Oak Channeling Staff (T2)
 - Battlemage Staff (T2)
 - Archmage Staff (T3)
@@ -138,7 +138,7 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 ## 9. Wands and Foci
 
 - Splintered Wand (T1)
-- Apprentice’s Wand (T1)
+- Apprenticeâ€™s Wand (T1)
 - Ember Wand (T2, Fire)
 - Frost Wand (T2, Ice)
 - Storm Wand (T3, Lightning)
@@ -155,14 +155,14 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 - Signature examples:
   - Vanguard Sabre
   - Templar Greatblade
-  - Berserker’s Cleaver
+  - Berserkerâ€™s Cleaver
 
 ### 10.2 Rogue
 
 - Prefers daggers, short swords, bows, crossbows.
 - Signature examples:
-  - Assassin’s Knife
-  - Nightstalker’s Fang
+  - Assassinâ€™s Knife
+  - Nightstalkerâ€™s Fang
   - Shadowbow
 
 ### 10.3 Mage
@@ -176,6 +176,6 @@ This file defines an example, reasonably exhaustive weapons list across tiers an
 
 - Prefers maces, hammers, staves.
 - Signature examples:
-  - Templar’s Mace
-  - Inquisitor’s Hammer
+  - Templarâ€™s Mace
+  - Inquisitorâ€™s Hammer
   - Staff of the Below
