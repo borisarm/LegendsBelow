@@ -31,6 +31,26 @@ LPCWSTR g_szAppName = L"LegendsBelow";
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
+namespace
+{
+    // Translate a WM_*BUTTONDOWN/UP message into an engine mouse event
+    void ForwardMouseButton(GameEngine* engine, UINT message, LPARAM lParam, bool down)
+    {
+        if (!engine)
+            return;
+
+        using LB::Systems::Input::MouseButton;
+        MouseButton button = MouseButton::Left;
+        if (message == WM_RBUTTONDOWN || message == WM_RBUTTONUP)
+            button = MouseButton::Right;
+        else if (message == WM_MBUTTONDOWN || message == WM_MBUTTONUP)
+            button = MouseButton::Middle;
+
+        engine->OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        engine->OnMouseButton(button, down);
+    }
+}
+
 // Entry point
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
@@ -298,6 +318,50 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
             s_fullscreen = !s_fullscreen;
         }
+        else if (engine)
+        {
+            // Alt combinations and F10; DefWindowProc still handles Alt+F4
+            engine->OnKeyDown(static_cast<int32_t>(wParam));
+        }
+        break;
+
+    // Input: forwarded to the engine. Key codes are Windows virtual-key codes, which
+    // LB::Systems::Input::Keys mirrors.
+    case WM_KEYDOWN:
+        if (engine)
+            engine->OnKeyDown(static_cast<int32_t>(wParam));
+        break;
+
+    case WM_KEYUP:
+    case WM_SYSKEYUP:
+        if (engine)
+            engine->OnKeyUp(static_cast<int32_t>(wParam));
+        break;
+
+    case WM_MOUSEMOVE:
+        if (engine)
+            engine->OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        break;
+
+    case WM_LBUTTONDOWN:
+    case WM_RBUTTONDOWN:
+    case WM_MBUTTONDOWN:
+        // Capture so the matching button-up arrives even if released outside the window
+        SetCapture(hWnd);
+        ForwardMouseButton(engine, message, lParam, true);
+        break;
+
+    case WM_LBUTTONUP:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONUP:
+        ForwardMouseButton(engine, message, lParam, false);
+        if ((wParam & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) == 0)
+            ReleaseCapture();
+        break;
+
+    case WM_MOUSEWHEEL:
+        if (engine)
+            engine->OnMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));
         break;
 
     case WM_MENUCHAR:

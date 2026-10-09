@@ -273,3 +273,188 @@ TEST(GameEngineTests, WindowEvents_Headless_NoError) {
 
     EXPECT_TRUE(engine.IsInitialized());
 }
+
+// ============================================================================
+// GameEngine Input Tests
+// ============================================================================
+
+namespace {
+    namespace Keys = LB::Systems::Input::Keys;
+    using LB::Systems::Input::MouseButton;
+
+    void TapKey(GameEngine& engine, std::int32_t key) {
+        engine.OnKeyDown(key);
+        engine.OnKeyUp(key);
+    }
+}
+
+TEST(GameEngineInputTests, OnKeyDown_ForwardsToInputSystem) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.OnKeyDown(Keys::FromChar('W'));
+
+    EXPECT_TRUE(engine.GetInput().IsKeyDown(Keys::FromChar('W')));
+}
+
+TEST(GameEngineInputTests, OnKeyUp_ForwardsToInputSystem) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.OnKeyDown(Keys::FromChar('W'));
+
+    engine.OnKeyUp(Keys::FromChar('W'));
+
+    EXPECT_FALSE(engine.GetInput().IsKeyDown(Keys::FromChar('W')));
+}
+
+TEST(GameEngineInputTests, InputBeforeInitialize_Ignored) {
+    GameEngine engine;
+
+    engine.OnKeyDown(Keys::Space);
+    engine.Initialize(nullptr, 800, 600);
+
+    EXPECT_FALSE(engine.GetInput().IsKeyDown(Keys::Space));
+}
+
+TEST(GameEngineInputTests, MouseEvents_ForwardedToInputSystem) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.OnMouseMove(120, 80);
+    engine.OnMouseButton(MouseButton::Left, true);
+    engine.OnMouseWheel(120);
+
+    const auto& mouse = engine.GetInput().GetMouseState();
+    EXPECT_EQ(mouse.x, 120);
+    EXPECT_EQ(mouse.y, 80);
+    EXPECT_TRUE(mouse.leftButton);
+    EXPECT_EQ(mouse.wheelDelta, 120);
+}
+
+TEST(GameEngineInputTests, SimulationStep_ConsumesInputFrame) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.OnKeyDown(Keys::Space);
+
+    engine.Tick(OneSixtieth);
+
+    // The step read the press; the next frame no longer reports it, but the key is still held
+    EXPECT_FALSE(engine.GetInput().IsKeyPressed(Keys::Space));
+    EXPECT_TRUE(engine.GetInput().IsKeyDown(Keys::Space));
+}
+
+TEST(GameEngineInputTests, NoSimulationStep_InputKeptForNextStep) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.OnKeyDown(Keys::Space);
+
+    engine.Tick(1ms);  // renders, but no 60 Hz step is due yet
+
+    EXPECT_TRUE(engine.GetInput().IsKeyPressed(Keys::Space));
+}
+
+TEST(GameEngineInputTests, OnDeactivated_ReleasesHeldInput) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.OnKeyDown(Keys::FromChar('W'));
+    engine.OnMouseButton(MouseButton::Right, true);
+
+    engine.OnDeactivated();
+
+    EXPECT_FALSE(engine.GetInput().IsKeyDown(Keys::FromChar('W')));
+    EXPECT_FALSE(engine.GetInput().IsMouseButtonDown(MouseButton::Right));
+}
+
+// ============================================================================
+// GameEngine Tactical Pause Tests
+// ============================================================================
+
+TEST(GameEnginePauseTests, InitialState_NotPaused) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    EXPECT_FALSE(engine.IsPaused());
+    EXPECT_DOUBLE_EQ(engine.GetGameTimeSeconds(), 0.0);
+}
+
+TEST(GameEnginePauseTests, EscapeTap_TogglesPause) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_TRUE(engine.IsPaused());
+}
+
+TEST(GameEnginePauseTests, SecondEscapeTap_Unpauses) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_FALSE(engine.IsPaused());
+}
+
+TEST(GameEnginePauseTests, EscapeHeldAcrossSteps_TogglesOnce) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.OnKeyDown(Keys::Escape);
+
+    engine.Tick(OneSixtieth);
+    engine.OnKeyDown(Keys::Escape);  // auto-repeat
+    engine.Tick(OneSixtieth);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_TRUE(engine.IsPaused());
+}
+
+TEST(GameEnginePauseTests, EscapeDuringCatchUpSteps_TogglesOnce) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    TapKey(engine, Keys::Escape);
+
+    engine.Tick(50ms);  // three 60 Hz steps in one tick
+
+    EXPECT_EQ(engine.GetTimer().GetFrameCount(), 3u);
+    EXPECT_TRUE(engine.IsPaused());
+}
+
+TEST(GameEnginePauseTests, GameTime_AdvancesWhileRunning) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    engine.Tick(OneSixtieth);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_NEAR(engine.GetGameTimeSeconds(), 2.0 / 60.0, 1e-6);
+}
+
+TEST(GameEnginePauseTests, GameTime_StopsWhilePaused) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.Tick(OneSixtieth);
+    const double before = engine.GetGameTimeSeconds();
+
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_TRUE(engine.IsPaused());
+    EXPECT_DOUBLE_EQ(engine.GetGameTimeSeconds(), before);
+    EXPECT_EQ(engine.GetTimer().GetFrameCount(), 3u);  // the loop keeps stepping
+}
+
+TEST(GameEnginePauseTests, Shutdown_ClearsPause) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    engine.Shutdown();
+
+    EXPECT_FALSE(engine.IsPaused());
+}

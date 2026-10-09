@@ -2,6 +2,7 @@
 export module LB.Engine:GameEngine;
 
 import std;
+import LB.InputSystem;
 import LB.RenderingSystem;
 import :StepTimer;
 
@@ -19,6 +20,9 @@ export namespace LB::Engine {
 
         // Simulation runs at a fixed 60 Hz (see design-combat-system.md, combat model)
         static constexpr double DefaultTargetElapsedSeconds = 1.0 / 60.0;
+
+        // Input action names registered by the engine (bindings from design-ui-ux-and-audio.md)
+        static constexpr std::string_view PauseAction = "Pause";
 
         GameEngine() {
             timer_.SetFixedTimeStep(true);
@@ -40,6 +44,9 @@ export namespace LB::Engine {
                 return false;
             }
 
+            inputSystem_.Initialize();
+            RegisterDefaultBindings();
+
             renderingSystem_.SetDeviceCallbacks(
                 [this] { OnDeviceLost(); },
                 [this] { OnDeviceRestored(); });
@@ -56,7 +63,9 @@ export namespace LB::Engine {
         void Shutdown() {
             if (!initialized_) return;
 
+            inputSystem_.Shutdown();
             renderingSystem_.Shutdown();
+            paused_ = false;
             initialized_ = false;
         }
 
@@ -86,7 +95,8 @@ export namespace LB::Engine {
         }
 
         void OnDeactivated() {
-            // TODO: Game is becoming background window.
+            // Key/button up events are not delivered while unfocused; avoid stuck input
+            inputSystem_.ReleaseAll();
         }
 
         void OnSuspending() {
@@ -110,6 +120,32 @@ export namespace LB::Engine {
             renderingSystem_.OnWindowSizeChanged(width, height);
         }
 
+        // Input events (forwarded by the host). Key codes are LB::Systems::Input::Keys values.
+        void OnKeyDown(std::int32_t keyCode) {
+            if (!initialized_) return;
+            inputSystem_.SetKeyState(keyCode, Systems::Input::KeyState::Pressed);
+        }
+
+        void OnKeyUp(std::int32_t keyCode) {
+            if (!initialized_) return;
+            inputSystem_.SetKeyState(keyCode, Systems::Input::KeyState::Released);
+        }
+
+        void OnMouseMove(std::int32_t x, std::int32_t y) {
+            if (!initialized_) return;
+            inputSystem_.SetMousePosition(x, y);
+        }
+
+        void OnMouseButton(Systems::Input::MouseButton button, bool down) {
+            if (!initialized_) return;
+            inputSystem_.SetMouseButton(button, down);
+        }
+
+        void OnMouseWheel(std::int32_t delta) {
+            if (!initialized_) return;
+            inputSystem_.AddMouseWheel(delta);
+        }
+
         // Configuration
         void GetDefaultWindowSize(std::int32_t& width, std::int32_t& height) const noexcept {
             width = DefaultWindowWidth;
@@ -125,13 +161,35 @@ export namespace LB::Engine {
         [[nodiscard]] bool IsInitialized() const noexcept { return initialized_; }
         [[nodiscard]] bool HasGpuDevice() const noexcept { return renderingSystem_.HasGpuDevice(); }
         [[nodiscard]] const StepTimer& GetTimer() const noexcept { return timer_; }
+        [[nodiscard]] const Systems::Input::InputSystem& GetInput() const noexcept { return inputSystem_; }
+
+        /// <summary>
+        /// Tactical pause (design-combat-system.md): the loop keeps running and reading input,
+        /// but the simulation and the game clock stop.
+        /// </summary>
+        [[nodiscard]] bool IsPaused() const noexcept { return paused_; }
+
+        /// <summary>
+        /// Simulated time, excluding time spent paused
+        /// </summary>
+        [[nodiscard]] double GetGameTimeSeconds() const noexcept { return gameTimeSeconds_; }
 
     private:
         /// <summary>
         /// Advance the simulation by one step.
         /// </summary>
-        void Update([[maybe_unused]] double elapsedSeconds) {
-            // TODO: Add game logic here (input, services, AI).
+        void Update(double elapsedSeconds) {
+            if (inputSystem_.IsActionTriggered(std::string(PauseAction))) {
+                paused_ = !paused_;
+            }
+
+            if (!paused_) {
+                gameTimeSeconds_ += elapsedSeconds;
+                // TODO: Add game logic here (services, AI).
+            }
+
+            // This step has consumed the input frame; presses are seen by exactly one step
+            inputSystem_.Update();
         }
 
         /// <summary>
@@ -144,11 +202,25 @@ export namespace LB::Engine {
             }
 
             renderingSystem_.BeginFrame();
-            renderingSystem_.Clear(Systems::Rendering::Color::CornflowerBlue());
+
+            // Placeholder pause feedback until there is a pause menu: dim the background
+            auto clearColor = Systems::Rendering::Color::CornflowerBlue();
+            if (paused_) {
+                clearColor = Systems::Rendering::Color{ clearColor.r * 0.4f, clearColor.g * 0.4f, clearColor.b * 0.4f, clearColor.a };
+            }
+            renderingSystem_.Clear(clearColor);
 
             // TODO: Queue world, characters, and UI draws here.
 
             renderingSystem_.EndFrame();
+        }
+
+        void RegisterDefaultBindings() {
+            Systems::Input::InputAction pause{};
+            pause.name = std::string(PauseAction);
+            pause.deviceType = Systems::Input::InputDevice::Keyboard;
+            pause.keyCode = Systems::Input::Keys::Escape;
+            inputSystem_.RegisterAction(pause);
         }
 
         void OnDeviceLost() {
@@ -160,7 +232,10 @@ export namespace LB::Engine {
         }
 
         Systems::Rendering::RenderingSystem renderingSystem_;
+        Systems::Input::InputSystem inputSystem_;
         StepTimer timer_;
+        double gameTimeSeconds_{0.0};
+        bool paused_{false};
         bool initialized_{false};
     };
 

@@ -265,20 +265,20 @@ struct Equipment { ... };
 ```
 
 ### ⚠️ Input System Frame Logic
-**Problem**: `IsKeyReleased()` tests fail unexpectedly
+**Model**: input is pushed in by the host (`SetKeyState`, `SetMousePosition`, `SetMouseButton`, `AddMouseWheel`). `IsKeyPressed`/`IsKeyReleased`/`IsMouseButtonPressed` report *transitions recorded since the last `Update()`*, so a tap shorter than a frame is never lost. `Update()` ends the input frame: it clears the transitions and per-frame mouse deltas.
 
-**Rule**: Check input state BEFORE calling Update(), not after
+**Rule**: read input, THEN call `Update()`. `GameEngine` calls it once per fixed simulation step, after the step has read input.
 ```cpp
-// ✅ CORRECT - Check state before Update() overwrites previous
+// ✅ CORRECT - query before Update() ends the frame
 system.SetKeyState(key, KeyState::Pressed);
-system.Update();  // Copies current state → previous state
-system.SetKeyState(key, KeyState::Released);
-EXPECT_TRUE(system.IsKeyReleased(key));  // current=Released, previous=Pressed ✓
+system.SetKeyState(key, KeyState::Released);   // tap within one frame
+EXPECT_TRUE(system.IsKeyPressed(key));         // transition recorded ✓
+EXPECT_TRUE(system.IsKeyReleased(key));
 
-// ❌ WRONG - Second Update() makes previous=Released too!
+// ❌ WRONG - Update() already consumed the transition
 system.SetKeyState(key, KeyState::Released);
-system.Update();  // Now previous = Released
-EXPECT_TRUE(system.IsKeyReleased(key));  // FAILS: both states are Released
+system.Update();
+EXPECT_TRUE(system.IsKeyReleased(key));  // FAILS: transitions cleared
 ```
 
 ### Project Configuration Requirements
@@ -369,7 +369,7 @@ Tests        →  Component under test + LB.Core
 | `'Position': is not a member of 'LB'` | Change `import LB.Common;` to `import LB.Core;` |
 | `'InventoryItem' cannot be defined` | Remove duplicate struct, use `using LB::Inventory::InventoryItem;` |
 | `could not find module 'LB.Common'` | Add LBModel.Core project reference to `.vcxproj` |
-| `IsKeyReleased` test fails | Check state BEFORE second `Update()` call |
+| `IsKeyPressed`/`IsKeyReleased` test fails | Query before `Update()`; it clears the frame's transitions |
 | `C7622` module interface extension incompatible with `/internalPartition` | Internal partitions (`module X:Part;`) must be `.cpp` files with `<CompileAs>CompileAsCppModuleInternalPartition</CompileAs>` |
 | `C5050` possible incompatible environment importing module | Importer and module libraries must agree on `/sdl` (`SDLCheck`), `/fp` (`FloatingPointModel`), and `/guard:cf` (`ControlFlowGuard`) |
 | `'X': is not a member of 'Y'` | Verify namespace and check if type uses `.x` vs `.X()` |
