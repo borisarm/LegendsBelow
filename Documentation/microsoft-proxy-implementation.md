@@ -53,7 +53,9 @@ Module `LB.Repositories` in `Components/Services/LBAssetPersistenceService/LB.Re
   - `MakeSpellRepositoryWithAllocator(alloc, impl)` → `pro::allocate_proxy`
   - `MakeSharedSpellRepository(impl)` → `pro::make_proxy_shared`
 
-Consumers: `Components/Tests/Services/LBAssetPersistenceServiceTests/RepositoryTestHelpers.h`.
+Consumers: `Components/Tests/Services/LBAssetPersistenceServiceTests/` (`RepositoryTestHelpers.h` holds the mock).
+
+Note: the domain `LB::Character::Spell` is still minimal (id, name, mana cost, base damage). School, class, level, category, and cast time are not on the entity yet, so implementations must keep that metadata alongside it, as the test mock does.
 
 Facade definition pattern:
 ```cpp
@@ -72,7 +74,8 @@ using SpellRepository = pro::proxy<SpellRepositoryFacade>;
 ## Status and Next Steps
 
 - [x] Microsoft Proxy v4 facade for spells
-- [ ] Declare `proxy` as a vcpkg manifest dependency. `LB.Repositories.ixx` does `import <proxy/proxy.h>;` but no `vcpkg.json` in the repo lists it, so LBAssetPersistenceService currently fails to build (header not found).
+- [x] `proxy` (4.1.0) declared in the root `vcpkg.json`; `LB.Repositories.ixx` includes `<proxy/proxy.h>` in its global module fragment
+- [x] Tests through the type-erased proxy with a duck-typed `MockSpellRepository` (all three factory functions, every query)
 - [ ] Weapon and armor facades (`WeaponRepository`, `ArmorRepository`) following the spell pattern
 - [ ] Concrete JSON-backed repository implementations wired to `LBAssetSystem`
 - [ ] Inject repositories into services from `LB.Engine` (see `modularized-game-architecture.md`)

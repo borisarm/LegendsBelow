@@ -1,5 +1,11 @@
-// LB.Repositories.ixx - Repository interfaces using Microsoft Proxy 4.0
+// LB.Repositories.ixx - Repository interfaces using Microsoft Proxy 4
 // Note: This belongs in the Services layer, not the Domain model
+module;
+
+// Microsoft Proxy (vcpkg "proxy"); included in the global module fragment so its
+// PRO_* macros are available below
+#include <proxy/proxy.h>
+
 export module LB.Repositories;
 
 // Import only required domains
@@ -7,7 +13,6 @@ import LB.Core;
 import LB.Character;
 import LB.Combat;
 import std;
-import <proxy/proxy.h>; // Microsoft Proxy 4.0
 
 export namespace LB::Repositories {
 	// Re-export domain types for convenience

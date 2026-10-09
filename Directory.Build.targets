@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    C++20 module dependency scanning (SetModuleDependencies) runs while computing compile
+    inputs, before vcpkg's VcpkgInstallManifestDependencies (hooked BeforeTargets="ClCompile").
+    On a fresh clone the scan would then fail to find vcpkg headers such as <proxy/proxy.h>
+    or <directx/d3d12.h>. Install manifest dependencies first in projects that use vcpkg.
+  -->
+  <Target Name="LBInstallVcpkgBeforeModuleScan"
+          BeforeTargets="SetModuleDependencies"
+          DependsOnTargets="VcpkgTripletSelection;VcpkgInstallManifestDependencies"
+          Condition="'$(VcpkgEnabled)' == 'true' and '$(VcpkgEnableManifest)' == 'true'" />
+</Project>
