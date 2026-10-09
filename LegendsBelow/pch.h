@@ -34,6 +34,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
+// GET_X_LPARAM / GET_Y_LPARAM for mouse messages
+#include <windowsx.h>
+
 // D3D12_SDK_VERSION for the Agility SDK exports in Main.cpp
 #include <directx/d3d12.h>
 

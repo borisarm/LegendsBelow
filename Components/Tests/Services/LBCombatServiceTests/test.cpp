@@ -6,12 +6,18 @@ import LB.CombatService;
 
 using namespace LB::Services::Combat;
 
+namespace {
+    // Fixed dice seed: statistical tests (e.g. "rarely hits") are deterministic instead of
+    // failing a few percent of the time
+    constexpr std::uint32_t TestSeed = 20260109;
+}
+
 // ============================================================================
 // Attack Roll Tests
 // ============================================================================
 
 TEST(CombatServiceTests, RollAttack_HitsWithHighRoll_Success) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     auto result = service.RollAttack(5, 15, false, false);
 
@@ -24,7 +30,7 @@ TEST(CombatServiceTests, RollAttack_HitsWithHighRoll_Success) {
 }
 
 TEST(CombatServiceTests, RollAttack_LowAttackBonusHighAC_LikelyMisses) {
-    CombatService service;
+    CombatService service{TestSeed};
     int hits = 0;
     int attempts = 100;
 
@@ -38,7 +44,7 @@ TEST(CombatServiceTests, RollAttack_LowAttackBonusHighAC_LikelyMisses) {
 }
 
 TEST(CombatServiceTests, RollAttack_HighAttackBonusLowAC_LikelyHits) {
-    CombatService service;
+    CombatService service{TestSeed};
     int hits = 0;
     int attempts = 100;
 
@@ -52,7 +58,7 @@ TEST(CombatServiceTests, RollAttack_HighAttackBonusLowAC_LikelyHits) {
 }
 
 TEST(CombatServiceTests, RollAttack_WithAdvantage_IncreasesHitChance) {
-    CombatService service;
+    CombatService service{TestSeed};
     int normalHits = 0;
     int advantageHits = 0;
     int attempts = 100;
@@ -70,7 +76,7 @@ TEST(CombatServiceTests, RollAttack_WithAdvantage_IncreasesHitChance) {
 }
 
 TEST(CombatServiceTests, RollAttack_WithDisadvantage_DecreasesHitChance) {
-    CombatService service;
+    CombatService service{TestSeed};
     int normalHits = 0;
     int disadvantageHits = 0;
     int attempts = 100;
@@ -92,7 +98,7 @@ TEST(CombatServiceTests, RollAttack_WithDisadvantage_DecreasesHitChance) {
 // ============================================================================
 
 TEST(CombatServiceTests, CalculateDamage_BasicDamage_CorrectTotal) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     auto result = service.CalculateDamage(10, 3, DamageType::Slashing, false, 0.0f);
 
@@ -104,7 +110,7 @@ TEST(CombatServiceTests, CalculateDamage_BasicDamage_CorrectTotal) {
 }
 
 TEST(CombatServiceTests, CalculateDamage_CriticalHit_DoublesDice) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     auto result = service.CalculateDamage(10, 3, DamageType::Slashing, true, 0.0f);
 
@@ -115,7 +121,7 @@ TEST(CombatServiceTests, CalculateDamage_CriticalHit_DoublesDice) {
 }
 
 TEST(CombatServiceTests, CalculateDamage_WithReduction_ReducesDamage) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     auto result = service.CalculateDamage(20, 5, DamageType::Slashing, false, 0.5f);
 
@@ -127,7 +133,7 @@ TEST(CombatServiceTests, CalculateDamage_WithReduction_ReducesDamage) {
 }
 
 TEST(CombatServiceTests, CalculateDamage_MaxReduction_MinimalDamage) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     auto result = service.CalculateDamage(10, 0, DamageType::Slashing, false, 0.99f);
 
@@ -136,7 +142,7 @@ TEST(CombatServiceTests, CalculateDamage_MaxReduction_MinimalDamage) {
 }
 
 TEST(CombatServiceTests, CalculateDamage_ZeroDamage_ReturnsZero) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     auto result = service.CalculateDamage(0, 0, DamageType::Slashing, false, 0.0f);
 
@@ -148,7 +154,7 @@ TEST(CombatServiceTests, CalculateDamage_ZeroDamage_ReturnsZero) {
 // ============================================================================
 
 TEST(CombatServiceTests, CalculateDamageReduction_PhysicalDamageHighArmor_HighReduction) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     float reduction = service.CalculateDamageReduction(20, DamageType::Slashing);
 
@@ -157,7 +163,7 @@ TEST(CombatServiceTests, CalculateDamageReduction_PhysicalDamageHighArmor_HighRe
 }
 
 TEST(CombatServiceTests, CalculateDamageReduction_PiercingDamage_LessReduction) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     float slashingReduction = service.CalculateDamageReduction(20, DamageType::Slashing);
     float piercingReduction = service.CalculateDamageReduction(20, DamageType::Piercing);
@@ -166,7 +172,7 @@ TEST(CombatServiceTests, CalculateDamageReduction_PiercingDamage_LessReduction) 
 }
 
 TEST(CombatServiceTests, CalculateDamageReduction_ElementalDamage_MinimalReduction) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     float fireReduction = service.CalculateDamageReduction(20, DamageType::Fire);
     float slashingReduction = service.CalculateDamageReduction(20, DamageType::Slashing);
@@ -175,7 +181,7 @@ TEST(CombatServiceTests, CalculateDamageReduction_ElementalDamage_MinimalReducti
 }
 
 TEST(CombatServiceTests, CalculateDamageReduction_SpiritualDamage_NoReduction) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     float holyReduction = service.CalculateDamageReduction(30, DamageType::Holy);
     float shadowReduction = service.CalculateDamageReduction(30, DamageType::Shadow);
@@ -185,7 +191,7 @@ TEST(CombatServiceTests, CalculateDamageReduction_SpiritualDamage_NoReduction) {
 }
 
 TEST(CombatServiceTests, CalculateDamageReduction_LowArmor_LowReduction) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     float reduction = service.CalculateDamageReduction(10, DamageType::Slashing);
 
@@ -197,7 +203,7 @@ TEST(CombatServiceTests, CalculateDamageReduction_LowArmor_LowReduction) {
 // ============================================================================
 
 TEST(CombatServiceTests, CalculateWeaponDamage_WithStrength_AddsModifier) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{16, 10, 10, 10, 10, 10}; // STR 16 = +3
 
     int32_t damage = service.CalculateWeaponDamage(8, attribs, true);
@@ -206,7 +212,7 @@ TEST(CombatServiceTests, CalculateWeaponDamage_WithStrength_AddsModifier) {
 }
 
 TEST(CombatServiceTests, CalculateWeaponDamage_WithDexterity_AddsModifier) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 16, 10, 10, 10, 10}; // DEX 16 = +3
 
     int32_t damage = service.CalculateWeaponDamage(6, attribs, false);
@@ -215,7 +221,7 @@ TEST(CombatServiceTests, CalculateWeaponDamage_WithDexterity_AddsModifier) {
 }
 
 TEST(CombatServiceTests, CalculateWeaponDamage_LowAttribute_MinimumOne) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{6, 10, 10, 10, 10, 10}; // STR 6 = -2
 
     int32_t damage = service.CalculateWeaponDamage(1, attribs, true);
@@ -228,7 +234,7 @@ TEST(CombatServiceTests, CalculateWeaponDamage_LowAttribute_MinimumOne) {
 // ============================================================================
 
 TEST(CombatServiceTests, CalculateSpellDamage_MageWithIntelligence_AddsBonus) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 10, 10, 18, 10, 10}; // INT 18 = +4
 
     int32_t damage = service.CalculateSpellDamage(12, attribs, CharacterClass::Mage);
@@ -237,7 +243,7 @@ TEST(CombatServiceTests, CalculateSpellDamage_MageWithIntelligence_AddsBonus) {
 }
 
 TEST(CombatServiceTests, CalculateSpellDamage_ClericWithWisdom_AddsBonus) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 10, 10, 10, 16, 10}; // WIS 16 = +3
 
     int32_t damage = service.CalculateSpellDamage(10, attribs, CharacterClass::Cleric);
@@ -246,7 +252,7 @@ TEST(CombatServiceTests, CalculateSpellDamage_ClericWithWisdom_AddsBonus) {
 }
 
 TEST(CombatServiceTests, CalculateSpellDamage_WarriorNoCasting_NoBonus) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{18, 10, 10, 10, 10, 10};
 
     int32_t damage = service.CalculateSpellDamage(8, attribs, CharacterClass::Warrior);
@@ -255,7 +261,7 @@ TEST(CombatServiceTests, CalculateSpellDamage_WarriorNoCasting_NoBonus) {
 }
 
 TEST(CombatServiceTests, CalculateSpellDamage_RogueLimitedCasting_HalfBonus) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 10, 10, 14, 10, 10}; // INT 14 = +2
 
     int32_t damage = service.CalculateSpellDamage(10, attribs, CharacterClass::Rogue);
@@ -268,7 +274,7 @@ TEST(CombatServiceTests, CalculateSpellDamage_RogueLimitedCasting_HalfBonus) {
 // ============================================================================
 
 TEST(CombatServiceTests, SpellAttackHits_HighBonus_Hits) {
-    CombatService service;
+    CombatService service{TestSeed};
     int hits = 0;
 
     for (int i = 0; i < 100; ++i) {
@@ -281,7 +287,7 @@ TEST(CombatServiceTests, SpellAttackHits_HighBonus_Hits) {
 }
 
 TEST(CombatServiceTests, SpellAttackHits_LowBonus_Misses) {
-    CombatService service;
+    CombatService service{TestSeed};
     int hits = 0;
 
     for (int i = 0; i < 100; ++i) {
@@ -294,7 +300,7 @@ TEST(CombatServiceTests, SpellAttackHits_LowBonus_Misses) {
 }
 
 TEST(CombatServiceTests, MakesSavingThrow_HighBonus_Succeeds) {
-    CombatService service;
+    CombatService service{TestSeed};
     int successes = 0;
 
     for (int i = 0; i < 100; ++i) {
@@ -307,7 +313,7 @@ TEST(CombatServiceTests, MakesSavingThrow_HighBonus_Succeeds) {
 }
 
 TEST(CombatServiceTests, MakesSavingThrow_WithAdvantage_MoreSuccesses) {
-    CombatService service;
+    CombatService service{TestSeed};
     int normalSuccesses = 0;
     int advantageSuccesses = 0;
 
@@ -320,7 +326,7 @@ TEST(CombatServiceTests, MakesSavingThrow_WithAdvantage_MoreSuccesses) {
 }
 
 TEST(CombatServiceTests, CalculateSpellSaveDC_HighLevelHighStat_HighDC) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 10, 10, 20, 10, 10}; // INT 20 = +5
 
     int32_t dc = service.CalculateSpellSaveDC(10, attribs, CharacterClass::Mage);
@@ -329,7 +335,7 @@ TEST(CombatServiceTests, CalculateSpellSaveDC_HighLevelHighStat_HighDC) {
 }
 
 TEST(CombatServiceTests, CalculateSpellSaveDC_LowLevelLowStat_LowDC) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 10, 10, 10, 10, 10}; // INT 10 = +0
 
     int32_t dc = service.CalculateSpellSaveDC(1, attribs, CharacterClass::Mage);
@@ -342,7 +348,7 @@ TEST(CombatServiceTests, CalculateSpellSaveDC_LowLevelLowStat_LowDC) {
 // ============================================================================
 
 TEST(CombatServiceTests, CalculateAreaDamage_MultipleTargets_AllReceiveDamage) {
-    CombatService service;
+    CombatService service{TestSeed};
     std::vector<int32_t> targetACs{12, 15, 18};
 
     auto results = service.CalculateAreaDamage(20, 5, DamageType::Fire, targetACs);
@@ -356,7 +362,7 @@ TEST(CombatServiceTests, CalculateAreaDamage_MultipleTargets_AllReceiveDamage) {
 }
 
 TEST(CombatServiceTests, CalculateAreaDamage_DifferentArmor_DifferentReduction) {
-    CombatService service;
+    CombatService service{TestSeed};
     std::vector<int32_t> targetACs{10, 20, 30};
 
     auto results = service.CalculateAreaDamage(30, 0, DamageType::Slashing, targetACs);
@@ -372,7 +378,7 @@ TEST(CombatServiceTests, CalculateAreaDamage_DifferentArmor_DifferentReduction) 
 // ============================================================================
 
 TEST(CombatServiceTests, CalculateHealing_WithWisdom_AddsBonus) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 10, 10, 10, 16, 10}; // WIS 16 = +3
 
     int32_t healing = service.CalculateHealing(10, attribs);
@@ -381,7 +387,7 @@ TEST(CombatServiceTests, CalculateHealing_WithWisdom_AddsBonus) {
 }
 
 TEST(CombatServiceTests, CalculateHealing_LowWisdom_MinimumOne) {
-    CombatService service;
+    CombatService service{TestSeed};
     Attributes attribs{10, 10, 10, 10, 6, 10}; // WIS 6 = -2
 
     int32_t healing = service.CalculateHealing(1, attribs);
@@ -394,7 +400,7 @@ TEST(CombatServiceTests, CalculateHealing_LowWisdom_MinimumOne) {
 // ============================================================================
 
 TEST(CombatServiceTests, HasAdvantage_HiddenAttacker_ReturnsTrue) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     bool advantage = service.HasAdvantage(true, false, false);
 
@@ -402,7 +408,7 @@ TEST(CombatServiceTests, HasAdvantage_HiddenAttacker_ReturnsTrue) {
 }
 
 TEST(CombatServiceTests, HasAdvantage_ProneTarget_ReturnsTrue) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     bool advantage = service.HasAdvantage(false, true, false);
 
@@ -410,7 +416,7 @@ TEST(CombatServiceTests, HasAdvantage_ProneTarget_ReturnsTrue) {
 }
 
 TEST(CombatServiceTests, HasAdvantage_NoConditions_ReturnsFalse) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     bool advantage = service.HasAdvantage(false, false, false);
 
@@ -418,7 +424,7 @@ TEST(CombatServiceTests, HasAdvantage_NoConditions_ReturnsFalse) {
 }
 
 TEST(CombatServiceTests, HasDisadvantage_BlindedAttacker_ReturnsTrue) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     bool disadvantage = service.HasDisadvantage(true, false, false);
 
@@ -426,7 +432,7 @@ TEST(CombatServiceTests, HasDisadvantage_BlindedAttacker_ReturnsTrue) {
 }
 
 TEST(CombatServiceTests, HasDisadvantage_ProneAttacker_ReturnsTrue) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     bool disadvantage = service.HasDisadvantage(false, true, false);
 
@@ -438,7 +444,7 @@ TEST(CombatServiceTests, HasDisadvantage_ProneAttacker_ReturnsTrue) {
 // ============================================================================
 
 TEST(CombatServiceTests, GetCriticalMultiplier_Rogue_HighestMultiplier) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     float rogueMultiplier = service.GetCriticalMultiplier(CharacterClass::Rogue);
     float warriorMultiplier = service.GetCriticalMultiplier(CharacterClass::Warrior);
@@ -449,7 +455,7 @@ TEST(CombatServiceTests, GetCriticalMultiplier_Rogue_HighestMultiplier) {
 }
 
 TEST(CombatServiceTests, GetCriticalHitThreshold_Rogue_LowerThreshold) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     int32_t rogueThreshold = service.GetCriticalHitThreshold(CharacterClass::Rogue);
     int32_t mageThreshold = service.GetCriticalHitThreshold(CharacterClass::Mage);
@@ -458,7 +464,7 @@ TEST(CombatServiceTests, GetCriticalHitThreshold_Rogue_LowerThreshold) {
 }
 
 TEST(CombatServiceTests, GetCriticalHitThreshold_Warrior_EnhancedCrits) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     int32_t threshold = service.GetCriticalHitThreshold(CharacterClass::Warrior);
 
@@ -466,7 +472,7 @@ TEST(CombatServiceTests, GetCriticalHitThreshold_Warrior_EnhancedCrits) {
 }
 
 TEST(CombatServiceTests, GetCriticalHitThreshold_StandardClass_NormalThreshold) {
-    CombatService service;
+    CombatService service{TestSeed};
 
     int32_t threshold = service.GetCriticalHitThreshold(CharacterClass::Mage);
 
