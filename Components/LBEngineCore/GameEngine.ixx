@@ -75,6 +75,10 @@ export namespace LB::Engine {
         static constexpr std::string_view CornerModel = "pillar.glb";
         static constexpr std::string_view PlayerModel = "character_knight.gltf";
 
+        // Walls between the camera and the player fade (game-design.md, occlusion handling)
+        static constexpr float FadedWallAlpha = 0.3f;
+        static constexpr float WallFadeSeconds = 0.2f;   // full fade in or out
+
         GameEngine() {
             timer_.SetFixedTimeStep(true);
             timer_.SetTargetElapsedSeconds(DefaultTargetElapsedSeconds);
@@ -158,6 +162,7 @@ export namespace LB::Engine {
             characterService_.ClearAll();
             playerId_.reset();
             models_ = {};
+            walls_.clear();
             renderingSystem_.Shutdown();
             paused_ = false;
             initialized_ = false;
@@ -329,6 +334,16 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// Opacity of each wall piece (1 opaque, FadedWallAlpha while hiding the player); empty
+        /// when the world is drawn with primitives
+        /// </summary>
+        [[nodiscard]] std::vector<float> GetWallOpacities() const {
+            std::vector<float> opacities;
+            for (const auto& wall : walls_) opacities.push_back(wall.opacity);
+            return opacities;
+        }
+
+        /// <summary>
         /// The isometric camera following the player
         /// </summary>
         [[nodiscard]] const Systems::Rendering::IsometricCamera& GetCamera() const noexcept {
@@ -417,6 +432,7 @@ export namespace LB::Engine {
                 camera_.Follow({ playerPosition_.x, playerPosition_.y });
             }
             camera_.Update(static_cast<float>(elapsedSeconds));
+            UpdateWallFade(static_cast<float>(elapsedSeconds));
 
             // This step has consumed the input frame; presses are seen by exactly one step
             inputSystem_.Update();
@@ -456,6 +472,7 @@ export namespace LB::Engine {
         /// </summary>
         bool LoadModels(const std::string& modelDirectory) {
             models_ = {};
+            walls_.clear();
             if (modelDirectory.empty()) return true;
 
             const auto directory = std::filesystem::path(std::u8string(modelDirectory.begin(), modelDirectory.end()));
@@ -481,7 +498,116 @@ export namespace LB::Engine {
                 return false;
             }
             models_.loaded = true;
+            BuildWalls();
             return true;
+        }
+
+        // A wall or corner piece of the arena, placed once when the models load
+        struct WallPiece {
+            Systems::Rendering::ModelId model{};
+            Systems::Rendering::Vector3 position{};
+            float yaw{0.0f};
+            Systems::Rendering::Vector3 boundsMin{};   // world space
+            Systems::Rendering::Vector3 boundsMax{};
+            float opacity{1.0f};
+        };
+
+        // World bounding box of a model placed with scale, a turn around Y, and a position
+        // (matches the renderer's Scale * RotationY * Translation)
+        WallPiece PlacePiece(Systems::Rendering::ModelId model, float x, float y, float z, float yaw) const {
+            const auto* data = renderingSystem_.GetModel(model);
+            WallPiece piece{ model, { x, y, z }, yaw };
+            const float c = std::cos(yaw);
+            const float s = std::sin(yaw);
+            constexpr float big = std::numeric_limits<float>::max();
+            piece.boundsMin = { big, data->boundsMin.y * ModelScale + y, big };
+            piece.boundsMax = { -big, data->boundsMax.y * ModelScale + y, -big };
+            for (float cx : { data->boundsMin.x, data->boundsMax.x }) {
+                for (float cz : { data->boundsMin.z, data->boundsMax.z }) {
+                    const float wx = (cx * c + cz * s) * ModelScale + x;
+                    const float wz = (-cx * s + cz * c) * ModelScale + z;
+                    piece.boundsMin.x = std::min(piece.boundsMin.x, wx);
+                    piece.boundsMax.x = std::max(piece.boundsMax.x, wx);
+                    piece.boundsMin.z = std::min(piece.boundsMin.z, wz);
+                    piece.boundsMax.z = std::max(piece.boundsMax.z, wz);
+                }
+            }
+            return piece;
+        }
+
+        // Wall segments two tiles long whose inner face is on the arena edge, and pillars filling
+        // the corners
+        void BuildWalls() {
+            walls_.clear();
+            const auto* wall = renderingSystem_.GetModel(models_.wall);
+            const float segment = (wall->boundsMax.x - wall->boundsMin.x) * ModelScale;     // 2 tiles
+            const float halfDepth = (wall->boundsMax.z - wall->boundsMin.z) * ModelScale * 0.5f;
+            const float wallY = -wall->boundsMin.y * ModelScale;
+            constexpr float quarterTurn = std::numbers::pi_v<float> * 0.5f;
+            for (float x = -ArenaHalfWidth + segment * 0.5f; x < ArenaHalfWidth; x += segment) {
+                walls_.push_back(PlacePiece(models_.wall, x, wallY, -ArenaHalfHeight - halfDepth, 0.0f));
+                walls_.push_back(PlacePiece(models_.wall, x, wallY, ArenaHalfHeight + halfDepth, 0.0f));
+            }
+            for (float z = -ArenaHalfHeight + segment * 0.5f; z < ArenaHalfHeight; z += segment) {
+                walls_.push_back(PlacePiece(models_.wall, -ArenaHalfWidth - halfDepth, wallY, z, quarterTurn));
+                walls_.push_back(PlacePiece(models_.wall, ArenaHalfWidth + halfDepth, wallY, z, quarterTurn));
+            }
+
+            const float cornerY = -renderingSystem_.GetModel(models_.corner)->boundsMin.y * ModelScale;
+            for (float sx : { -1.0f, 1.0f }) {
+                for (float sz : { -1.0f, 1.0f }) {
+                    walls_.push_back(PlacePiece(models_.corner, sx * (ArenaHalfWidth + halfDepth), cornerY, sz * (ArenaHalfHeight + halfDepth), 0.0f));
+                }
+            }
+        }
+
+        // Does the segment from -> to pass through the box? (slab test)
+        static bool SegmentHitsBox(Systems::Rendering::Vector3 from, Systems::Rendering::Vector3 to,
+                                   Systems::Rendering::Vector3 lo, Systems::Rendering::Vector3 hi) noexcept {
+            const float start[3] = { from.x, from.y, from.z };
+            const float delta[3] = { to.x - from.x, to.y - from.y, to.z - from.z };
+            const float minimum[3] = { lo.x, lo.y, lo.z };
+            const float maximum[3] = { hi.x, hi.y, hi.z };
+            float enter = 0.0f;
+            float exit = 1.0f;
+            for (int axis = 0; axis < 3; ++axis) {
+                if (std::abs(delta[axis]) < 1e-6f) {
+                    if (start[axis] < minimum[axis] || start[axis] > maximum[axis]) return false;
+                    continue;
+                }
+                float a = (minimum[axis] - start[axis]) / delta[axis];
+                float b = (maximum[axis] - start[axis]) / delta[axis];
+                if (a > b) std::swap(a, b);
+                enter = std::max(enter, a);
+                exit = std::min(exit, b);
+                if (enter > exit) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Fade wall pieces that hide the player from the camera (sight lines to the feet, chest,
+        /// and head) and bring the others back, easing over WallFadeSeconds
+        /// </summary>
+        void UpdateWallFade(float elapsedSeconds) {
+            if (walls_.empty()) return;
+
+            const auto eye = camera_.GetView().eye;
+            const float step = elapsedSeconds / WallFadeSeconds * (1.0f - FadedWallAlpha);
+            for (auto& wall : walls_) {
+                bool hides = false;
+                if (playerId_) {
+                    for (float height : { 0.1f, 0.6f, 1.1f }) {
+                        const Systems::Rendering::Vector3 target{ playerPosition_.x, height, playerPosition_.y };
+                        if (SegmentHitsBox(eye, target, wall.boundsMin, wall.boundsMax)) {
+                            hides = true;
+                            break;
+                        }
+                    }
+                }
+                const float goal = hides ? FadedWallAlpha : 1.0f;
+                wall.opacity = wall.opacity < goal ? std::min(goal, wall.opacity + step) : std::max(goal, wall.opacity - step);
+            }
         }
 
         bool LoadContent(const std::string& contentDirectory) {
@@ -679,9 +805,6 @@ export namespace LB::Engine {
             const auto place = [&](Systems::Rendering::ModelId model, float x, float y, float z, float yaw) {
                 renderingSystem_.DrawModel(ModelRenderData{ model, { x, y, z }, yaw, ModelScale, tint });
             };
-            const auto bottomOf = [&](Systems::Rendering::ModelId model) {
-                return renderingSystem_.GetModel(model)->boundsMin.y * ModelScale;
-            };
             const auto topOf = [&](Systems::Rendering::ModelId model) {
                 return renderingSystem_.GetModel(model)->boundsMax.y * ModelScale;
             };
@@ -697,25 +820,10 @@ export namespace LB::Engine {
                 }
             }
 
-            const auto* wall = renderingSystem_.GetModel(models_.wall);
-            const float segment = (wall->boundsMax.x - wall->boundsMin.x) * ModelScale;     // 2 tiles
-            const float halfDepth = (wall->boundsMax.z - wall->boundsMin.z) * ModelScale * 0.5f;
-            const float wallY = -bottomOf(models_.wall);
-            constexpr float quarterTurn = std::numbers::pi_v<float> * 0.5f;
-            for (float x = -ArenaHalfWidth + segment * 0.5f; x < ArenaHalfWidth; x += segment) {
-                place(models_.wall, x, wallY, -ArenaHalfHeight - halfDepth, 0.0f);
-                place(models_.wall, x, wallY, ArenaHalfHeight + halfDepth, 0.0f);
-            }
-            for (float z = -ArenaHalfHeight + segment * 0.5f; z < ArenaHalfHeight; z += segment) {
-                place(models_.wall, -ArenaHalfWidth - halfDepth, wallY, z, quarterTurn);
-                place(models_.wall, ArenaHalfWidth + halfDepth, wallY, z, quarterTurn);
-            }
-
-            const float cornerY = -bottomOf(models_.corner);
-            for (float sx : { -1.0f, 1.0f }) {
-                for (float sz : { -1.0f, 1.0f }) {
-                    place(models_.corner, sx * (ArenaHalfWidth + halfDepth), cornerY, sz * (ArenaHalfHeight + halfDepth), 0.0f);
-                }
+            for (const auto& wall : walls_) {
+                auto wallTint = tint;
+                wallTint.a = wall.opacity;
+                renderingSystem_.DrawModel(ModelRenderData{ wall.model, wall.position, wall.yaw, ModelScale, wallTint });
             }
         }
 
@@ -858,6 +966,7 @@ export namespace LB::Engine {
             Systems::Rendering::ModelId player{};
         };
         WorldModels models_;
+        std::vector<WallPiece> walls_;
         WorldPoint previousRightStick_{};         // for right stick flick detection
         StepTimer timer_;
         double gameTimeSeconds_{0.0};

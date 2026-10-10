@@ -47,6 +47,7 @@ module;
 #endif
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -63,6 +64,9 @@ module;
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dxguid.lib")
+
+// Compiled shaders (ShaderBytecode.cpp, a plain C++ file including the FXCompile output)
+#include "ShaderBytecode.h"
 
 #pragma warning(disable : 4061)
 
@@ -303,8 +307,11 @@ namespace LB::Systems::Rendering::Detail
             const XMVECTOR target = XMVectorSet(targetX, targetY, targetZ, 1.0f);
             if (XMVector3Equal(eye, target)) return;
 
-            m_effect->SetView(XMMatrixLookAtRH(eye, target, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)));
-            m_effect->SetProjection(XMMatrixPerspectiveFovRH(verticalFov, width / height, nearPlane, farPlane));
+            const XMMATRIX view = XMMatrixLookAtRH(eye, target, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+            const XMMATRIX projection = XMMatrixPerspectiveFovRH(verticalFov, width / height, nearPlane, farPlane);
+            m_effect->SetView(view);
+            m_effect->SetProjection(projection);
+            XMStoreFloat4x4(&m_frameConstants.viewProjection, view * projection);
         }
 
         // Draw a unit primitive (0 box, 1 cylinder, 2 sphere, 3 cone) scaled, turned around Y,
@@ -335,36 +342,81 @@ namespace LB::Systems::Rendering::Detail
             return m_models.size() - 1;
         }
 
-        // Draw every part of a model: part transform, then scale, turn around Y, and move to a
-        // world position. Material colors are multiplied by the tint. Call after SetCamera.
-        void DrawModel(std::size_t index, float x, float y, float z, float yaw, float scale,
-                       float r, float g, float b, float a)
+        // Which pass an instanced model draw belongs to
+        enum class ModelPass
         {
-            if (!m_effect || index >= m_models.size()) return;
+            Opaque,        // depth-tested and written, no blending
+            DepthOnly,     // faded instances, first: depth only, so each shows its nearest surface
+            Transparent    // faded instances, second: premultiplied alpha blend where depth matches
+        };
+
+        // Bind the model pipeline's root signature and per-frame constants. Call after SetCamera,
+        // before the DrawModelInstances calls of a frame.
+        void BeginModelPass()
+        {
+            if (!m_modelRootSignature || !m_graphicsMemory) return;
+
+            auto frame = m_graphicsMemory->Allocate(sizeof(FrameConstants), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+            std::memcpy(frame.Memory(), &m_frameConstants, sizeof(FrameConstants));
+
+            auto commandList = m_deviceResources->GetCommandList();
+            commandList->SetGraphicsRootSignature(m_modelRootSignature.Get());
+            commandList->SetGraphicsRootConstantBufferView(0, frame.GpuAddress());
+            commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        }
+
+        // Draw every copy of a model with one instanced draw per part. Each copy places the model
+        // (part transform, then scale, turn around Y, move) and tints its material colors.
+        void DrawModelInstances(std::size_t index, const ModelInstance* instances, std::size_t count, ModelPass pass)
+        {
+            if (!m_modelRootSignature || !m_graphicsMemory || index >= m_models.size() || count == 0) return;
             const auto& model = m_models[index];
             if (model.parts.size() != model.data->parts.size()) return;
 
             using namespace DirectX;
-            const XMMATRIX placement = XMMatrixScaling(scale, scale, scale) * XMMatrixRotationY(yaw) * XMMatrixTranslation(x, y, z);
-
             auto commandList = m_deviceResources->GetCommandList();
-            commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            for (std::size_t i = 0; i < model.parts.size(); ++i)
+            commandList->SetPipelineState(m_modelPipelines[static_cast<int>(pass)].Get());
+
+            std::vector<XMMATRIX> placements;
+            placements.reserve(count);
+            for (std::size_t i = 0; i < count; ++i)
             {
-                const auto& part = model.data->parts[i];
-                const auto& gpu = model.parts[i];
-                const auto& color = model.data->materials[part.materialIndex].baseColor;
+                const auto& instance = instances[i];
+                placements.push_back(XMMatrixScaling(instance.scale, instance.scale, instance.scale)
+                    * XMMatrixRotationY(instance.yawRadians)
+                    * XMMatrixTranslation(instance.position.x, instance.position.y, instance.position.z));
+            }
 
-                XMFLOAT4X4 transform;
-                std::copy(part.transform.m.begin(), part.transform.m.end(), &transform._11);
-                m_effect->SetWorld(XMLoadFloat4x4(&transform) * placement);
-                m_effect->SetDiffuseColor(XMVectorSet(color[0] * r, color[1] * g, color[2] * b, 1.0f));
-                m_effect->SetAlpha(color[3] * a);
-                m_effect->Apply(commandList);
+            for (std::size_t p = 0; p < model.parts.size(); ++p)
+            {
+                const auto& part = model.data->parts[p];
+                const auto& gpu = model.parts[p];
+                const auto& material = model.data->materials[part.materialIndex].baseColor;
 
-                commandList->IASetVertexBuffers(0, 1, &gpu.vertexView);
+                XMFLOAT4X4 partTransform;
+                std::copy(part.transform.m.begin(), part.transform.m.end(), &partTransform._11);
+                const XMMATRIX local = XMLoadFloat4x4(&partTransform);
+
+                auto buffer = m_graphicsMemory->Allocate(count * sizeof(InstanceData), 16);
+                auto* data = static_cast<InstanceData*>(buffer.Memory());
+                for (std::size_t i = 0; i < count; ++i)
+                {
+                    // Store the first three columns of the row-vector matrix as rows (see the shader)
+                    const XMMATRIX world = XMMatrixTranspose(local * placements[i]);
+                    XMStoreFloat4(&data[i].world[0], world.r[0]);
+                    XMStoreFloat4(&data[i].world[1], world.r[1]);
+                    XMStoreFloat4(&data[i].world[2], world.r[2]);
+                    const auto& tint = instances[i].tint;
+                    data[i].color = XMFLOAT4(material[0] * tint[0], material[1] * tint[1], material[2] * tint[2], material[3] * tint[3]);
+                }
+
+                D3D12_VERTEX_BUFFER_VIEW views[2] = { gpu.vertexView, {} };
+                views[1].BufferLocation = buffer.GpuAddress();
+                views[1].SizeInBytes = static_cast<UINT>(count * sizeof(InstanceData));
+                views[1].StrideInBytes = sizeof(InstanceData);
+                commandList->IASetVertexBuffers(0, 2, views);
                 commandList->IASetIndexBuffer(&gpu.indexView);
-                commandList->DrawIndexedInstanced(gpu.indexCount, 1, 0, 0, 0);
+                commandList->DrawIndexedInstanced(gpu.indexCount, static_cast<UINT>(count), 0, 0, 0);
             }
         }
 
@@ -423,6 +475,9 @@ namespace LB::Systems::Rendering::Detail
         {
             for (auto& model : m_models)
                 model.parts.clear();
+            for (auto& pipeline : m_modelPipelines)
+                pipeline.Reset();
+            m_modelRootSignature.Reset();
             for (auto& shape : m_shapes)
                 shape.reset();
             m_effect.reset();
@@ -472,12 +527,17 @@ namespace LB::Systems::Rendering::Detail
             // DirectXTK's default three-light rig, dimmed for a dungeon: the lights add up, and the
             // sRGB target shows linear values brighter than a UNORM one did. Almost no specular, so
             // the flat-colored KayKit materials read as stone and cloth rather than plastic.
+            // The model shader uses the same lights (no specular there; almost none here)
             m_effect->EnableDefaultLighting();
-            m_effect->SetAmbientLightColor(XMVectorSet(0.03f, 0.03f, 0.04f, 1.0f));
+            m_effect->SetAmbientLightColor(XMLoadFloat4(&m_frameConstants.ambientColor));
             m_effect->SetSpecularColor(XMVectorSet(0.04f, 0.04f, 0.04f, 1.0f));
-            m_effect->SetLightDiffuseColor(0, XMVectorSet(0.75f, 0.70f, 0.62f, 1.0f));   // key: warm, torch-like
-            m_effect->SetLightDiffuseColor(1, XMVectorSet(0.12f, 0.13f, 0.18f, 1.0f));   // fill: cool
-            m_effect->SetLightDiffuseColor(2, XMVectorSet(0.10f, 0.10f, 0.12f, 1.0f));   // back
+            for (int i = 0; i < 3; ++i)
+            {
+                m_effect->SetLightDirection(i, XMLoadFloat4(&m_frameConstants.lightDirection[i]));
+                m_effect->SetLightDiffuseColor(i, XMLoadFloat4(&m_frameConstants.lightColor[i]));
+            }
+
+            CreateModelPipelines(renderTargetState);
 
             // Unit shapes centered on the origin; scaled per draw
             m_shapes[0] = GeometricPrimitive::CreateBox(XMFLOAT3(1.0f, 1.0f, 1.0f));
@@ -488,6 +548,95 @@ namespace LB::Systems::Rendering::Detail
             // Models added before (or kept across) a device loss
             for (auto& model : m_models)
                 UploadModel(model);
+        }
+
+        // Per-frame constants of the model shader (ModelInstanced.hlsli: cbuffer Frame)
+        struct FrameConstants
+        {
+            DirectX::XMFLOAT4X4 viewProjection{};
+            // DirectXTK's default three-light rig, dimmed for a dungeon: the lights add up, and the
+            // sRGB target shows linear values brighter than a UNORM one did
+            DirectX::XMFLOAT4 lightDirection[3] = {
+                { -0.5265408f, -0.5735765f, -0.6275069f, 0.0f },
+                {  0.7198464f,  0.3420201f,  0.6040227f, 0.0f },
+                {  0.4545195f, -0.7660444f,  0.4545195f, 0.0f } };
+            DirectX::XMFLOAT4 lightColor[3] = {
+                { 0.75f, 0.70f, 0.62f, 1.0f },     // key: warm, torch-like
+                { 0.12f, 0.13f, 0.18f, 1.0f },     // fill: cool
+                { 0.10f, 0.10f, 0.12f, 1.0f } };   // back
+            DirectX::XMFLOAT4 ambientColor{ 0.03f, 0.03f, 0.04f, 1.0f };
+        };
+
+        // Per-instance vertex stream of the model shader (WORLD0..2, COLOR0)
+        struct InstanceData
+        {
+            DirectX::XMFLOAT4 world[3];
+            DirectX::XMFLOAT4 color;
+        };
+
+        void CreateModelPipelines(const DirectX::RenderTargetState& renderTargetState)
+        {
+            using namespace DirectX;
+            auto device = m_deviceResources->GetD3DDevice();
+
+            // Root signature: the per-frame constant buffer only
+            CD3DX12_ROOT_PARAMETER parameter;
+            parameter.InitAsConstantBufferView(0);
+            const CD3DX12_ROOT_SIGNATURE_DESC rootDesc(1, &parameter, 0, nullptr,
+                D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
+                | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
+                | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
+                | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS);
+            ComPtr<ID3DBlob> signature;
+            ComPtr<ID3DBlob> error;
+            ThrowIfFailed(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf()));
+            ThrowIfFailed(device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(),
+                IID_PPV_ARGS(m_modelRootSignature.ReleaseAndGetAddressOf())));
+
+            static constexpr D3D12_INPUT_ELEMENT_DESC inputElements[] =
+            {
+                { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+                { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+                { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+                { "WORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+                { "WORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+                { "WORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            };
+            static_assert(sizeof(InstanceData) == 64);
+
+            std::size_t vsSize = 0;
+            std::size_t psSize = 0;
+            const auto* vs = LBShaders::ModelInstancedVS(vsSize);
+            const auto* ps = LBShaders::ModelInstancedPS(psSize);
+
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+            desc.pRootSignature = m_modelRootSignature.Get();
+            desc.VS = { vs, vsSize };
+            desc.PS = { ps, psSize };
+            desc.SampleMask = UINT_MAX;
+            desc.RasterizerState = CommonStates::CullCounterClockwise;   // clockwise front faces
+            desc.InputLayout = { inputElements, static_cast<UINT>(std::size(inputElements)) };
+            desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            desc.NumRenderTargets = 1;
+            desc.RTVFormats[0] = renderTargetState.rtvFormats[0];
+            desc.DSVFormat = renderTargetState.dsvFormat;
+            desc.SampleDesc.Count = 1;
+
+            const auto create = [&](ModelPass pass, const D3D12_BLEND_DESC& blend, const D3D12_DEPTH_STENCIL_DESC& depth)
+            {
+                desc.BlendState = blend;
+                desc.DepthStencilState = depth;
+                ThrowIfFailed(device->CreateGraphicsPipelineState(&desc,
+                    IID_PPV_ARGS(m_modelPipelines[static_cast<int>(pass)].ReleaseAndGetAddressOf())));
+            };
+
+            D3D12_BLEND_DESC depthOnly = CommonStates::Opaque;
+            depthOnly.RenderTarget[0].RenderTargetWriteMask = 0;
+
+            create(ModelPass::Opaque, CommonStates::Opaque, CommonStates::DepthDefault);
+            create(ModelPass::DepthOnly, depthOnly, CommonStates::DepthDefault);
+            create(ModelPass::Transparent, CommonStates::AlphaBlend, CommonStates::DepthRead);
         }
 
         // GPU copies of a model's parts, in the same order as ModelData::parts
@@ -611,6 +760,11 @@ namespace LB::Systems::Rendering::Detail
         std::unique_ptr<DirectX::GeometricPrimitive> m_shapes[4];
 
         std::vector<GpuModel> m_models;
+
+        // Instanced model pipeline
+        FrameConstants m_frameConstants;
+        ComPtr<ID3D12RootSignature> m_modelRootSignature;
+        ComPtr<ID3D12PipelineState> m_modelPipelines[3];   // by ModelPass
         DeviceCallback m_onDeviceLost;
         DeviceCallback m_onDeviceRestored;
     };

@@ -296,7 +296,9 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
-        /// Queue a loaded model for the world pass (unknown handles are ignored)
+        /// Queue a loaded model for the world pass (unknown handles are ignored). Copies of the
+        /// same model are drawn together, one instanced draw per part; a tint alpha below 1 draws
+        /// the copy see-through (after the opaque world, showing only its nearest surface).
         /// </summary>
         void DrawModel(const ModelRenderData& model) {
             if (!initialized_ || !GetModel(model.model)) return;
@@ -416,6 +418,8 @@ export namespace LB::Systems::Rendering {
         std::vector<RectangleRenderData> rectangleQueue_;
         std::vector<MeshRenderData> meshQueue_;
         std::vector<ModelRenderData> modelQueue_;
+        std::vector<std::vector<ModelInstance>> opaqueInstances_;   // per model, rebuilt each frame
+        std::vector<std::vector<ModelInstance>> fadedInstances_;
         std::vector<std::shared_ptr<const ModelData>> models_;   // ModelId - 1
         std::vector<std::filesystem::path> modelPaths_;          // canonical source of each model
         CameraView cameraView_{};
