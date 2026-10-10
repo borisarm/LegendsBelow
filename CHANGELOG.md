@@ -34,7 +34,7 @@ All notable changes to LegendsBelow. Dates are commit dates.
 - `CharacterService` uses data-driven class rules: HP/MP come from the class progression tables (MaxHP = table HP + CON_mod x level; MaxMP = table MP + INT/WIS_mod x level for Mages/Clerics), replacing the hard-coded formulas. Characters can only be created for classes whose rules are configured; the engine configures them from classes.json and runs without a player when there is no content.
 - Removed the hard-coded class attribute bonus on creation (classes.json starting attributes are the class template) and the fixed per-level attribute gains. Armour proficiency lists replaced by the armour adjustment model; armour.json `allowedClasses` is no longer cross-checked against them.
 - Movement is screen-relative through the camera: W/stick up walks away from the camera whatever its rotation. The background is a dim ambient color instead of cornflower blue.
-- `LB.Engine` re-exports `LB.RenderingSystem`. DirectXTK12 added to `vcpkg.json` (used as a DLL); test projects that link the renderer copy `DirectXTK12.dll` next to them (`LBDeployDirectXTK12`).
+- `LB.Engine` re-exports `LB.RenderingSystem`. DirectXTK12 added to `vcpkg.json` and linked statically into `LBRenderingSystem.lib` through overlay triplets (`triplets/`, `vcpkg-configuration.json`) that keep every other port dynamic; no DirectXTK12.dll ships.
 - LegendsBelow is now a Win32/GDK shell: `Main.cpp` imports `LB.Engine` and forwards window events; `Game`, `DeviceResources`, and `StepTimer` removed from the executable.
 - `vcpkg.json` moved to the repository root so all projects share one manifest.
 - LBEngineCore references only the projects it imports (LBRenderingSystem, LBModel.Core).
