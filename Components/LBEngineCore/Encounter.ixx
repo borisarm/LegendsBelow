@@ -70,6 +70,9 @@ export namespace LB::Engine {
         EnemyState state{EnemyState::Spawning};
         float stateSeconds{0.0f};           // time spent in the current state
         std::int32_t hitPoints{1};
+        std::int32_t maxHitPoints{1};       // the type's hit points scaled for the wave
+        std::int32_t bonusDamage{0};        // added to the type's damage for the wave
+        std::int32_t experience{0};         // awarded for the kill, scaled for the wave
         bool impactDone{false};             // the current attack's hit has been resolved
         float recoverySeconds{0.0f};        // until the next attack may start
         float hitFlashSeconds{0.0f};        // > 0 right after being hit
@@ -175,6 +178,21 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// How much tougher a wave's enemies are (design-combat-system.md 8.1, the wave standing in
+        /// for depth): +15% hit points and +10% experience per wave, +1 damage every second wave
+        /// </summary>
+        struct WaveScaling {
+            float hitPoints{1.0f};
+            std::int32_t damage{0};
+            float experience{1.0f};
+        };
+
+        static WaveScaling ScalingFor(std::int32_t wave) noexcept {
+            const std::int32_t depth = std::max(0, wave - 1);
+            return { 1.0f + 0.15f * static_cast<float>(depth), depth / 2, 1.0f + 0.1f * static_cast<float>(depth) };
+        }
+
+        /// <summary>
         /// Enemies in a wave: light ones grow from 2 to 4, heavy ones from 0 to 2
         /// (placeholder composition until dungeon rooms define their encounters)
         /// </summary>
@@ -193,7 +211,7 @@ export namespace LB::Engine {
 
             const auto spawnFacingPlayer = [&](const Content::EnemyDefinition& type) {
                 const auto at = FindSpawnPoint(player);
-                Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y));
+                Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, wave);
             };
             const auto [lightCount, heavyCount] = WaveComposition(wave);
             for (std::int32_t i = 0; i < heavyCount; ++i) spawnFacingPlayer(heavy_ ? *heavy_ : *light_);
@@ -201,16 +219,20 @@ export namespace LB::Engine {
         }
 
         /// <summary>
-        /// Add one enemy at a point, facing a yaw. Without rising (the spawn animation) it is ready
-        /// at once (tests, scripted placements).
+        /// Add one enemy at a point, facing a yaw, as tough as a wave makes it. Without rising (the
+        /// spawn animation) it is ready at once (tests, scripted placements).
         /// </summary>
-        std::uint32_t Spawn(const Content::EnemyDefinition& type, WorldPoint at, float facingYaw, bool rise = true) {
+        std::uint32_t Spawn(const Content::EnemyDefinition& type, WorldPoint at, float facingYaw, bool rise = true, std::int32_t wave = 1) {
+            const auto scaling = ScalingFor(wave);
             Enemy enemy;
             enemy.id = nextId_++;
             enemy.definition = &type;
             enemy.position = ClampToArena(at);
             enemy.facingYaw = facingYaw;
-            enemy.hitPoints = type.hitPoints;
+            enemy.maxHitPoints = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(type.hitPoints) * scaling.hitPoints)));
+            enemy.hitPoints = enemy.maxHitPoints;
+            enemy.bonusDamage = scaling.damage;
+            enemy.experience = static_cast<std::int32_t>(std::lround(static_cast<float>(type.experience) * scaling.experience));
             Enter(enemy, rise ? EnemyState::Spawning : EnemyState::Idle);
             enemies_.push_back(std::move(enemy));
             return enemies_.back().id;
@@ -332,8 +354,9 @@ export namespace LB::Engine {
             return it != enemies_.end() ? &*it : nullptr;
         }
 
-        static Services::Combat::WeaponAttackProfile AttackOf(const Content::EnemyDefinition& type) {
-            return { type.attackBonus, type.damageDice, type.damageBonus, type.damageType, type.critRangeMin, type.critMultiplier };
+        static Services::Combat::WeaponAttackProfile AttackOf(const Enemy& enemy) {
+            const auto& type = *enemy.definition;
+            return { type.attackBonus, type.damageDice, type.damageBonus + enemy.bonusDamage, type.damageType, type.critRangeMin, type.critMultiplier };
         }
 
         // Change state and start the state's animation
@@ -395,7 +418,7 @@ export namespace LB::Engine {
                 if (!enemy.impactDone && enemy.stateSeconds >= type.attackTimeSeconds * type.attackImpactFraction) {
                     enemy.impactDone = true;
                     if (player.alive && distance <= type.attackRange + AttackReachSlack) {
-                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(type), player.defense), false });
+                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), player.defense), false });
                     }
                 }
                 if (enemy.stateSeconds >= type.attackTimeSeconds) {

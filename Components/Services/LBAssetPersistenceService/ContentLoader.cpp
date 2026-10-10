@@ -544,6 +544,7 @@ namespace LB::Content {
             reader.ReadFloat("movementSpeed", enemy.movementSpeed, true);
             reader.ReadFloat("aggroRange", enemy.aggroRange, false);
 
+            reader.ReadString("lootTable", enemy.lootTable, false);
             reader.ReadString("model", enemy.model, true);
             reader.ReadString("mainHandModel", enemy.mainHandModel, false);
             reader.ReadString("offHandModel", enemy.offHandModel, false);
@@ -563,6 +564,72 @@ namespace LB::Content {
             if (enemy.aggroRange < 0.0f) reader.Error("'aggroRange' must not be negative");
             if (enemy.modelScale <= 0.0f) reader.Error("'modelScale' must be positive");
             return enemy;
+        }
+
+        ConsumableDefinition ReadConsumable(EntryReader& reader) {
+            ConsumableDefinition consumable{};
+            consumable.healing = LB::Dice{ 0, 0, 0 };
+            reader.ReadString("id", consumable.key, true);
+            reader.ReadString("name", consumable.name, true);
+            reader.ReadDice("healing", consumable.healing, false);
+            reader.ReadInt("maxStack", consumable.maxStack, false);
+            reader.ReadString("model", consumable.model, true);
+
+            if (consumable.maxStack < 1) reader.Error("'maxStack' must be at least 1");
+            return consumable;
+        }
+
+        LootTableDefinition ReadLootTable(EntryReader& reader) {
+            LootTableDefinition table{};
+            reader.ReadString("id", table.key, true);
+            reader.ReadFloat("goldChance", table.goldChance, false);
+            reader.ReadDice("gold", table.gold, table.goldChance > 0.0f);
+            reader.ReadFloat("itemChance", table.itemChance, false);
+
+            if (const Json* items = reader.Nested("items", table.itemChance > 0.0f, true)) {
+                std::size_t index = 0;
+                for (const auto& item : *items) {
+                    const std::string context = std::format("{}: items[{}]", reader.Context(), index++);
+                    if (!item.is_object()) {
+                        reader.Errors().push_back(std::format("{}: must be a JSON object", context));
+                        continue;
+                    }
+                    EntryReader itemReader(item, context, reader.Errors());
+                    LootEntry entry{};
+                    itemReader.ReadString("item", entry.item, true);
+                    itemReader.ReadInt("weight", entry.weight, false);
+                    if (entry.weight < 1) itemReader.Error("'weight' must be at least 1");
+                    table.items.push_back(std::move(entry));
+                }
+            }
+
+            if (table.goldChance < 0.0f || table.goldChance > 1.0f) reader.Error("'goldChance' must be in [0, 1]");
+            if (table.itemChance < 0.0f || table.itemChance > 1.0f) reader.Error("'itemChance' must be in [0, 1]");
+            if (table.itemChance > 0.0f && table.items.empty()) reader.Error("'items' must list at least one item when 'itemChance' is above 0");
+            return table;
+        }
+
+        // Rules spanning files: loot tables name existing items, enemies name existing tables
+        void CheckLootRules(const std::vector<LootTableDefinition>& tables, const std::vector<EnemyDefinition>& enemies,
+                            const std::vector<WeaponDefinition>& weapons, const std::vector<ArmorDefinition>& armour,
+                            const std::vector<ConsumableDefinition>& consumables, std::vector<String>& errors) {
+            const auto isItem = [&](const String& key) {
+                return std::ranges::find(weapons, key, &WeaponDefinition::key) != weapons.end()
+                    || std::ranges::find(armour, key, &ArmorDefinition::key) != armour.end()
+                    || std::ranges::find(consumables, key, &ConsumableDefinition::key) != consumables.end();
+            };
+            for (const auto& table : tables) {
+                for (const auto& entry : table.items) {
+                    if (!isItem(entry.item)) {
+                        errors.push_back(std::format("loot.json: {}: item '{}' is not a weapon, armour piece, or consumable", table.key, entry.item));
+                    }
+                }
+            }
+            for (const auto& enemy : enemies) {
+                if (!enemy.lootTable.empty() && std::ranges::find(tables, enemy.lootTable, &LootTableDefinition::key) == tables.end()) {
+                    errors.push_back(std::format("enemies.json: {}: loot table '{}' is not in loot.json", enemy.key, enemy.lootTable));
+                }
+            }
         }
 
         // Rules spanning files: every class defined once, and class spells agree with class schools
@@ -642,9 +709,9 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[5];
-        constexpr const char* files[5] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json" };
-        for (int i = 0; i < 5; ++i) {
+        String texts[7];
+        constexpr const char* files[7] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json" };
+        for (int i = 0; i < 7; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -653,11 +720,12 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
-                                                    const String& classesJson, const String& enemiesJson) {
+                                                    const String& classesJson, const String& enemiesJson,
+                                                    const String& consumablesJson, const String& lootJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -665,8 +733,11 @@ namespace LB::Content {
         auto armour = ReadArray<ArmorDefinition>(armourJson, "armour.json", ReadArmor, result.errors);
         auto classes = ReadArray<ClassDefinition>(classesJson, "classes.json", ReadClass, result.errors);
         auto enemies = ReadArray<EnemyDefinition>(enemiesJson, "enemies.json", ReadEnemy, result.errors);
+        auto consumables = ReadArray<ConsumableDefinition>(consumablesJson, "consumables.json", ReadConsumable, result.errors);
+        auto lootTables = ReadArray<LootTableDefinition>(lootJson, "loot.json", ReadLootTable, result.errors);
 
         CheckClassRules(classes, spells, result.errors);
+        CheckLootRules(lootTables, enemies, weapons, armour, consumables, result.errors);
 
         if (!result.Succeeded()) {
             Clear();
@@ -678,6 +749,8 @@ namespace LB::Content {
         armour_ = std::move(armour);
         classes_ = std::move(classes);
         enemies_ = std::move(enemies);
+        consumables_ = std::move(consumables);
+        lootTables_ = std::move(lootTables);
         return result;
     }
 

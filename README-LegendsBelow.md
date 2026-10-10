@@ -24,7 +24,7 @@ Components/
 Tools/
 ├── LBAssetProcessor/      JSON validation and binary packing (empty project)
 └── LBGameEditor/          WinUI content editor (template)
-Assets/Data/               spells.json, weapons.json, armour.json, classes.json, enemies.json
+Assets/Data/               spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json, loot.json
 Assets/Models/             KayKit glTF models (CC0); Animations/ holds the skeletons' animation sets
 Assets/Fonts/              MedievalSharp (SIL Open Font License)
 Documentation/             Game design and architecture documents
@@ -38,9 +38,9 @@ Documentation/             Game design and architecture documents
 | Services (Character, Combat, Inventory, Progression, Dungeon) | Implemented, unit tested; CharacterService uses the class data (HP/MP progression, movement, weapon adjustments); CombatService resolves the arena's weapon attacks (d20 vs AC, dice, crits, armour, resistances) |
 | Systems | Unit tested. Rendering: Direct3D 12 with DirectXTK12: a lit 3D world pass of glTF models (fastgltf; textured, skinned, and animated with cross-fades; instanced per model part, see-through walls) and primitives through an isometric camera, plus a 2D overlay of rectangles and text (TrueType fonts as distance fields, MedievalSharp for the HUD and damage numbers). Input: keyboard/mouse from the window, gamepads through GameInput. Audio: XAudio2 output device. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
 | Repositories | Spell facade via Microsoft Proxy 4 with a content-backed implementation |
-| Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: a Warrior (the KayKit knight) walks around a 3D test arena of KayKit floor tiles and walls with WASD/arrows or the left stick (screen-relative) and fights waves of animated KayKit skeletons with Left Click, Space, or gamepad A; Q/E or right stick left/right rotate the camera 90 degrees, the mouse wheel or right stick up/down zoom; Esc/Start toggles the tactical pause; F5/F9 quick save and load |
+| Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: a Warrior (the KayKit knight) walks around a 3D test arena of KayKit floor tiles and walls with WASD/arrows or the left stick (screen-relative) and fights waves of animated KayKit skeletons with Left Click, Space, or gamepad A, gaining experience and picking up gold and gear they drop (I/C or View: character screen; R or X: drink a potion); Q/E or right stick left/right rotate the camera 90 degrees, the mouse wheel or right stick up/down zoom; Esc/Start toggles the tactical pause; F5/F9 quick save and load |
 | Asset pipeline | Not started (see `Documentation/asset-preprocesing-strategy-instructions.md`) |
-| Content | 4 classes, 45 spells, 12 weapons, 15 armour pieces, 2 enemies authored in JSON, validated (including cross-file class rules) and loaded at startup. 3D models: a starter set of the KayKit Dungeon Pack and KayKit Skeletons (CC0, with the Rig_Medium General, MovementBasic, and CombatMelee animation sets) in `Assets/Models` |
+| Content | 4 classes, 45 spells, 12 weapons, 15 armour pieces, 2 enemies, 1 consumable, 2 loot tables authored in JSON, validated (including cross-file class rules) and loaded at startup. 3D models: a starter set of the KayKit Dungeon Pack and KayKit Skeletons (CC0, with the Rig_Medium General, MovementBasic, and CombatMelee animation sets) in `Assets/Models` |
 
 ## Getting Started
 

@@ -481,6 +481,48 @@ export namespace LB::Services::Character {
         }
 
         /// <summary>
+        /// Put back saved progression: level, experience, attributes, and unassigned points. Max
+        /// HP/MP follow from the class tables; current HP is kept as a fraction of max. Returns false
+        /// for an unknown character or values outside the class rules (level 1..MaxLevel,
+        /// attributes within the class caps, no negative experience or points).
+        /// </summary>
+        bool RestoreProgress(CharacterId id, int32_t level, int32_t experience, const Attributes& attributes, int32_t unspentPoints) {
+            auto it = characters_.find(id);
+            const auto* rules = GetRulesFor(id);
+            if (it == characters_.end() || !rules) {
+                return false;
+            }
+            if (level < 1 || level > ClassProgression::MaxLevel || experience < 0 || unspentPoints < 0 || !attributes.IsValid()) {
+                return false;
+            }
+            for (auto attribute : { AttributeType::Strength, AttributeType::Dexterity, AttributeType::Constitution,
+                                    AttributeType::Intelligence, AttributeType::Wisdom, AttributeType::Charisma }) {
+                if (attributes.Get(attribute) > attributeCap(*rules, attribute)) return false;
+            }
+
+            auto& character = it->second;
+            const double health = character.GetMaxHitPoints() > 0
+                ? static_cast<double>(character.GetCurrentHitPoints()) / character.GetMaxHitPoints() : 1.0;
+            character.SetLevel(level);
+            character.SetExperience(experience);
+            character.SetAttributes(attributes);
+            character.SetUnspentAttributePoints(unspentPoints);
+
+            const auto maxHP = calculateMaxHitPoints(*rules, level, attributes);
+            const auto maxMP = calculateMaxManaPoints(character.GetClass(), *rules, level, attributes);
+            character.SetHitPoints(std::clamp(static_cast<int32_t>(std::lround(health * maxHP)), character.IsAlive() ? 1 : 0, maxHP), maxHP);
+            character.SetManaPoints(maxMP, maxMP);
+            return true;
+        }
+
+        /// <summary>
+        /// Total experience a character needs to reach a level (level 1: 0)
+        /// </summary>
+        int32_t GetExperienceForLevel(int32_t level) const {
+            return calculateExperienceForLevel(level);
+        }
+
+        /// <summary>
         /// Class adjustment for attacking with a weapon category (classes.json weaponAdjustments)
         /// </summary>
         std::optional<int32_t> GetWeaponAdjustment(CharacterId id, WeaponType weapon) const {

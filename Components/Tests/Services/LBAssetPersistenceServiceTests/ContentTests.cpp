@@ -310,7 +310,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 5u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies
+    EXPECT_EQ(result.errors.size(), 7u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -719,4 +719,74 @@ TEST(EnemyValidationTests, DuplicateIds_Rejected) {
     auto result = LoadEnemies(content, "[" + std::string(ValidEnemy) + "," + ValidEnemy + "]");
 
     EXPECT_TRUE(AnyErrorContains(result, "duplicate id 'enemy_a'")) << ErrorsOf(result);
+}
+
+// ============================================================================
+// Consumable and Loot Tests (consumables.json, loot.json)
+// ============================================================================
+
+namespace {
+    constexpr const char* ValidPotion = R"({"id":"potion_a","name":"P","healing":"2d4+2","model":"p.glb"})";
+    constexpr const char* ValidTable = R"({"id":"loot_a","goldChance":0.5,"gold":"1d6","itemChance":0.5,"items":[{"item":"potion_a","weight":3},{"item":"weapon_a"}]})";
+
+    ContentLoadResult LoadLoot(ContentDatabase& content, const std::string& consumables, const std::string& loot, const std::string& enemies = "[]") {
+        return content.LoadFromJson("[]", Array(ValidWeapon), "[]", "[]", enemies, consumables, loot);
+    }
+}
+
+TEST_F(ShippedContentTests, Loot_TablesForBothSkeletonsAndAPotion) {
+    const auto* potion = content_.FindConsumable("consumable_potion_healing_minor");
+    ASSERT_NE(potion, nullptr);
+    EXPECT_GT(potion->healing.count, 0);
+    for (const auto& enemy : content_.GetEnemies()) {
+        const auto* table = content_.FindLootTable(enemy.lootTable);
+        ASSERT_NE(table, nullptr) << enemy.key;
+        EXPECT_GT(table->TotalWeight(), 0);
+    }
+}
+
+TEST(LootValidationTests, ValidTable_LoadsEntriesAndWeights) {
+    ContentDatabase content;
+
+    auto result = LoadLoot(content, Array(ValidPotion), Array(ValidTable));
+
+    ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
+    const auto* table = content.FindLootTable("loot_a");
+    ASSERT_NE(table, nullptr);
+    ASSERT_EQ(table->items.size(), 2u);
+    EXPECT_EQ(table->items[1].weight, 1);    // default
+    EXPECT_EQ(table->TotalWeight(), 4);
+    EXPECT_EQ(content.FindConsumable("potion_a")->healing.bonus, 2);
+    EXPECT_EQ(content.FindConsumable("potion_a")->maxStack, 10);
+}
+
+TEST(LootValidationTests, UnknownItemsAndTables_Rejected) {
+    ContentDatabase content;
+    const std::string table = R"({"id":"loot_a","itemChance":1.0,"items":[{"item":"nothing_here"}]})";
+    std::string enemy = ValidEnemy;
+    enemy.insert(enemy.size() - 1, R"(,"lootTable":"loot_missing")");
+
+    auto result = LoadLoot(content, Array(ValidPotion), Array(table), Array(enemy));
+
+    EXPECT_TRUE(AnyErrorContains(result, "loot.json: loot_a: item 'nothing_here' is not a weapon, armour piece, or consumable")) << ErrorsOf(result);
+    EXPECT_TRUE(AnyErrorContains(result, "enemies.json: enemy_a: loot table 'loot_missing' is not in loot.json")) << ErrorsOf(result);
+    EXPECT_TRUE(content.IsEmpty());
+}
+
+TEST(LootValidationTests, BadChancesAndWeights_Rejected) {
+    ContentDatabase content;
+    const std::string table = R"({"id":"loot_a","goldChance":1.5,"gold":"1d4","itemChance":0.5,"items":[{"item":"potion_a","weight":0}]})";
+
+    auto result = LoadLoot(content, Array(ValidPotion), Array(table));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'goldChance' must be in [0, 1]")) << ErrorsOf(result);
+    EXPECT_TRUE(AnyErrorContains(result, "'weight' must be at least 1")) << ErrorsOf(result);
+}
+
+TEST(LootValidationTests, ItemChanceWithoutItems_Rejected) {
+    ContentDatabase content;
+
+    auto result = LoadLoot(content, "[]", Array(R"({"id":"loot_a","itemChance":0.5,"items":[]})"));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'items' must list at least one item")) << ErrorsOf(result);
 }

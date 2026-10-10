@@ -8,12 +8,16 @@ import LB.CharacterService;
 import LB.Combat;
 import LB.CombatService;
 import LB.Content;
+import LB.Inventory;
+import LB.InventoryService;
 import LB.AudioSystem;
 import LB.InputSystem;
 import LB.PersistenceSystem;
 import LB.RenderingSystem;
 import :StepTimer;
 import :Encounter;
+import :Loot;
+import :CharacterScreen;
 
 export namespace LB::Engine {
 
@@ -67,6 +71,12 @@ export namespace LB::Engine {
         static constexpr std::string_view RotateCameraLeftAction = "RotateCameraLeft";
         static constexpr std::string_view RotateCameraRightAction = "RotateCameraRight";
         static constexpr std::string_view AttackAction = "Attack";
+        static constexpr std::string_view CharacterScreenAction = "CharacterScreen";
+        static constexpr std::string_view UsePotionAction = "UsePotion";
+        static constexpr std::string_view MenuUpAction = "MenuUp";
+        static constexpr std::string_view MenuDownAction = "MenuDown";
+        static constexpr std::string_view MenuConfirmAction = "MenuConfirm";
+        static constexpr std::string_view MenuBackAction = "MenuBack";
 
         // Right stick flicks past this deflection rotate (X) or zoom (Y) the camera
         static constexpr float CameraStickThreshold = 0.6f;
@@ -92,6 +102,10 @@ export namespace LB::Engine {
         // Font of the HUD and the damage numbers (Assets/Fonts, SIL Open Font License)
         static constexpr std::string_view UiFont = "MedievalSharp-Regular.ttf";
         static constexpr std::string_view PlayerSwordArmPart = "character_knightArmRight";
+        // Props for loot on the floor and the weapon categories the knight can hold
+        static constexpr std::array<std::string_view, 10> PropModels = {
+            "lootSackA.glb", "coinsSmall.glb", "coinsMedium.glb", "coinsLarge.glb", "axe_common.glb",
+            "dagger_common.glb", "hammer_common.glb", "staff_common.glb", "crossbow_common.glb", "shield_common.glb" };
         // Animation sets of the skinned characters (KayKit Rig_Medium), in the model directory
         static constexpr std::array<std::string_view, 3> AnimationFiles = {
             "Animations/Rig_Medium_General.glb", "Animations/Rig_Medium_MovementBasic.glb", "Animations/Rig_Medium_CombatMelee.glb" };
@@ -103,6 +117,13 @@ export namespace LB::Engine {
         static constexpr std::string_view HeavyEnemy = "enemy_skeleton_warrior";
         static constexpr float PlayerReach = 1.4f;              // tiles between centers
         static constexpr float PlayerRespawnSeconds = 3.0f;     // after going down
+
+        // Loot: the potion the quick-use button drinks, the bag size, and how close the player
+        // walks to pick things up
+        static constexpr std::string_view HealingPotion = "consumable_potion_healing_minor";
+        static constexpr std::int32_t StartingPotions = 1;
+        static constexpr std::int32_t BagCapacity = 20;
+        static constexpr float PickupRadius = 0.7f;
 
         // Damage numbers rise this far (tiles) over their lifetime, fading out at the end
         static constexpr float FloatingTextSeconds = 1.0f;
@@ -162,7 +183,9 @@ export namespace LB::Engine {
             }
 
             encounter_ = options.randomSeed ? Encounter(*options.randomSeed) : Encounter();
+            lootRoller_ = options.randomSeed ? LootRoller(*options.randomSeed + 1) : LootRoller();
             spawnEnemies_ = options.spawnEnemies;
+            GiveStartingKit();
             StartEncounter();
 
             inputSystem_.Initialize();
@@ -200,6 +223,10 @@ export namespace LB::Engine {
             playerId_.reset();
             playerWeapon_ = nullptr;
             playerCombat_ = {};
+            inventoryService_ = {};
+            gold_ = 0;
+            groundItems_.clear();
+            characterScreen_.Close();
             encounter_.Reset();
             combatEvents_.clear();
             floatingTexts_.clear();
@@ -437,6 +464,64 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// Gold carried
+        /// </summary>
+        [[nodiscard]] std::int32_t GetGold() const noexcept { return gold_; }
+
+        /// <summary>
+        /// The bag (unequipped items); item ids are packed ItemRefs
+        /// </summary>
+        [[nodiscard]] std::vector<Inventory::InventoryItem> GetInventory() const {
+            return playerId_ ? inventoryService_.GetInventory(*playerId_) : std::vector<Inventory::InventoryItem>{};
+        }
+
+        /// <summary>
+        /// How many of an item (by content key) the bag holds
+        /// </summary>
+        [[nodiscard]] std::int32_t CountItem(std::string_view key) const;
+
+        /// <summary>
+        /// The weapon the player attacks with
+        /// </summary>
+        [[nodiscard]] const Content::WeaponDefinition* GetPlayerWeapon() const noexcept { return playerWeapon_; }
+
+        /// <summary>
+        /// Gold and items lying on the floor, waiting to be picked up
+        /// </summary>
+        [[nodiscard]] const std::vector<GroundItem>& GetGroundItems() const noexcept { return groundItems_; }
+
+        /// <summary>
+        /// The character and inventory screen (I, C, or the gamepad View button)
+        /// </summary>
+        [[nodiscard]] const CharacterScreen& GetCharacterScreen() const noexcept { return characterScreen_; }
+
+        /// <summary>
+        /// Put items (by content key) in the bag. Returns how many fit.
+        /// </summary>
+        std::int32_t GiveItem(std::string_view key, std::int32_t quantity = 1);
+
+        /// <summary>
+        /// Equip a weapon or armour piece from the bag (what was in its slot goes back to the bag).
+        /// Fails for items not in the bag, not usable by the player's class, or above their level.
+        /// </summary>
+        bool EquipItem(std::string_view key);
+
+        /// <summary>
+        /// Take an armour piece off into the bag (fails when the bag is full)
+        /// </summary>
+        bool UnequipArmorSlot(LB::Combat::EquipmentSlot slot);
+
+        /// <summary>
+        /// Use a consumable from the bag (a healing potion restores its dice of hit points)
+        /// </summary>
+        bool UseItem(std::string_view key);
+
+        /// <summary>
+        /// Drop a loot table's roll at a point (enemies do this when they die)
+        /// </summary>
+        void DropLoot(std::string_view lootTable, WorldPoint at);
+
+        /// <summary>
         /// Place an enemy from enemies.json, ready to act (no spawn animation). Returns its id, or
         /// nothing for an unknown key or before Initialize.
         /// </summary>
@@ -495,6 +580,7 @@ export namespace LB::Engine {
             if (playerId_) {
                 data["player.x"] = std::format("{}", playerPosition_.x);
                 data["player.y"] = std::format("{}", playerPosition_.y);
+                WriteProgress(data);
             }
 
             return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
@@ -526,6 +612,9 @@ export namespace LB::Engine {
                 characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
                 camera_.SnapTo({ playerPosition_.x, playerPosition_.y });  // instant refocus
             }
+            if (playerId_) {
+                ReadProgress(result.data);   // saves from before progression keep the current one
+            }
             return true;
         }
 
@@ -538,7 +627,11 @@ export namespace LB::Engine {
                 inputSystem_.PollDevices();
             }
 
-            if (inputSystem_.IsActionTriggered(std::string(PauseAction))) {
+            // The character screen takes the input while open (Esc closes it instead of pausing)
+            const bool screenWasOpen = characterScreen_.IsOpen();
+            UpdateCharacterScreen();
+
+            if (!screenWasOpen && !characterScreen_.IsOpen() && inputSystem_.IsActionTriggered(std::string(PauseAction))) {
                 SetPaused(!paused_);
             }
 
@@ -553,12 +646,14 @@ export namespace LB::Engine {
             UpdateCameraControls();
 
             combatEvents_.clear();
-            if (!paused_) {
+            if (!paused_ && !screenWasOpen && !characterScreen_.IsOpen()) {
                 gameTimeSeconds_ += elapsedSeconds;
                 // Attacks first: a swing that starts this step roots the player at once
                 UpdatePlayerCombat(static_cast<float>(elapsedSeconds));
                 MovePlayer(static_cast<float>(elapsedSeconds));
                 UpdateEncounter(static_cast<float>(elapsedSeconds));
+                UpdateQuickUse();
+                UpdateGroundItems(static_cast<float>(elapsedSeconds));
                 UpdateFloatingTexts(static_cast<float>(elapsedSeconds));
             }
 
@@ -585,7 +680,7 @@ export namespace LB::Engine {
 
             // Placeholder pause feedback until there is a pause menu: dim the whole frame.
             // Colors are picked as display (sRGB) values and handed to the renderer as linear.
-            const float dim = paused_ ? 0.4f : 1.0f;
+            const float dim = paused_ || characterScreen_.IsOpen() ? 0.4f : 1.0f;
             const auto shade = [dim](float r, float g, float b) {
                 const auto linear = [dim](float c) { return std::pow(c * dim, 2.2f); };
                 return Systems::Rendering::Color{ linear(r), linear(g), linear(b), 1.0f };
@@ -597,7 +692,9 @@ export namespace LB::Engine {
             DrawArena(shade);
             DrawPlayer(shade);
             DrawEnemies(shade);
+            DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
             DrawHud();
+            DrawCharacterScreen();
 
             renderingSystem_.EndFrame();
         }
@@ -625,9 +722,17 @@ export namespace LB::Engine {
             models_.corner = load(CornerModel);
             models_.player = load(PlayerModel);
             models_.playerWeapon = load(PlayerWeaponModel);
+            characterModels_.clear();
+
+            // Loot on the floor and weapons in the knight's hand (KayKit Dungeon Pack props)
+            for (const auto file : PropModels) {
+                characterModels_[std::string(file)] = load(file);
+            }
+            for (const auto& consumable : content_->GetConsumables()) {
+                if (!characterModels_.contains(consumable.model)) characterModels_[consumable.model] = load(consumable.model);
+            }
 
             // Enemy bodies and the weapons they hold, by file name
-            characterModels_.clear();
             for (const auto& enemy : content_->GetEnemies()) {
                 for (const auto& file : { enemy.model, enemy.mainHandModel, enemy.offHandModel }) {
                     if (!file.empty() && !characterModels_.contains(file)) characterModels_[file] = load(file);
@@ -812,7 +917,6 @@ export namespace LB::Engine {
 
         // Waves start once there is a player to fight (and enemies are enabled)
         void StartEncounter() {
-            playerWeapon_ = content_->FindWeapon(StartingWeapon);
             encounter_.Configure(content_->FindEnemy(LightEnemy), content_->FindEnemy(HeavyEnemy), ArenaHalfWidth, ArenaHalfHeight);
             encounter_.SetClips(enemyClips_);
             encounter_.Reset();
@@ -852,6 +956,9 @@ export namespace LB::Engine {
                     if (playerCombat_.target) {
                         if (auto event = encounter_.StrikeEnemy(*playerCombat_.target, GetPlayerAttackProfile(), playerPosition_, PlayerReach)) {
                             combatEvents_.push_back(*event);
+                            if (event->killed) {
+                                OnEnemyKilled(*encounter_.FindEnemy(event->enemyId));
+                            }
                         }
                     }
                 }
@@ -896,6 +1003,22 @@ export namespace LB::Engine {
                 characterService_.RestCharacter(*playerId_);
             }
         }
+
+        // Player progression and items (PlayerProgress.cpp)
+        void GiveStartingKit();
+        void OnEnemyKilled(const Enemy& enemy);
+        void UpdateGroundItems(float elapsedSeconds);
+        void UpdateQuickUse();
+        void UpdateCharacterScreen();
+        std::vector<ScreenRow> BuildScreenRows() const;
+        void DrawGroundItems(const Systems::Rendering::Color& tint);
+        void DrawCharacterScreen();
+        Systems::Rendering::ModelId ItemModel(const GroundItem& item) const;
+        Systems::Rendering::ModelId HeldWeaponModel() const;
+        void AddFloatingText(std::string text, Systems::Rendering::Vector3 at, Systems::Rendering::Color color, float scale);
+        void WriteProgress(Systems::Persistence::SaveData& data) const;
+        void ReadProgress(const Systems::Persistence::SaveData& data);
+        std::string CanEquip(ItemRef item) const;
 
         // World height just over a character's head
         float EnemyTop(const Enemy& enemy) const {
@@ -961,6 +1084,7 @@ export namespace LB::Engine {
             characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
             camera_.SnapTo({ playerPosition_.x, playerPosition_.y });
             playerCombat_ = {};
+            groundItems_.clear();
             StartEncounter();
         }
 
@@ -1253,7 +1377,7 @@ export namespace LB::Engine {
                 if (arm) {
                     body.partPoses.push_back({ *arm, armPose });
                     constexpr Systems::Rendering::Vector3 fist{ -0.195f, -0.43f, 0.0f };   // in the arm's space
-                    Systems::Rendering::ModelRenderData sword{ models_.playerWeapon, body.position, body.yawRadians, ModelScale, body.tint };
+                    Systems::Rendering::ModelRenderData sword{ HeldWeaponModel(), body.position, body.yawRadians, ModelScale, body.tint };
                     sword.transform = Matrix4::RotationX(std::numbers::pi_v<float> * 0.5f) * Matrix4::Translation(fist)
                                     * armPose * knight->parts[*arm].transform;
                     if (body.transform) *sword.transform = *sword.transform * *body.transform;
@@ -1382,11 +1506,24 @@ export namespace LB::Engine {
                 if (const auto status = characterService_.GetCharacterStatus(*playerId_)) {
                     bar(24, screenHeight - 44, 240, 18, static_cast<float>(status->healthPercentage()), display(0.80f, 0.14f, 0.12f));
                     label(std::format("HP {}/{}", status->currentHitPoints, status->maxHitPoints), 30, screenHeight - 42, 2.0f, display(1.0f, 1.0f, 1.0f), 13);
+
+                    // Experience toward the next level, a thin gold bar under the health bar
+                    const float previous = static_cast<float>(characterService_.GetExperienceForLevel(status->level));
+                    const float next = static_cast<float>(status->experienceToNextLevel);
+                    const float progress = next > previous ? (static_cast<float>(status->currentExperience) - previous) / (next - previous) : 1.0f;
+                    bar(24, screenHeight - 20, 240, 5, progress, display(0.95f, 0.75f, 0.30f));
+                    label(std::format("LEVEL {}", status->level), 24, screenHeight - 70, 2.0f, display(0.95f, 0.75f, 0.30f), 13);
+
+                    label(std::format("GOLD {}", gold_), 280, screenHeight - 42, 2.0f, display(0.95f, 0.80f, 0.35f), 13);
+                    label(std::format("POTIONS {}", CountItem(HealingPotion)), 280, screenHeight - 22, 2.0f, display(0.95f, 0.45f, 0.40f), 13);
+                    if (characterService_.GetCharacter(*playerId_)->get().GetUnspentAttributePoints() > 0) {
+                        label("POINTS TO SPEND (I)", 24, screenHeight - 92, 2.0f, display(0.55f, 0.95f, 0.55f), 13);
+                    }
                 }
             }
 
             for (const auto& enemy : encounter_.GetEnemies()) {
-                if (!enemy.IsTargetable() || enemy.hitPoints >= enemy.definition->hitPoints) continue;
+                if (!enemy.IsTargetable() || enemy.hitPoints >= enemy.maxHitPoints) continue;
                 float top = 1.4f;
                 if (models_.loaded) {
                     const auto it = characterModels_.find(enemy.definition->model);
@@ -1394,7 +1531,7 @@ export namespace LB::Engine {
                 }
                 const auto point = renderingSystem_.WorldToScreen({ enemy.position.x, top, enemy.position.y });
                 if (!point.inFront) continue;
-                const float fraction = static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.definition->hitPoints);
+                const float fraction = static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints);
                 bar(static_cast<std::int32_t>(point.x) - 22, static_cast<std::int32_t>(point.y) - 8, 44, 5, fraction, display(0.85f, 0.20f, 0.15f));
             }
 
@@ -1454,6 +1591,14 @@ export namespace LB::Engine {
             return ec == std::errc{} && end == text.data() + text.size();
         }
 
+        void RegisterGamepadBinding(std::string_view action, Systems::Input::GamepadButton button) {
+            Systems::Input::InputAction binding{};
+            binding.name = std::string(action);
+            binding.deviceType = Systems::Input::InputDevice::Gamepad;
+            binding.gamepadButton = button;
+            inputSystem_.RegisterAction(binding);
+        }
+
         void RegisterKeyBinding(std::string_view action, std::int32_t keyCode) {
             Systems::Input::InputAction binding{};
             binding.name = std::string(action);
@@ -1479,6 +1624,25 @@ export namespace LB::Engine {
             RegisterKeyBinding(QuickLoadAction, Systems::Input::Keys::F9);
             RegisterKeyBinding(RotateCameraLeftAction, Systems::Input::Keys::FromChar('Q'));
             RegisterKeyBinding(RotateCameraRightAction, Systems::Input::Keys::FromChar('E'));
+
+            // Character screen (I, C, gamepad View), quick potion (R, gamepad X: use item), and
+            // the screen's navigation (WASD/arrows/D-pad, Enter/Space/A, Esc/B)
+            RegisterKeyBinding(CharacterScreenAction, Systems::Input::Keys::FromChar('I'));
+            RegisterKeyBinding(CharacterScreenAction, Systems::Input::Keys::FromChar('C'));
+            RegisterGamepadBinding(CharacterScreenAction, Systems::Input::GamepadButton::Back);
+            RegisterKeyBinding(UsePotionAction, Systems::Input::Keys::FromChar('R'));
+            RegisterGamepadBinding(UsePotionAction, Systems::Input::GamepadButton::X);
+            RegisterKeyBinding(MenuUpAction, Systems::Input::Keys::FromChar('W'));
+            RegisterKeyBinding(MenuUpAction, Systems::Input::Keys::Up);
+            RegisterGamepadBinding(MenuUpAction, Systems::Input::GamepadButton::DPadUp);
+            RegisterKeyBinding(MenuDownAction, Systems::Input::Keys::FromChar('S'));
+            RegisterKeyBinding(MenuDownAction, Systems::Input::Keys::Down);
+            RegisterGamepadBinding(MenuDownAction, Systems::Input::GamepadButton::DPadDown);
+            RegisterKeyBinding(MenuConfirmAction, Systems::Input::Keys::Enter);
+            RegisterKeyBinding(MenuConfirmAction, Systems::Input::Keys::Space);
+            RegisterGamepadBinding(MenuConfirmAction, Systems::Input::GamepadButton::A);
+            RegisterKeyBinding(MenuBackAction, Systems::Input::Keys::Escape);
+            RegisterGamepadBinding(MenuBackAction, Systems::Input::GamepadButton::B);
 
             // Primary action (design-ui-ux-and-audio.md 4): left click, gamepad A; Space as well
             RegisterKeyBinding(AttackAction, Systems::Input::Keys::Space);
@@ -1542,6 +1706,12 @@ export namespace LB::Engine {
         Encounter encounter_;
         std::vector<CombatEvent> combatEvents_;
         std::vector<FloatingText> floatingTexts_;
+        Services::Inventory::InventoryService inventoryService_;
+        std::int32_t gold_{0};
+        std::vector<GroundItem> groundItems_;
+        std::uint32_t nextGroundItemId_{1};
+        LootRoller lootRoller_;
+        CharacterScreen characterScreen_;
         std::uint32_t floatingTextCount_{0};
         bool spawnEnemies_{true};
         std::vector<WallPiece> walls_;

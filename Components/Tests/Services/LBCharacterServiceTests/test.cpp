@@ -1039,3 +1039,64 @@ TEST(CharacterServiceArmorTests, RemoveCharacter_ForgetsArmor) {
 
     EXPECT_TRUE(service.GetEquippedArmor(id).empty());
 }
+
+// ============================================================================
+// Saved Progress Tests
+// ============================================================================
+
+TEST(CharacterServiceProgressTests, RestoreProgress_SetsLevelAttributesAndHitPoints) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{16, 12, 14, 8, 10, 10}));
+    CharacterService reference = MakeTestService();
+    auto other = *reference.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{16, 12, 14, 8, 10, 10}));
+    reference.AwardExperience(other, 300);   // level 3
+    const auto& expected = Get(reference, other);
+
+    ASSERT_TRUE(service.RestoreProgress(id, expected.GetLevel(), expected.GetExperience(), expected.GetAttributes(), 2));
+
+    const auto& restored = Get(service, id);
+    EXPECT_EQ(restored.GetLevel(), 3);
+    EXPECT_EQ(restored.GetExperience(), 300);
+    EXPECT_EQ(restored.GetAttributes().strength, expected.GetAttributes().strength);
+    EXPECT_EQ(restored.GetUnspentAttributePoints(), 2);
+    EXPECT_EQ(restored.GetMaxHitPoints(), expected.GetMaxHitPoints());
+    EXPECT_EQ(restored.GetCurrentHitPoints(), restored.GetMaxHitPoints());
+}
+
+TEST(CharacterServiceProgressTests, RestoreProgress_KeepsTheHealthFraction) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{16, 12, 14, 8, 10, 10}));
+    const auto max = Get(service, id).GetMaxHitPoints();
+    service.DamageCharacter(id, max / 2);
+    const double fraction = static_cast<double>(Get(service, id).GetCurrentHitPoints()) / max;
+
+    ASSERT_TRUE(service.RestoreProgress(id, 5, 800, Get(service, id).GetAttributes(), 0));
+
+    const auto& after = Get(service, id);
+    EXPECT_NEAR(static_cast<double>(after.GetCurrentHitPoints()) / after.GetMaxHitPoints(), fraction, 0.1);
+}
+
+TEST(CharacterServiceProgressTests, RestoreProgress_RejectsValuesOutsideTheRules) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 16, 10, 10}));
+    const Attributes fine{10, 10, 10, 16, 10, 10};
+
+    EXPECT_FALSE(service.RestoreProgress(id, 0, 0, fine, 0));
+    EXPECT_FALSE(service.RestoreProgress(id, ClassProgression::MaxLevel + 1, 0, fine, 0));
+    EXPECT_FALSE(service.RestoreProgress(id, 2, -5, fine, 0));
+    EXPECT_FALSE(service.RestoreProgress(id, 2, 100, fine, -1));
+    EXPECT_FALSE(service.RestoreProgress(id, 2, 100, Attributes{19, 10, 10, 16, 10, 10}, 0));   // STR above a Mage's cap
+    EXPECT_FALSE(service.RestoreProgress(999, 2, 100, fine, 0));
+    EXPECT_EQ(Get(service, id).GetLevel(), 1);
+}
+
+TEST(CharacterServiceProgressTests, ExperienceForLevel_MatchesLevelUps) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{16, 12, 14, 8, 10, 10}));
+
+    EXPECT_EQ(service.GetExperienceForLevel(1), 0);
+    service.AwardExperience(id, service.GetExperienceForLevel(2) - 1);
+    EXPECT_EQ(Get(service, id).GetLevel(), 1);
+    service.AwardExperience(id, 1);
+    EXPECT_EQ(Get(service, id).GetLevel(), 2);
+}

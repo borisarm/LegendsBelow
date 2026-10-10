@@ -436,6 +436,12 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Data\enemies.json">
       <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
     </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Data\consumables.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Data\loot.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
     <!-- 3D models (KayKit Dungeon Pack and Skeletons, CC0) with their buffers, textures, and
          animation sets, loaded at startup from <exe dir>\Assets\Models -->
     <CopyFileToFolders Include="..\Assets\Models\*.glb;..\Assets\Models\*.gltf;..\Assets\Models\*.bin;..\Assets\Models\*.png;..\Assets\Models\LICENSE-KayKit*.txt">

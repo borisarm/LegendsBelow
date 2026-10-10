@@ -206,6 +206,8 @@ export namespace LB::Content {
         float aggroRange{8.0f};                       // tiles; notices the player within this distance
 
         // Presentation: model files (in the model directory) and scale
+        String lootTable;                             // loot.json table rolled when it dies (empty: drops nothing)
+
         String model;                                 // skinned glTF on the KayKit Rig_Medium
         String mainHandModel;                         // optional, held at the right hand slot
         String offHandModel;                          // optional, held at the left hand slot
@@ -214,6 +216,46 @@ export namespace LB::Content {
         [[nodiscard]] float GetResistance(DamageType type) const {
             auto it = resistances.find(type);
             return it != resistances.end() ? it->second : 0.0f;
+        }
+    };
+
+    /// <summary>
+    /// A consumable item (Assets/Data/consumables.json, design-loot-and-progression.md 2.1): used
+    /// from the inventory or the quick-use button
+    /// </summary>
+    struct ConsumableDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "consumable_potion_healing_minor"
+        String name;
+        LB::Dice healing{};                           // hit points restored (0d0: none)
+        int32_t maxStack{10};
+        String model;                                 // how it lies on the floor
+    };
+
+    /// <summary>
+    /// One possible item drop of a loot table, with its relative weight
+    /// </summary>
+    struct LootEntry {
+        String item;                                  // weapon, armour, or consumable key
+        int32_t weight{1};
+    };
+
+    /// <summary>
+    /// What a source drops (Assets/Data/loot.json, design-loot-and-progression.md 4.2): a chance of
+    /// gold (dice), and a chance of one item picked by weight
+    /// </summary>
+    struct LootTableDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "loot_skeleton_minion"
+        float goldChance{0.0f};                       // 0..1
+        LB::Dice gold{1, 1, 0};
+        float itemChance{0.0f};                       // 0..1
+        std::vector<LootEntry> items;
+
+        [[nodiscard]] int32_t TotalWeight() const noexcept {
+            int32_t total = 0;
+            for (const auto& entry : items) total += entry.weight;
+            return total;
         }
     };
 
@@ -232,8 +274,9 @@ export namespace LB::Content {
     class ContentDatabase {
     public:
         /// <summary>
-        /// Load spells.json, weapons.json, armour.json, classes.json and enemies.json from a
-        /// directory (UTF-8 path). On any error the database is left empty and every error is reported.
+        /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json
+        /// and loot.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
 
@@ -243,7 +286,8 @@ export namespace LB::Content {
         /// otherwise every character class must be defined and items/spells must agree with them.
         /// </summary>
         ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
-                                       const String& classesJson = "[]", const String& enemiesJson = "[]");
+                                       const String& classesJson = "[]", const String& enemiesJson = "[]",
+                                       const String& consumablesJson = "[]", const String& lootJson = "[]");
 
         void Clear() {
             spells_.clear();
@@ -251,10 +295,13 @@ export namespace LB::Content {
             armour_.clear();
             classes_.clear();
             enemies_.clear();
+            consumables_.clear();
+            lootTables_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
-            return spells_.empty() && weapons_.empty() && armour_.empty() && classes_.empty() && enemies_.empty();
+            return spells_.empty() && weapons_.empty() && armour_.empty() && classes_.empty() && enemies_.empty()
+                && consumables_.empty() && lootTables_.empty();
         }
 
         [[nodiscard]] const std::vector<SpellDefinition>& GetSpells() const noexcept { return spells_; }
@@ -262,6 +309,8 @@ export namespace LB::Content {
         [[nodiscard]] const std::vector<ArmorDefinition>& GetArmour() const noexcept { return armour_; }
         [[nodiscard]] const std::vector<ClassDefinition>& GetClasses() const noexcept { return classes_; }
         [[nodiscard]] const std::vector<EnemyDefinition>& GetEnemies() const noexcept { return enemies_; }
+        [[nodiscard]] const std::vector<ConsumableDefinition>& GetConsumables() const noexcept { return consumables_; }
+        [[nodiscard]] const std::vector<LootTableDefinition>& GetLootTables() const noexcept { return lootTables_; }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
         [[nodiscard]] const SpellDefinition* FindSpell(std::string_view key) const { return FindByKey(spells_, key); }
@@ -272,6 +321,9 @@ export namespace LB::Content {
         [[nodiscard]] const ClassDefinition* FindClass(std::string_view key) const { return FindByKey(classes_, key); }
         [[nodiscard]] const EnemyDefinition* FindEnemy(ContentId id) const { return FindById(enemies_, id); }
         [[nodiscard]] const EnemyDefinition* FindEnemy(std::string_view key) const { return FindByKey(enemies_, key); }
+        [[nodiscard]] const ConsumableDefinition* FindConsumable(ContentId id) const { return FindById(consumables_, id); }
+        [[nodiscard]] const ConsumableDefinition* FindConsumable(std::string_view key) const { return FindByKey(consumables_, key); }
+        [[nodiscard]] const LootTableDefinition* FindLootTable(std::string_view key) const { return FindByKey(lootTables_, key); }
         [[nodiscard]] const ClassDefinition* FindClass(CharacterClass characterClass) const {
             auto it = std::ranges::find(classes_, characterClass, &ClassDefinition::characterClass);
             return it != classes_.end() ? &*it : nullptr;
@@ -318,6 +370,8 @@ export namespace LB::Content {
         std::vector<ArmorDefinition> armour_;
         std::vector<ClassDefinition> classes_;
         std::vector<EnemyDefinition> enemies_;
+        std::vector<ConsumableDefinition> consumables_;
+        std::vector<LootTableDefinition> lootTables_;
     };
 
 } // namespace LB::Content

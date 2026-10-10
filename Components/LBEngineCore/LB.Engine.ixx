@@ -10,4 +10,6 @@ export import LB.RenderingSystem;
 export import :StepTimer;
 export import :Animator;
 export import :Encounter;
+export import :Loot;
+export import :CharacterScreen;
 export import :GameEngine;

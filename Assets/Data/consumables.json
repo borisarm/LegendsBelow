@@ -1,0 +1,9 @@
+[
+  {
+    "id": "consumable_potion_healing_minor",
+    "name": "Minor Healing Potion",
+    "healing": "2d4+2",
+    "maxStack": 10,
+    "model": "potionSmall_red.glb"
+  }
+]

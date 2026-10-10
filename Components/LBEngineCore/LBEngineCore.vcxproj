@@ -142,6 +142,9 @@
   <ItemGroup>
     <ClCompile Include="Animator.ixx" />
     <ClCompile Include="Encounter.ixx" />
+    <ClCompile Include="Loot.ixx" />
+    <ClCompile Include="CharacterScreen.ixx" />
+    <ClCompile Include="PlayerProgress.cpp" />
     <ClCompile Include="GameEngine.ixx" />
     <ClCompile Include="LB.Engine.ixx" />
     <ClCompile Include="StepTimer.ixx" />
@@ -158,6 +161,12 @@
     </ProjectReference>
     <ProjectReference Include="..\Services\LBAssetPersistenceService\LBAssetPersistenceService.vcxproj">
       <Project>{cc3058fb-9cf7-4f26-b020-5d8ee70368a3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Services\LBInventoryService\LBInventoryService.vcxproj">
+      <Project>{0660e29a-5d0d-4024-bca2-70d97491cf45}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Model\LBModel.Inventory\LBModel.Inventory.vcxproj">
+      <Project>{9a682277-90f2-4283-8946-08694c37fc55}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Services\LBCombatService\LBCombatService.vcxproj">
       <Project>{6404607a-1507-4842-a231-e7761a80b19d}</Project>
