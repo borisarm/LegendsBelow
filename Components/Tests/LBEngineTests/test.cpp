@@ -740,6 +740,24 @@ TEST(GameEngineSaveTests, UnusableSaveDirectory_FallsBackToMemory) {
 // ============================================================================
 
 namespace {
+    // Assets/Data, found by walking up from the working directory (tests run from x64/<Config>)
+    std::string ShippedContentDirectory() {
+        for (auto dir = std::filesystem::current_path(); ; dir = dir.parent_path()) {
+            const auto candidate = dir / "Assets" / "Data";
+            if (std::filesystem::exists(candidate / "classes.json")) {
+                const auto text = candidate.u8string();
+                return std::string(text.begin(), text.end());
+            }
+            if (dir == dir.root_path()) return {};
+        }
+    }
+
+    // The player is created from class data, so movement tests load the shipped content
+    void InitializeWithContent(GameEngine& engine) {
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory() }))
+            << engine.GetInitializationError();
+    }
+
     float PlayerSpeed(const GameEngine& engine) {
         return *engine.GetCharacters().GetMovementSpeed(*engine.GetPlayerId());
     }
@@ -763,9 +781,22 @@ namespace {
     }
 }
 
+TEST(GameEngineMovementTests, NoContent_NoPlayer) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600));
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 10);
+
+    EXPECT_FALSE(engine.GetPlayerId().has_value());
+    const auto arenaTiles = static_cast<std::size_t>(GameEngine::ArenaHalfWidth * 2 * GameEngine::ArenaHalfHeight * 2);
+    EXPECT_EQ(engine.GetRendering().GetQueuedRectangles().size(), arenaTiles);  // arena only
+    EXPECT_TRUE(engine.SaveGame(1));
+    EXPECT_TRUE(engine.LoadGame(1));
+}
+
 TEST(GameEngineMovementTests, Initialize_SpawnsPlayerAtOrigin) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     ASSERT_TRUE(engine.GetPlayerId().has_value());
     EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
@@ -777,7 +808,7 @@ TEST(GameEngineMovementTests, Initialize_SpawnsPlayerAtOrigin) {
 
 TEST(GameEngineMovementTests, HoldD_MovesRightAtCharacterSpeed) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
 
@@ -787,7 +818,7 @@ TEST(GameEngineMovementTests, HoldD_MovesRightAtCharacterSpeed) {
 
 TEST(GameEngineMovementTests, HoldW_MovesUpTheScreen) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::FromChar('W') }, 20);
 
@@ -797,7 +828,7 @@ TEST(GameEngineMovementTests, HoldW_MovesUpTheScreen) {
 
 TEST(GameEngineMovementTests, ArrowKeys_AlsoMove) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::Left, Keys::Down }, 20);
 
@@ -807,7 +838,7 @@ TEST(GameEngineMovementTests, ArrowKeys_AlsoMove) {
 
 TEST(GameEngineMovementTests, Diagonal_NotFasterThanStraight) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::FromChar('D'), Keys::FromChar('S') }, 30);
 
@@ -818,7 +849,7 @@ TEST(GameEngineMovementTests, Diagonal_NotFasterThanStraight) {
 
 TEST(GameEngineMovementTests, OppositeKeys_Cancel) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::FromChar('A'), Keys::FromChar('D') }, 20);
 
@@ -827,7 +858,7 @@ TEST(GameEngineMovementTests, OppositeKeys_Cancel) {
 
 TEST(GameEngineMovementTests, LeftStick_AnalogSpeed) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     engine.OnGamepadState(0, Stick(0.5f, 0.0f));
     RunSteps(engine, 30);
@@ -837,7 +868,7 @@ TEST(GameEngineMovementTests, LeftStick_AnalogSpeed) {
 
 TEST(GameEngineMovementTests, LeftStickUp_MovesUpTheScreen) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     engine.OnGamepadState(0, Stick(0.0f, 1.0f));
     RunSteps(engine, 10);
@@ -847,7 +878,7 @@ TEST(GameEngineMovementTests, LeftStickUp_MovesUpTheScreen) {
 
 TEST(GameEngineMovementTests, Paused_DoesNotMove) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
     TapKey(engine, Keys::Escape);
     engine.Tick(OneSixtieth);
 
@@ -858,7 +889,7 @@ TEST(GameEngineMovementTests, Paused_DoesNotMove) {
 
 TEST(GameEngineMovementTests, ArenaEdge_StopsPlayer) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::FromChar('D') }, 60 * 10);  // far longer than needed to cross
 
@@ -867,7 +898,7 @@ TEST(GameEngineMovementTests, ArenaEdge_StopsPlayer) {
 
 TEST(GameEngineMovementTests, DomainTilePosition_FollowsPlayer) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::FromChar('D') }, 45);  // ~2.7 tiles at Warrior speed
 
@@ -879,7 +910,7 @@ TEST(GameEngineMovementTests, DomainTilePosition_FollowsPlayer) {
 
 TEST(GameEngineMovementTests, SaveLoad_RestoresPlayerPosition) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
     HoldKeysFor(engine, { Keys::FromChar('D'), Keys::FromChar('W') }, 20);
     const auto saved = engine.GetPlayerPosition();
     ASSERT_TRUE(engine.SaveGame(1));
@@ -895,7 +926,7 @@ TEST(GameEngineMovementTests, SaveLoad_RestoresPlayerPosition) {
 
 TEST(GameEngineMovementTests, Render_DrawsArenaAndCenteredPlayer) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     engine.Tick(OneSixtieth);
 
@@ -914,7 +945,7 @@ TEST(GameEngineMovementTests, Render_DrawsArenaAndCenteredPlayer) {
 
 TEST(GameEngineMovementTests, Shutdown_RemovesPlayer) {
     GameEngine engine;
-    engine.Initialize(nullptr, 800, 600);
+    InitializeWithContent(engine);
 
     engine.Shutdown();
 
@@ -968,6 +999,7 @@ TEST(GameEngineContentTests, InvalidContent_FailsWithAllErrors) {
     std::ofstream(dir.path / "spells.json") << R"([{"id":"spell_a","name":"A","school":"Nope","level":1,"categories":["Damage"],"manaCost":5,"castTimeSeconds":1.0}])";
     std::ofstream(dir.path / "weapons.json") << "[{";
     std::ofstream(dir.path / "armour.json") << "[]";
+    std::ofstream(dir.path / "classes.json") << "[]";
     GameEngine engine;
 
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() }));
@@ -985,4 +1017,53 @@ TEST(GameEngineContentTests, MissingContentDirectory_Fails) {
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = "Z:/no/such/content" }));
 
     EXPECT_NE(engine.GetInitializationError().find("file not found"), std::string::npos);
+}
+
+// ============================================================================
+// GameEngine Class Data Tests
+// ============================================================================
+
+TEST(GameEngineClassDataTests, ShippedContent_ConfiguresPlayerFromClassData) {
+    const auto dir = FindShippedContent();
+    ASSERT_TRUE(dir.has_value());
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = *dir })) << engine.GetInitializationError();
+
+    const auto* warrior = engine.GetContent()->FindClass(LB::Character::CharacterClass::Warrior);
+    ASSERT_NE(warrior, nullptr);
+    const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    const float expected = warrior->baseMovementSpeed + static_cast<float>(player.GetAttributes().GetDexterityModifier()) * 0.1f;
+
+    EXPECT_EQ(engine.GetContent()->GetClasses().size(), 4u);
+    EXPECT_FLOAT_EQ(*engine.GetCharacters().GetMovementSpeed(*engine.GetPlayerId()), expected);
+}
+
+TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
+    const auto shipped = FindShippedContent();
+    ASSERT_TRUE(shipped.has_value());
+    TempSaveDir dir;
+    std::filesystem::create_directories(dir.path);
+    const std::filesystem::path source(std::u8string(shipped->begin(), shipped->end()));
+    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json" }) {
+        std::filesystem::copy_file(source / file, dir.path / file);
+    }
+
+    // Data-only change: Warrior base speed 4.0 -> 8.0
+    std::string classes;
+    {
+        std::ifstream in(dir.path / "classes.json", std::ios::binary);
+        classes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    const auto at = classes.find("\"baseMovementSpeed\": 4.0");
+    ASSERT_NE(at, std::string::npos);
+    classes.replace(at, std::string("\"baseMovementSpeed\": 4.0").size(), "\"baseMovementSpeed\": 8.0");
+    std::ofstream(dir.path / "classes.json", std::ios::binary | std::ios::trunc) << classes;
+
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() })) << engine.GetInitializationError();
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
+
+    const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    const float speed = 8.0f + static_cast<float>(player.GetAttributes().GetDexterityModifier()) * 0.1f;
+    EXPECT_NEAR(engine.GetPlayerPosition().x, speed * 30 * StepSeconds(engine), 1e-4);
 }

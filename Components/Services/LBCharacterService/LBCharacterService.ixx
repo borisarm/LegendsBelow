@@ -4,6 +4,7 @@ export module LB.CharacterService;
 // Import only required domains
 import LB.Core;
 import LB.Character;
+import LB.Combat;
 import std;
 
 /// <summary>
@@ -18,6 +19,18 @@ export namespace LB::Services::Character {
 	using LB::Character::CharacterId;
 
     using LB::Attributes;
+    using LB::Character::ClassProgression;
+    using LB::Combat::WeaponType;
+
+    /// <summary>
+    /// A class's rules, normally loaded from classes.json: movement, the level 1-20
+    /// progression table, and attack adjustments per weapon category
+    /// </summary>
+    struct ClassRules {
+        float baseMovementSpeed{4.0f};                       // tiles per second before DEX and armour
+        ClassProgression progression;                        // HP/MP gains, attack and save bonuses
+        std::map<WeaponType, int32_t> weaponAdjustments;     // e.g. Sword: +3 Warrior, -5 Cleric
+    };
     using LB::Position;
 
     /// <summary>
@@ -103,15 +116,21 @@ export namespace LB::Services::Character {
                 return std::nullopt; // Invalid name
             }
 
+            // Classes are data driven: no rules, no character
+            const auto* rules = GetClassRules(request.characterClass);
+            if (!rules) {
+                return std::nullopt;
+            }
+
             // Generate new character ID
             auto characterId = generateNextId();
 
             // Apply class-specific modifiers
             auto adjustedAttributes = applyClassModifiers(request.characterClass, request.baseAttributes);
 
-            // Calculate starting hit points and mana
-            auto startingHP = calculateBaseHitPoints(request.characterClass, adjustedAttributes);
-            auto startingMP = calculateBaseManaPoints(request.characterClass, adjustedAttributes);
+            // Starting hit points and mana from the class progression table at level 1
+            auto startingHP = calculateMaxHitPoints(*rules, 1, adjustedAttributes);
+            auto startingMP = calculateMaxManaPoints(request.characterClass, *rules, 1, adjustedAttributes);
 
             // Create character domain entity
             Character character(
@@ -206,18 +225,17 @@ export namespace LB::Services::Character {
                     currentAttribs.charisma + result.attributeGains.charisma
                 };
 
-                // Calculate hit point and mana increases
-                result.hitPointIncrease = calculateHitPointGain(character.GetClass(), result.attributeGains.constitution, levelsGained);
-                result.manaPointIncrease = calculateManaPointGain(character.GetClass(), result.attributeGains.intelligence, levelsGained);
+                // Recompute max HP and MP from the progression table at the new level
+                const auto& rules = *GetClassRules(character.GetClass());
+                const auto newMaxHP = calculateMaxHitPoints(rules, newLevel, newAttributes);
+                const auto newMaxMP = calculateMaxManaPoints(character.GetClass(), rules, newLevel, newAttributes);
+                result.hitPointIncrease = newMaxHP - character.GetMaxHitPoints();
+                result.manaPointIncrease = newMaxMP - character.GetMaxManaPoints();
 
                 // Apply changes to character
                 character.SetLevel(newLevel);
                 character.SetExperience(newExperience);
                 character.SetAttributes(newAttributes);
-
-                // Increase max HP and MP
-                auto newMaxHP = character.GetMaxHitPoints() + result.hitPointIncrease;
-                auto newMaxMP = character.GetMaxManaPoints() + result.manaPointIncrease;
                 character.SetHitPoints(newMaxHP, newMaxHP); // Level up restores health
                 character.SetManaPoints(newMaxMP, newMaxMP); // Level up restores mana
 
@@ -341,9 +359,67 @@ export namespace LB::Services::Character {
             }
 
             const auto& character = it->second;
-            const float speed = getClassBaseSpeed(character.GetClass())
+            const auto* rules = GetClassRules(character.GetClass());
+            if (!rules) {
+                return std::nullopt;
+            }
+
+            const float speed = rules->baseMovementSpeed
                 + static_cast<float>(character.GetAttributes().GetDexterityModifier()) * 0.1f;
             return std::max(MinimumMovementSpeed, speed);
+        }
+
+        /// <summary>
+        /// Class adjustment for attacking with a weapon category (classes.json weaponAdjustments)
+        /// </summary>
+        std::optional<int32_t> GetWeaponAdjustment(CharacterId id, WeaponType weapon) const {
+            const auto* rules = GetRulesFor(id);
+            if (!rules) {
+                return std::nullopt;
+            }
+
+            auto it = rules->weaponAdjustments.find(weapon);
+            return it != rules->weaponAdjustments.end() ? it->second : 0;
+        }
+
+        /// <summary>
+        /// Attack bonus with a weapon category (design-character-system.md 4.2 plus class adjustment):
+        /// melee = class melee bonus + STR_mod, ranged (bows, crossbows) = class ranged bonus + DEX_mod,
+        /// then + the class adjustment for that weapon category
+        /// </summary>
+        std::optional<int32_t> GetAttackBonus(CharacterId id, WeaponType weapon) const {
+            auto it = characters_.find(id);
+            const auto* rules = GetRulesFor(id);
+            if (it == characters_.end() || !rules) {
+                return std::nullopt;
+            }
+
+            const auto& character = it->second;
+            const auto totals = rules->progression.TotalsAt(character.GetLevel());
+            const bool ranged = weapon == WeaponType::Bow || weapon == WeaponType::Crossbow;
+            const int32_t classBonus = ranged ? totals.rangedAttackBonus : totals.meleeAttackBonus;
+            const int32_t attributeBonus = ranged
+                ? character.GetAttributes().GetDexterityModifier()
+                : character.GetAttributes().GetStrengthModifier();
+
+            return classBonus + attributeBonus + *GetWeaponAdjustment(id, weapon);
+        }
+
+        /// <summary>
+        /// Configure a class's rules, normally from classes.json. Characters of a class can only
+        /// be created once its rules are configured.
+        /// </summary>
+        void SetClassRules(CharacterClass charClass, ClassRules rules) {
+            rules.baseMovementSpeed = std::max(MinimumMovementSpeed, rules.baseMovementSpeed);
+            classRules_[charClass] = std::move(rules);
+        }
+
+        /// <summary>
+        /// Rules for a class, or null if not configured
+        /// </summary>
+        const ClassRules* GetClassRules(CharacterClass charClass) const {
+            auto it = classRules_.find(charClass);
+            return it != classRules_.end() ? &it->second : nullptr;
         }
 
         /// <summary>
@@ -580,6 +656,7 @@ export namespace LB::Services::Character {
 
     private:
         std::unordered_map<CharacterId, Character> characters_;
+        std::unordered_map<CharacterClass, ClassRules> classRules_;
         CharacterId nextId_{1};
 
         CharacterId generateNextId() {
@@ -600,38 +677,6 @@ export namespace LB::Services::Character {
                 default:
                     return base;
             }
-        }
-
-        int32_t calculateBaseHitPoints(CharacterClass charClass, const Attributes& attributes) const {
-            int32_t baseHP = 10; // Base hit points
-            int32_t constitutionBonus = attributes.GetConstitutionModifier();
-
-            // Class-specific HP modifiers
-            switch (charClass) {
-                case CharacterClass::Warrior: baseHP += 5; break;
-                case CharacterClass::Rogue: baseHP += 2; break;
-                case CharacterClass::Mage: baseHP += 0; break;
-                case CharacterClass::Cleric: baseHP += 3; break;
-                default: break;
-            }
-
-            return std::max(1, baseHP + constitutionBonus);
-        }
-
-        int32_t calculateBaseManaPoints(CharacterClass charClass, const Attributes& attributes) const {
-            int32_t baseMP = 0; // Base mana points
-            int32_t intelligenceBonus = attributes.GetIntelligenceModifier();
-
-            // Class-specific MP modifiers
-            switch (charClass) {
-                case CharacterClass::Warrior: baseMP = 0; break;
-                case CharacterClass::Rogue: baseMP = 5; break;
-                case CharacterClass::Mage: baseMP = 20; break;
-                case CharacterClass::Cleric: baseMP = 15; break;
-                default: break;
-            }
-
-            return std::max(0, baseMP + intelligenceBonus * 2);
         }
 
         int32_t calculateExperienceForLevel(int32_t level) const {
@@ -681,46 +726,28 @@ export namespace LB::Services::Character {
             };
         }
 
-        int32_t calculateHitPointGain(CharacterClass charClass, int32_t constitutionGain, int32_t levels) const {
-            int32_t baseGainPerLevel = 3; // Base HP gain per level
-
-            switch (charClass) {
-                case CharacterClass::Warrior: baseGainPerLevel = 5; break;
-                case CharacterClass::Rogue: baseGainPerLevel = 4; break;
-                case CharacterClass::Mage: baseGainPerLevel = 2; break;
-                case CharacterClass::Cleric: baseGainPerLevel = 3; break;
-                default: break;
-            }
-
-            return (baseGainPerLevel + constitutionGain) * levels;
-        }
-
-        int32_t calculateManaPointGain(CharacterClass charClass, int32_t intelligenceGain, int32_t levels) const {
-            int32_t baseGainPerLevel = 0;
-
-            switch (charClass) {
-                case CharacterClass::Warrior: baseGainPerLevel = 0; break;
-                case CharacterClass::Rogue: baseGainPerLevel = 1; break;
-                case CharacterClass::Mage: baseGainPerLevel = 5; break;
-                case CharacterClass::Cleric: baseGainPerLevel = 3; break;
-                default: break;
-            }
-
-            return (baseGainPerLevel + intelligenceGain * 2) * levels;
-        }
-
         // Slowest a character can move, however low its DEX
         static constexpr float MinimumMovementSpeed = 1.0f;
 
-        // Tiles per second before DEX and armour. Placeholder tuning until class data files exist.
-        static float getClassBaseSpeed(CharacterClass charClass) {
-            switch (charClass) {
-                case CharacterClass::Rogue: return 5.0f;
-                case CharacterClass::Warrior:
-                case CharacterClass::Mage:
-                case CharacterClass::Cleric:
-                default: return 4.0f;
-            }
+        const ClassRules* GetRulesFor(CharacterId id) const {
+            auto it = characters_.find(id);
+            return it != characters_.end() ? GetClassRules(it->second.GetClass()) : nullptr;
+        }
+
+        // design-character-system.md 4.2: MaxHP = class table HP + CON_mod * level
+        static int32_t calculateMaxHitPoints(const ClassRules& rules, int32_t level, const Attributes& attributes) {
+            const auto totals = rules.progression.TotalsAt(level);
+            return std::max(1, totals.maxHitPoints + attributes.GetConstitutionModifier() * level);
+        }
+
+        // design-character-system.md 4.2: MaxMP = class table MP + CasterPrimaryMod * level,
+        // CasterPrimaryMod = INT_mod (Mage), WIS_mod (Cleric), 0 for others
+        static int32_t calculateMaxManaPoints(CharacterClass charClass, const ClassRules& rules, int32_t level, const Attributes& attributes) {
+            const auto totals = rules.progression.TotalsAt(level);
+            int32_t casterModifier = 0;
+            if (charClass == CharacterClass::Mage) casterModifier = attributes.GetIntelligenceModifier();
+            if (charClass == CharacterClass::Cleric) casterModifier = attributes.GetWisdomModifier();
+            return std::max(0, totals.maxManaPoints + casterModifier * level);
         }
 
         int32_t getMaxMoveDistance(CharacterClass charClass, const Attributes& attributes) const {

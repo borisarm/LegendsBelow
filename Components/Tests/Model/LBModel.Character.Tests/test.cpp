@@ -298,3 +298,60 @@ TEST(ItemIdTests, ItemId_IsInt32) {
     ItemId id = 99;
     EXPECT_EQ(id, 99);
 }
+// ============================================================================
+// ClassProgression Tests
+// ============================================================================
+
+namespace {
+    LB::Character::ClassProgression MakeProgression(int levels) {
+        LB::Character::ClassProgression progression;
+        for (int level = 1; level <= levels; ++level) {
+            LB::Character::ClassLevelGains row{};
+            row.level = level;
+            row.hpGain = level == 1 ? 12 : 8;
+            row.mpGain = level == 1 ? 3 : 2;
+            row.meleeAttackBonus = level == 1 ? 2 : (level % 2);
+            row.mentalSaveBonus = level % 5 == 0 ? 1 : 0;
+            progression.levels.push_back(row);
+        }
+        return progression;
+    }
+}
+
+TEST(ClassProgressionTests, IsComplete_TwentyLevelsInOrder) {
+    EXPECT_TRUE(MakeProgression(20).IsComplete());
+    EXPECT_FALSE(MakeProgression(19).IsComplete());
+
+    auto shuffled = MakeProgression(20);
+    std::swap(shuffled.levels[3], shuffled.levels[4]);
+    EXPECT_FALSE(shuffled.IsComplete());
+}
+
+TEST(ClassProgressionTests, TotalsAt_SumsRowsUpToLevel) {
+    const auto progression = MakeProgression(20);
+
+    const auto level1 = progression.TotalsAt(1);
+    EXPECT_EQ(level1.maxHitPoints, 12);
+    EXPECT_EQ(level1.maxManaPoints, 3);
+    EXPECT_EQ(level1.meleeAttackBonus, 2);
+
+    const auto level5 = progression.TotalsAt(5);
+    EXPECT_EQ(level5.maxHitPoints, 12 + 4 * 8);
+    EXPECT_EQ(level5.meleeAttackBonus, 2 + 2);   // levels 3 and 5
+    EXPECT_EQ(level5.mentalSaveBonus, 1);        // level 5
+}
+
+TEST(ClassProgressionTests, TotalsAt_ClampsToTable) {
+    const auto progression = MakeProgression(20);
+
+    EXPECT_EQ(progression.TotalsAt(0).maxHitPoints, progression.TotalsAt(1).maxHitPoints);
+    EXPECT_EQ(progression.TotalsAt(50).maxHitPoints, progression.TotalsAt(20).maxHitPoints);
+    EXPECT_EQ(progression.TotalsAt(20).maxHitPoints, 12 + 19 * 8);
+}
+
+TEST(ClassProgressionTests, TotalsAt_EmptyTable_Zero) {
+    const LB::Character::ClassProgression empty;
+
+    EXPECT_EQ(empty.TotalsAt(10).maxHitPoints, 0);
+    EXPECT_FALSE(empty.IsComplete());
+}

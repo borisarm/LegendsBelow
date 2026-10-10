@@ -141,6 +141,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="LB.Character.Progression.ixx" />
     <ClCompile Include="LB.Character.Entities.ixx" />
     <ClCompile Include="LB.Character.Enums.ixx" />
     <ClCompile Include="LB.Character.ixx" />
