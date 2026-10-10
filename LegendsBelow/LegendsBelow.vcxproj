@@ -433,6 +433,10 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Data\classes.json">
       <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
     </CopyFileToFolders>
+    <!-- 3D models (KayKit Dungeon Pack, CC0), loaded at startup from <exe dir>\Assets\Models -->
+    <CopyFileToFolders Include="..\Assets\Models\*.glb;..\Assets\Models\*.gltf;..\Assets\Models\LICENSE-KayKit.txt">
+      <DestinationFolders>$(OutDir)Assets\Models</DestinationFolders>
+    </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />

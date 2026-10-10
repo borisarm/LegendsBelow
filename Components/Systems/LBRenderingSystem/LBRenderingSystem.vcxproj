@@ -52,7 +52,9 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <!-- No /GL: with /GL + /Zi the compiler writes corrupt debug info for this library's module
+         units (LNK4020), as in LBAssetPersistenceService -->
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -131,6 +133,8 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ControlFlowGuard>Guard</ControlFlowGuard>
+      <!-- The game links with /guard:ehcont; without /GL the objects need it at compile time -->
+      <GuardEHContMetadata>true</GuardEHContMetadata>
       <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -145,12 +149,15 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <Lib>
-      <!-- Fold DirectXTK12 (static through the overlay triplets in triplets/) into this library
-           so consumers link without vcpkg; vcpkg supplies the library directory -->
-      <AdditionalDependencies>DirectXTK12.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- Fold DirectXTK12 and fastgltf (with simdjson), static through the overlay triplets in
+           triplets/, into this library so consumers link without vcpkg; vcpkg supplies the
+           library directory -->
+      <AdditionalDependencies>DirectXTK12.lib;fastgltf.lib;simdjson.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GltfLoader.cpp" />
+    <ClCompile Include="Model.ixx" />
     <ClCompile Include="Camera.ixx" />
     <ClCompile Include="DeviceResources.cpp">
       <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>

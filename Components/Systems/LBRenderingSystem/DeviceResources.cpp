@@ -40,6 +40,7 @@ module;
 #include <directxtk12/GeometricPrimitive.h>
 #include <directxtk12/GraphicsMemory.h>
 #include <directxtk12/RenderTargetState.h>
+#include <directxtk12/VertexTypes.h>
 
 #ifdef _DEBUG
 #include <dxgidebug.h>
@@ -47,11 +48,13 @@ module;
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <exception>
 #include <functional>
 #include <iterator>
 #include <memory>
+#include <vector>
 #include <stdexcept>
 #include <system_error>
 #include <tuple>
@@ -64,6 +67,8 @@ module;
 #pragma warning(disable : 4061)
 
 module LB.RenderingSystem:DeviceResources;
+
+import :Model;
 
 namespace LB::Systems::Rendering::Detail
 {
@@ -235,7 +240,9 @@ namespace LB::Systems::Rendering::Detail
     public:
         using DeviceCallback = std::function<void()>;
 
-        GpuRenderer() : m_deviceResources(std::make_unique<DeviceResources>())
+        // sRGB render target views over a UNORM swap chain: shaders write linear colors (glTF
+        // materials are linear) and the hardware encodes them for display
+        GpuRenderer() : m_deviceResources(std::make_unique<DeviceResources>(DXGI_FORMAT_B8G8R8A8_UNORM_SRGB))
         {
             m_deviceResources->RegisterDeviceNotify(this);
         }
@@ -318,6 +325,49 @@ namespace LB::Systems::Rendering::Detail
             m_shapes[shape]->Draw(commandList);
         }
 
+        // Keep a model and upload its parts to GPU buffers; returns its index for DrawModel.
+        // The CPU data is kept so the model can be uploaded again after a device loss.
+        std::size_t AddModel(std::shared_ptr<const ModelData> model)
+        {
+            m_models.push_back(GpuModel{ std::move(model), {} });
+            if (m_effect)
+                UploadModel(m_models.back());
+            return m_models.size() - 1;
+        }
+
+        // Draw every part of a model: part transform, then scale, turn around Y, and move to a
+        // world position. Material colors are multiplied by the tint. Call after SetCamera.
+        void DrawModel(std::size_t index, float x, float y, float z, float yaw, float scale,
+                       float r, float g, float b, float a)
+        {
+            if (!m_effect || index >= m_models.size()) return;
+            const auto& model = m_models[index];
+            if (model.parts.size() != model.data->parts.size()) return;
+
+            using namespace DirectX;
+            const XMMATRIX placement = XMMatrixScaling(scale, scale, scale) * XMMatrixRotationY(yaw) * XMMatrixTranslation(x, y, z);
+
+            auto commandList = m_deviceResources->GetCommandList();
+            commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            for (std::size_t i = 0; i < model.parts.size(); ++i)
+            {
+                const auto& part = model.data->parts[i];
+                const auto& gpu = model.parts[i];
+                const auto& color = model.data->materials[part.materialIndex].baseColor;
+
+                XMFLOAT4X4 transform;
+                std::copy(part.transform.m.begin(), part.transform.m.end(), &transform._11);
+                m_effect->SetWorld(XMLoadFloat4x4(&transform) * placement);
+                m_effect->SetDiffuseColor(XMVectorSet(color[0] * r, color[1] * g, color[2] * b, 1.0f));
+                m_effect->SetAlpha(color[3] * a);
+                m_effect->Apply(commandList);
+
+                commandList->IASetVertexBuffers(0, 1, &gpu.vertexView);
+                commandList->IASetIndexBuffer(&gpu.indexView);
+                commandList->DrawIndexedInstanced(gpu.indexCount, 1, 0, 0, 0);
+            }
+        }
+
         // Fill a screen-space rectangle with a solid color. Uses a render-target clear limited to
         // the rectangle, so no pipeline state or shaders are needed. Call between BeginFrame and
         // EndFrame with a rectangle inside the back buffer.
@@ -371,6 +421,8 @@ namespace LB::Systems::Rendering::Detail
         // IDeviceNotify
         void OnDeviceLost() override
         {
+            for (auto& model : m_models)
+                model.parts.clear();
             for (auto& shape : m_shapes)
                 shape.reset();
             m_effect.reset();
@@ -417,13 +469,137 @@ namespace LB::Systems::Rendering::Detail
                 renderTargetState);
 
             m_effect = std::make_unique<BasicEffect>(device, EffectFlags::Lighting | EffectFlags::PerPixelLighting, pipeline);
+            // DirectXTK's default three-light rig, dimmed for a dungeon: the lights add up, and the
+            // sRGB target shows linear values brighter than a UNORM one did. Almost no specular, so
+            // the flat-colored KayKit materials read as stone and cloth rather than plastic.
             m_effect->EnableDefaultLighting();
+            m_effect->SetAmbientLightColor(XMVectorSet(0.03f, 0.03f, 0.04f, 1.0f));
+            m_effect->SetSpecularColor(XMVectorSet(0.04f, 0.04f, 0.04f, 1.0f));
+            m_effect->SetLightDiffuseColor(0, XMVectorSet(0.75f, 0.70f, 0.62f, 1.0f));   // key: warm, torch-like
+            m_effect->SetLightDiffuseColor(1, XMVectorSet(0.12f, 0.13f, 0.18f, 1.0f));   // fill: cool
+            m_effect->SetLightDiffuseColor(2, XMVectorSet(0.10f, 0.10f, 0.12f, 1.0f));   // back
 
             // Unit shapes centered on the origin; scaled per draw
             m_shapes[0] = GeometricPrimitive::CreateBox(XMFLOAT3(1.0f, 1.0f, 1.0f));
             m_shapes[1] = GeometricPrimitive::CreateCylinder(1.0f, 1.0f);
             m_shapes[2] = GeometricPrimitive::CreateSphere(1.0f);
             m_shapes[3] = GeometricPrimitive::CreateCone(1.0f, 1.0f);
+
+            // Models added before (or kept across) a device loss
+            for (auto& model : m_models)
+                UploadModel(model);
+        }
+
+        // GPU copies of a model's parts, in the same order as ModelData::parts
+        struct GpuModelPart
+        {
+            ComPtr<ID3D12Resource> vertexBuffer;
+            ComPtr<ID3D12Resource> indexBuffer;
+            D3D12_VERTEX_BUFFER_VIEW vertexView{};
+            D3D12_INDEX_BUFFER_VIEW indexView{};
+            UINT indexCount{0};
+        };
+
+        struct GpuModel
+        {
+            std::shared_ptr<const ModelData> data;
+            std::vector<GpuModelPart> parts;
+        };
+
+        // ModelVertex must match the input layout shared with GeometricPrimitive
+        static_assert(sizeof(ModelVertex) == sizeof(DirectX::VertexPositionNormalTexture));
+
+        // Copy every part into default-heap vertex and index buffers through one staging buffer and
+        // a one-off command list, then wait for the copy (models are loaded at startup).
+        // ResourceUploadBatch is avoided on purpose: its <future> include breaks `import std` in
+        // the units importing this partition (MSVC C1116).
+        void UploadModel(GpuModel& model)
+        {
+            auto device = m_deviceResources->GetD3DDevice();
+
+            struct Pending { const void* data; UINT64 size; ID3D12Resource* target; D3D12_RESOURCE_STATES state; UINT64 offset; };
+            std::vector<GpuModelPart> parts(model.data->parts.size());
+            std::vector<Pending> copies;
+            UINT64 stagingSize = 0;
+
+            const auto createBuffer = [&](UINT64 size, ComPtr<ID3D12Resource>& buffer)
+            {
+                const CD3DX12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE_DEFAULT);
+                const auto desc = CD3DX12_RESOURCE_DESC::Buffer(size);
+                ThrowIfFailed(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+                    D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(buffer.ReleaseAndGetAddressOf())));
+            };
+            const auto align = [](UINT64 value) { return (value + 255) & ~UINT64(255); };
+
+            for (std::size_t i = 0; i < parts.size(); ++i)
+            {
+                const auto& part = model.data->parts[i];
+                auto& gpu = parts[i];
+                const UINT64 vertexBytes = part.vertices.size() * sizeof(ModelVertex);
+                const UINT64 indexBytes = part.indices.size() * sizeof(std::uint32_t);
+                createBuffer(vertexBytes, gpu.vertexBuffer);
+                createBuffer(indexBytes, gpu.indexBuffer);
+
+                copies.push_back({ part.vertices.data(), vertexBytes, gpu.vertexBuffer.Get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, stagingSize });
+                stagingSize = align(stagingSize + vertexBytes);
+                copies.push_back({ part.indices.data(), indexBytes, gpu.indexBuffer.Get(), D3D12_RESOURCE_STATE_INDEX_BUFFER, stagingSize });
+                stagingSize = align(stagingSize + indexBytes);
+
+                gpu.vertexView.BufferLocation = gpu.vertexBuffer->GetGPUVirtualAddress();
+                gpu.vertexView.SizeInBytes = static_cast<UINT>(vertexBytes);
+                gpu.vertexView.StrideInBytes = sizeof(ModelVertex);
+                gpu.indexView.BufferLocation = gpu.indexBuffer->GetGPUVirtualAddress();
+                gpu.indexView.SizeInBytes = static_cast<UINT>(indexBytes);
+                gpu.indexView.Format = DXGI_FORMAT_R32_UINT;
+                gpu.indexCount = static_cast<UINT>(part.indices.size());
+            }
+
+            // Staging buffer in the upload heap holding everything
+            ComPtr<ID3D12Resource> staging;
+            {
+                const CD3DX12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE_UPLOAD);
+                const auto desc = CD3DX12_RESOURCE_DESC::Buffer(std::max<UINT64>(stagingSize, 1));
+                ThrowIfFailed(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(staging.GetAddressOf())));
+                std::uint8_t* mapped = nullptr;
+                const CD3DX12_RANGE noRead(0, 0);
+                ThrowIfFailed(staging->Map(0, &noRead, reinterpret_cast<void**>(&mapped)));
+                for (const auto& copy : copies)
+                    std::memcpy(mapped + copy.offset, copy.data, static_cast<std::size_t>(copy.size));
+                staging->Unmap(0, nullptr);
+            }
+
+            // Record the copies and the transitions to their final states
+            ComPtr<ID3D12CommandAllocator> allocator;
+            ComPtr<ID3D12GraphicsCommandList> commandList;
+            ThrowIfFailed(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(allocator.GetAddressOf())));
+            ThrowIfFailed(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(commandList.GetAddressOf())));
+            std::vector<D3D12_RESOURCE_BARRIER> barriers;
+            for (const auto& copy : copies)
+            {
+                commandList->CopyBufferRegion(copy.target, 0, staging.Get(), copy.offset, copy.size);
+                barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(copy.target, D3D12_RESOURCE_STATE_COPY_DEST, copy.state));
+            }
+            commandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+            ThrowIfFailed(commandList->Close());
+
+            auto queue = m_deviceResources->GetCommandQueue();
+            ID3D12CommandList* lists[] = { commandList.Get() };
+            queue->ExecuteCommandLists(1, lists);
+
+            // Wait for the copy before the staging buffer goes away
+            ComPtr<ID3D12Fence> fence;
+            ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.GetAddressOf())));
+            ThrowIfFailed(queue->Signal(fence.Get(), 1));
+            if (fence->GetCompletedValue() < 1)
+            {
+                Microsoft::WRL::Wrappers::Event done(CreateEventExW(nullptr, nullptr, 0, EVENT_MODIFY_STATE | SYNCHRONIZE));
+                if (!done.IsValid()) throw std::system_error(std::error_code(static_cast<int>(GetLastError()), std::system_category()), "CreateEventExW");
+                ThrowIfFailed(fence->SetEventOnCompletion(1, done.Get()));
+                std::ignore = WaitForSingleObjectEx(done.Get(), INFINITE, FALSE);
+            }
+
+            model.parts = std::move(parts);
         }
 
         std::unique_ptr<DeviceResources> m_deviceResources;
@@ -433,6 +609,8 @@ namespace LB::Systems::Rendering::Detail
         std::unique_ptr<DirectX::GraphicsMemory> m_graphicsMemory;
         std::unique_ptr<DirectX::BasicEffect> m_effect;
         std::unique_ptr<DirectX::GeometricPrimitive> m_shapes[4];
+
+        std::vector<GpuModel> m_models;
         DeviceCallback m_onDeviceLost;
         DeviceCallback m_onDeviceRestored;
     };

@@ -67,8 +67,8 @@ namespace
         return ToUtf8(path + L"\\LegendsBelow\\Saves");
     }
 
-    // <directory of the executable>\Assets\Data as UTF-8 (copied there by the build)
-    std::string GetContentDirectory()
+    // <directory of the executable>\Assets\<folder> as UTF-8 (copied there by the build)
+    std::string GetAssetDirectory(const wchar_t* folder)
     {
         std::wstring path(MAX_PATH, L'\0');
         DWORD length = 0;
@@ -77,7 +77,7 @@ namespace
         path.resize(length);
 
         path.resize(path.find_last_of(L'\\') + 1);
-        return ToUtf8(path + L"Assets\\Data");
+        return ToUtf8(path + L"Assets\\" + folder);
     }
 
     // Translate a WM_*BUTTONDOWN/UP message into an engine mouse event
@@ -166,7 +166,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
         LB::Engine::EngineOptions options;
         options.saveDirectory = GetSaveDirectory();
-        options.contentDirectory = GetContentDirectory();
+        options.contentDirectory = GetAssetDirectory(L"Data");
+        options.modelDirectory = GetAssetDirectory(L"Models");
 
         if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top, options))
         {

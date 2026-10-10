@@ -2,6 +2,7 @@
 export module LB.RenderingSystem;
 
 export import :Camera;
+export import :Model;
 import LB.Core;
 import std;
 
@@ -99,6 +100,27 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
+    /// A loaded model placed in the world
+    /// </summary>
+    struct ModelRenderData {
+        ModelId model{InvalidModelId};
+        Vector3 position{};                    // where the model's origin goes
+        float yawRadians{0.0f};                // rotation around the vertical axis (0: model +Z faces +Z)
+        float scale{1.0f};                     // uniform
+        Color tint{Color::White()};            // multiplies the material colors
+    };
+
+    /// <summary>
+    /// Outcome of RenderingSystem::LoadModel
+    /// </summary>
+    struct ModelLoadResult {
+        ModelId id{InvalidModelId};
+        String error;                          // why loading failed (empty on success)
+
+        [[nodiscard]] bool Succeeded() const noexcept { return id != InvalidModelId; }
+    };
+
+    /// <summary>
     /// Text render data
     /// </summary>
     struct TextRenderData {
@@ -116,6 +138,7 @@ export namespace LB::Systems::Rendering {
     struct RenderStats {
         uint32_t drawCalls{0};
         uint32_t meshesRendered{0};
+        uint32_t modelsRendered{0};
         uint32_t spritesRendered{0};
         uint32_t textRendered{0};
         float frameTime{0.0f};
@@ -200,9 +223,11 @@ export namespace LB::Systems::Rendering {
             textQueue_.clear();
             rectangleQueue_.clear();
             meshQueue_.clear();
+            modelQueue_.clear();
 
             stats_.drawCalls = 0;
             stats_.meshesRendered = 0;
+            stats_.modelsRendered = 0;
             stats_.spritesRendered = 0;
             stats_.textRendered = 0;
         }
@@ -244,6 +269,45 @@ export namespace LB::Systems::Rendering {
         /// </summary>
         const std::vector<MeshRenderData>& GetQueuedMeshes() const {
             return meshQueue_;
+        }
+
+        /// <summary>
+        /// Load a glTF 2.0 model (.gltf or .glb) and, with a GPU device, upload it. Works headless
+        /// too, so model data can be inspected without a device. Loading the same file twice
+        /// returns the same model.
+        /// </summary>
+        ModelLoadResult LoadModel(const std::filesystem::path& path);
+
+        /// <summary>
+        /// A loaded model by handle, or null
+        /// </summary>
+        [[nodiscard]] const ModelData* GetModel(ModelId id) const noexcept {
+            return id != InvalidModelId && id <= models_.size() ? models_[id - 1].get() : nullptr;
+        }
+
+        /// <summary>
+        /// A loaded model by name (file name without extension)
+        /// </summary>
+        [[nodiscard]] std::optional<ModelId> FindModel(std::string_view name) const noexcept {
+            for (std::size_t i = 0; i < models_.size(); ++i) {
+                if (models_[i]->name == name) return static_cast<ModelId>(i + 1);
+            }
+            return std::nullopt;
+        }
+
+        /// <summary>
+        /// Queue a loaded model for the world pass (unknown handles are ignored)
+        /// </summary>
+        void DrawModel(const ModelRenderData& model) {
+            if (!initialized_ || !GetModel(model.model)) return;
+            modelQueue_.push_back(model);
+        }
+
+        /// <summary>
+        /// Models queued this frame (in submission order)
+        /// </summary>
+        const std::vector<ModelRenderData>& GetQueuedModels() const {
+            return modelQueue_;
         }
 
         /// <summary>
@@ -351,6 +415,9 @@ export namespace LB::Systems::Rendering {
         std::vector<TextRenderData> textQueue_;
         std::vector<RectangleRenderData> rectangleQueue_;
         std::vector<MeshRenderData> meshQueue_;
+        std::vector<ModelRenderData> modelQueue_;
+        std::vector<std::shared_ptr<const ModelData>> models_;   // ModelId - 1
+        std::vector<std::filesystem::path> modelPaths_;          // canonical source of each model
         CameraView cameraView_{};
         RenderStats stats_{};
 
@@ -380,3 +447,19 @@ export namespace LB::Systems::Rendering {
     };
 
 } // namespace LB::Systems::Rendering
+
+// Not exported: shared with the implementation units
+namespace LB::Systems::Rendering::Detail {
+    /// <summary>
+    /// Result of reading a glTF file: the model, or why it could not be read
+    /// </summary>
+    struct GltfLoadResult {
+        ModelData model;
+        std::string error;   // empty on success
+    };
+
+    /// <summary>
+    /// Read a .gltf or .glb file (GltfLoader.cpp, fastgltf)
+    /// </summary>
+    GltfLoadResult LoadGltfModel(const std::filesystem::path& path);
+}
