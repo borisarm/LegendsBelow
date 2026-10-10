@@ -145,8 +145,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <Lib>
-      <!-- Fold the DirectXTK12 import library into this library so consumers link without vcpkg
-           (vcpkg supplies the library directory). Executables need DirectXTK12.dll at run time. -->
+      <!-- Fold DirectXTK12 (static through the overlay triplets in triplets/) into this library
+           so consumers link without vcpkg; vcpkg supplies the library directory -->
       <AdditionalDependencies>DirectXTK12.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
   </ItemDefinitionGroup>

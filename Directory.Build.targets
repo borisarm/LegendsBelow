@@ -9,19 +9,4 @@
           BeforeTargets="SetModuleDependencies"
           DependsOnTargets="VcpkgTripletSelection;VcpkgInstallManifestDependencies"
           Condition="'$(VcpkgEnabled)' == 'true' and '$(VcpkgEnableManifest)' == 'true'" />
-
-  <!--
-    LBRenderingSystem uses DirectXTK12, which the x64-windows triplet builds as a DLL. The game
-    gets DirectXTK12.dll from vcpkg's app-local deployment; executables that link the renderer
-    without vcpkg (test projects) opt in with LBDeployDirectXTK12 to have it copied next to them.
-  -->
-  <Target Name="LBDeployDirectXTK12"
-          AfterTargets="Build"
-          Condition="'$(LBDeployDirectXTK12)' == 'true'">
-    <PropertyGroup>
-      <_LBVcpkgBin>$(MSBuildThisFileDirectory)vcpkg_installed\x64-windows\x64-windows\bin\</_LBVcpkgBin>
-      <_LBVcpkgBin Condition="'$(Configuration)' == 'Debug'">$(MSBuildThisFileDirectory)vcpkg_installed\x64-windows\x64-windows\debug\bin\</_LBVcpkgBin>
-    </PropertyGroup>
-    <Copy SourceFiles="$(_LBVcpkgBin)DirectXTK12.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-  </Target>
 </Project>

@@ -31,10 +31,8 @@ module;
 
 #include <dxgi1_6.h>
 
-// DirectX Tool Kit for DX12 (vcpkg builds it as DirectXTK12.dll): use the same DirectX-Headers
-// d3d12.h as above and import its API
+// DirectX Tool Kit for DX12 (static, see triplets/): use the same DirectX-Headers d3d12.h as above
 #define USING_DIRECTX_HEADERS
-#define DIRECTX_TOOLKIT_IMPORT
 #include <DirectXMath.h>
 #include <directxtk12/CommonStates.h>
 #include <directxtk12/Effects.h>
