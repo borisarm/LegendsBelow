@@ -144,7 +144,9 @@
     <ClCompile Include="Encounter.ixx" />
     <ClCompile Include="World.ixx" />
     <ClCompile Include="DungeonFloor.cpp" />
+    <ClCompile Include="Effects.cpp" />
     <ClCompile Include="Loot.ixx" />
+    <ClCompile Include="Particles.ixx" />
     <ClCompile Include="CharacterScreen.ixx" />
     <ClCompile Include="PlayerProgress.cpp" />
     <ClCompile Include="GameEngine.ixx" />

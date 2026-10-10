@@ -175,6 +175,7 @@ namespace LB::Engine {
         if (consumable->healing.count > 0) {
             const auto healed = characterService_.HealCharacter(*playerId_, lootRoller_.RollDice(consumable->healing));
             AddFloatingText(std::format("+{}", healed), { playerPosition_.x, PlayerTop(), playerPosition_.y }, { 0.45f, 0.95f, 0.45f, 1.0f }, 3.0f);
+            EmitHealingEffect();
         }
         return true;
     }
@@ -196,6 +197,7 @@ namespace LB::Engine {
         if (enemy.experience > 0) {
             if (const auto progress = characterService_.AwardExperience(*playerId_, enemy.experience); progress && progress->levelIncreased) {
                 AddFloatingText("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
+                EmitLevelUpEffect();
             }
         }
         if (!enemy.definition->lootTable.empty()) {

@@ -10,4 +10,7 @@ namespace LBShaders
     const unsigned char* ModelInstancedPS(std::size_t& size) noexcept;
     const unsigned char* OverlayVS(std::size_t& size) noexcept;
     const unsigned char* OverlayPS(std::size_t& size) noexcept;
+    const unsigned char* ParticleVS(std::size_t& size) noexcept;
+    const unsigned char* ParticlePS(std::size_t& size) noexcept;
+    const unsigned char* ParticleAlphaPS(std::size_t& size) noexcept;
 }

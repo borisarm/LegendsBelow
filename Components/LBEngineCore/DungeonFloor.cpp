@@ -84,6 +84,7 @@ namespace LB::Engine {
             BuildWalls();
         }
         BuildTorches();
+        particles_.Clear();
         explored_.assign(layout.cells.size(), 0);
         RevealAround();
     }
@@ -147,6 +148,7 @@ namespace LB::Engine {
             const auto chest = world_.RoomCenter(static_cast<std::int32_t>(i));
             if (Encounter::Distance(chest, playerPosition_) <= InteractRadius) {
                 rooms_[i].chestOpened = true;
+                EmitChestEffect(chest);
                 DropLoot(ChestLootTable, chest);
             }
         }
@@ -317,29 +319,61 @@ namespace LB::Engine {
                 color.a = opacity;
                 renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ model(TorchModel), { torch.position.x, 1.0f, torch.position.y }, torch.yaw, ModelScale, color });
             }
-            if (opacity > 0.5f) {
-                // An outer glow and a hot core, swaying with the flicker
-                Systems::Rendering::MeshRenderData outer{};
-                outer.shape = Systems::Rendering::MeshShape::Sphere;
-                outer.position = { flame.x, flame.y + 0.02f * flicker, flame.z };
-                outer.size = { 0.17f * flicker, 0.24f * flicker, 0.17f * flicker };
-                outer.color = { 0.0f, 0.0f, 0.0f, 1.0f };
-                outer.emissive = { 1.0f * flicker * tint.r, 0.42f * flicker * tint.g, 0.08f * flicker * tint.b, 1.0f };
-                renderingSystem_.DrawMesh(outer);
-
-                Systems::Rendering::MeshRenderData core = outer;
-                core.position.y = flame.y - 0.02f;
-                core.size = { 0.09f, 0.13f * flicker, 0.09f };
-                core.emissive = { 1.0f * tint.r, 0.85f * tint.g, 0.45f * tint.b, 1.0f };
-                renderingSystem_.DrawMesh(core);
-            }
-
             Systems::Rendering::PointLight light{};
             light.position = { flame.x + std::sin(torch.yaw) * 0.25f, flame.y, flame.z + std::cos(torch.yaw) * 0.25f };
             light.color = { 1.0f, 0.55f, 0.22f, 1.0f };
             light.radius = TorchLightRadius;
             light.intensity = TorchLightIntensity * flicker;
             renderingSystem_.DrawLight(light);
+        }
+    }
+
+    // Each torch near the player feeds its fire: a steady stream of flame particles rising and
+    // cooling from white-yellow to deep red, and now and then an ember drifting higher
+    void GameEngine::UpdateTorchFire(float elapsedSeconds) {
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        const auto between = [&](float lo, float hi) { return lo + (hi - lo) * unit(effectsRng_); };
+
+        for (auto& torch : torches_) {
+            if (torch.wall && walls_[*torch.wall].opacity < 0.5f) continue;   // its wall is faded out
+            if (Encounter::Distance(torch.position, playerPosition_) > TorchFireRange) continue;
+            const auto base = FlameOf(torch);
+
+            torch.flameCarry += TorchFlamesPerSecond * elapsedSeconds;
+            for (; torch.flameCarry >= 1.0f; torch.flameCarry -= 1.0f) {
+                Particle flame{};
+                flame.effect = ParticleEffect::TorchFlame;
+                flame.position = { base.x + between(-0.04f, 0.04f), base.y - 0.06f, base.z + between(-0.04f, 0.04f) };
+                flame.velocity = { between(-0.08f, 0.08f), between(0.55f, 0.9f), between(-0.08f, 0.08f) };
+                flame.buoyancy = 0.6f;
+                flame.drag = 1.5f;
+                flame.lifetimeSeconds = between(0.35f, 0.6f);
+                flame.startSize = between(0.12f, 0.18f);
+                flame.endSize = 0.04f;
+                flame.startColor = { 1.0f, 0.85f, 0.45f };
+                flame.middleColor = { 1.0f, 0.42f, 0.08f };
+                flame.endColor = { 0.5f, 0.08f, 0.02f };
+                flame.brightness = 1.15f;
+                particles_.Spawn(flame);
+            }
+
+            torch.emberCarry += TorchEmbersPerSecond * elapsedSeconds;
+            for (; torch.emberCarry >= 1.0f; torch.emberCarry -= 1.0f) {
+                Particle ember{};
+                ember.effect = ParticleEffect::TorchEmber;
+                ember.position = { base.x + between(-0.05f, 0.05f), base.y + 0.05f, base.z + between(-0.05f, 0.05f) };
+                ember.velocity = { between(-0.25f, 0.25f), between(0.6f, 1.1f), between(-0.25f, 0.25f) };
+                ember.buoyancy = 0.2f;
+                ember.drag = 0.6f;
+                ember.lifetimeSeconds = between(1.0f, 1.8f);
+                ember.startSize = 0.04f;
+                ember.endSize = 0.02f;
+                ember.startColor = { 1.0f, 0.7f, 0.3f };
+                ember.middleColor = { 1.0f, 0.4f, 0.1f };
+                ember.endColor = { 0.7f, 0.15f, 0.03f };
+                ember.brightness = 2.0f;
+                particles_.Spawn(ember);
+            }
         }
     }
 

@@ -1450,3 +1450,29 @@ TEST(LightingTests, DrawLight_BeforeInitialize_Ignored) {
 
     EXPECT_TRUE(system.GetQueuedLights().empty());
 }
+
+TEST(LightingTests, DrawParticle_QueuedAndOneDraw) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+
+    for (int i = 0; i < 50; ++i) system.DrawParticle(ParticleRenderData{ { 0.0f, 1.0f, 0.0f }, 0.1f });
+
+    EXPECT_EQ(system.GetQueuedParticles().size(), 50u);
+    system.EndFrame();
+    EXPECT_EQ(system.GetStats().drawCalls, 1u);
+    system.BeginFrame();
+    EXPECT_TRUE(system.GetQueuedParticles().empty());
+}
+
+TEST(LightingTests, DustAndGlowingParticles_OneDrawEach) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+
+    for (int i = 0; i < 10; ++i) system.DrawParticle(ParticleRenderData{ { 0.0f, 1.0f, 0.0f }, 0.1f });
+    for (int i = 0; i < 10; ++i) system.DrawParticle(ParticleRenderData{ { 0.0f, 0.1f, 0.0f }, 0.3f, Color{ 0.5f, 0.5f, 0.5f, 0.4f }, false });
+    system.EndFrame();
+
+    EXPECT_EQ(system.GetStats().drawCalls, 2u);
+}

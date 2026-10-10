@@ -194,6 +194,16 @@
     </FxCompile>
     <None Include="Shaders\ModelInstanced.hlsli" />
     <None Include="Shaders\Overlay.hlsli" />
+    <None Include="Shaders\Particle.hlsli" />
+    <FxCompile Include="Shaders\Particle_VS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\ParticleAlpha_PS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Particle_PS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FxCompile>
     <ClInclude Include="ShaderBytecode.h" />
   </ItemGroup>
   <ItemDefinitionGroup>

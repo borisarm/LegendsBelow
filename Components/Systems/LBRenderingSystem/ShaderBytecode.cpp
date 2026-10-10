@@ -11,6 +11,9 @@
 #include "ModelInstanced_PS.inc"
 #include "Overlay_VS.inc"
 #include "Overlay_PS.inc"
+#include "Particle_VS.inc"
+#include "Particle_PS.inc"
+#include "ParticleAlpha_PS.inc"
 
 namespace LBShaders
 {
@@ -42,5 +45,23 @@ namespace LBShaders
     {
         size = sizeof(g_Overlay_PS);
         return g_Overlay_PS;
+    }
+
+    const unsigned char* ParticleVS(std::size_t& size) noexcept
+    {
+        size = sizeof(g_Particle_VS);
+        return g_Particle_VS;
+    }
+
+    const unsigned char* ParticlePS(std::size_t& size) noexcept
+    {
+        size = sizeof(g_Particle_PS);
+        return g_Particle_PS;
+    }
+
+    const unsigned char* ParticleAlphaPS(std::size_t& size) noexcept
+    {
+        size = sizeof(g_ParticleAlpha_PS);
+        return g_ParticleAlpha_PS;
     }
 }

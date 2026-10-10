@@ -341,6 +341,12 @@ namespace LB::Systems::Rendering::Detail
             m_effect->SetView(view);
             m_effect->SetProjection(projection);
             XMStoreFloat4x4(&m_frameConstants.viewProjection, view * projection);
+
+            // Screen right and up in the world, for camera-facing particles
+            const XMVECTOR forward = XMVector3Normalize(XMVectorSubtract(target, eye));
+            const XMVECTOR right = XMVector3Normalize(XMVector3Cross(forward, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)));
+            XMStoreFloat4(&m_cameraRight, right);
+            XMStoreFloat4(&m_cameraUp, XMVector3Cross(right, forward));
         }
 
         // Draw a unit primitive (0 box, 1 cylinder, 2 sphere, 3 cone) scaled, turned around Y,
@@ -516,6 +522,46 @@ namespace LB::Systems::Rendering::Detail
                 UploadTextures({ &m_fonts.back()->atlas });
         }
 
+        // Draw particles (x, y, z, size, r, g, b, a each) as camera-facing quads, added to the frame
+        // (glowing) or blended over it (dust): tested against the depth buffer but not writing it.
+        // Call after the models.
+        void DrawParticles(const float* particles, std::size_t count, bool additive)
+        {
+            auto* pipeline = additive ? m_particlePipeline.Get() : m_particleAlphaPipeline.Get();
+            if (!pipeline || !m_graphicsMemory || !m_textureHeap || count == 0) return;
+            using namespace DirectX;
+
+            struct ParticleFrame
+            {
+                XMFLOAT4X4 viewProjection;
+                XMFLOAT4 right;
+                XMFLOAT4 up;
+            };
+            auto frame = m_graphicsMemory->Allocate(sizeof(ParticleFrame), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+            *static_cast<ParticleFrame*>(frame.Memory()) = ParticleFrame{ m_frameConstants.viewProjection, m_cameraRight, m_cameraUp };
+
+            const std::size_t bytes = count * 8 * sizeof(float);
+            auto instances = m_graphicsMemory->Allocate(bytes, 16);
+            std::memcpy(instances.Memory(), particles, bytes);
+
+            auto commandList = m_deviceResources->GetCommandList();
+            ID3D12DescriptorHeap* heaps[] = { m_textureHeap->Heap() };
+            commandList->SetDescriptorHeaps(1, heaps);
+            commandList->SetGraphicsRootSignature(m_particleRootSignature.Get());
+            commandList->SetGraphicsRootConstantBufferView(0, frame.GpuAddress());
+            commandList->SetGraphicsRootDescriptorTable(1, m_textureHeap->GetGpuHandle(m_textures.at(&ParticleTexture()).descriptor));
+            commandList->SetPipelineState(pipeline);
+            commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            D3D12_VERTEX_BUFFER_VIEW view{};
+            view.BufferLocation = instances.GpuAddress();
+            view.SizeInBytes = static_cast<UINT>(bytes);
+            view.StrideInBytes = 8 * sizeof(float);
+            commandList->IASetVertexBuffers(0, 1, &view);
+            commandList->DrawInstanced(6, static_cast<UINT>(count), 0, 0);
+            m_boundPipeline = nullptr;
+        }
+
         // Draw the 2D overlay: textured, alpha-blended triangles in pixels over the whole frame
         // (six vertices per quad), one draw per run of the same atlas. Call after the world pass.
         void DrawOverlay(const OverlayVertex* vertices, const std::vector<OverlayBatch>& batches)
@@ -609,6 +655,9 @@ namespace LB::Systems::Rendering::Detail
             m_modelRootSignature.Reset();
             m_overlayPipeline.Reset();
             m_overlayRootSignature.Reset();
+            m_particlePipeline.Reset();
+            m_particleAlphaPipeline.Reset();
+            m_particleRootSignature.Reset();
             m_boundPipeline = nullptr;
             m_paletteAddress = 0;
             for (auto& shape : m_shapes)
@@ -667,12 +716,13 @@ namespace LB::Systems::Rendering::Detail
 
             CreateModelPipelines(renderTargetState);
             CreateOverlayPipeline(renderTargetState);
+            CreateParticlePipeline(renderTargetState);
 
             // Shader-visible texture descriptors; slot 0 is a white texel for untextured materials,
             // slot 1 the overlay's font atlas
             m_textureHeap = std::make_unique<DescriptorHeap>(device, MaxTextures);
             m_textures.clear();
-            UploadTextures({ &WhiteTexture(), &FontTexture() });
+            UploadTextures({ &WhiteTexture(), &FontTexture(), &ParticleTexture() });
             for (const auto& font : m_fonts)
                 UploadTextures({ &font->atlas });
 
@@ -941,6 +991,66 @@ namespace LB::Systems::Rendering::Detail
             ThrowIfFailed(device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(m_overlayPipeline.ReleaseAndGetAddressOf())));
         }
 
+        // Particles: frame constants, the sprite, additive blending over the depth-tested world
+        void CreateParticlePipeline(const DirectX::RenderTargetState& renderTargetState)
+        {
+            using namespace DirectX;
+            auto device = m_deviceResources->GetD3DDevice();
+
+            const CD3DX12_DESCRIPTOR_RANGE spriteRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+            CD3DX12_ROOT_PARAMETER parameters[2];
+            parameters[0].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_VERTEX);
+            parameters[1].InitAsDescriptorTable(1, &spriteRange, D3D12_SHADER_VISIBILITY_PIXEL);
+            CD3DX12_STATIC_SAMPLER_DESC sampler(0, D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+                D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP);
+            sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+            const CD3DX12_ROOT_SIGNATURE_DESC rootDesc(static_cast<UINT>(std::size(parameters)), parameters, 1, &sampler,
+                D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
+                | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
+                | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
+                | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS);
+            ComPtr<ID3DBlob> signature;
+            ComPtr<ID3DBlob> error;
+            ThrowIfFailed(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.GetAddressOf(), error.GetAddressOf()));
+            ThrowIfFailed(device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(),
+                IID_PPV_ARGS(m_particleRootSignature.ReleaseAndGetAddressOf())));
+
+            static constexpr D3D12_INPUT_ELEMENT_DESC elements[] =
+            {
+                { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+                { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            };
+
+            std::size_t vsSize = 0;
+            std::size_t psSize = 0;
+            const auto* vs = LBShaders::ParticleVS(vsSize);
+            const auto* ps = LBShaders::ParticlePS(psSize);
+
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+            desc.pRootSignature = m_particleRootSignature.Get();
+            desc.VS = { vs, vsSize };
+            desc.PS = { ps, psSize };
+            desc.BlendState = CommonStates::Additive;
+            desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;   // the shader premultiplies
+            desc.SampleMask = UINT_MAX;
+            desc.RasterizerState = CommonStates::CullNone;
+            desc.DepthStencilState = CommonStates::DepthRead;
+            desc.InputLayout = { elements, static_cast<UINT>(std::size(elements)) };
+            desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            desc.NumRenderTargets = 1;
+            desc.RTVFormats[0] = renderTargetState.rtvFormats[0];
+            desc.DSVFormat = renderTargetState.dsvFormat;
+            desc.SampleDesc.Count = 1;
+            ThrowIfFailed(device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(m_particlePipeline.ReleaseAndGetAddressOf())));
+
+            // Dust and smoke: straight alpha blending
+            const auto* alphaPs = LBShaders::ParticleAlphaPS(psSize);
+            desc.PS = { alphaPs, psSize };
+            desc.BlendState = CommonStates::NonPremultiplied;
+            ThrowIfFailed(device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(m_particleAlphaPipeline.ReleaseAndGetAddressOf())));
+        }
+
         // GPU copies of a model's parts, in the same order as ModelData::parts
         struct GpuModelPart
         {
@@ -971,6 +1081,28 @@ namespace LB::Systems::Rendering::Detail
         {
             static const ModelTexture white{ { ModelTexture::MipLevel{ 1, 1, { 255, 255, 255, 255 } } } };
             return white;
+        }
+
+        // The particle sprite: a soft round glow (alpha falls off smoothly from the middle)
+        static const ModelTexture& ParticleTexture()
+        {
+            static const ModelTexture sprite = []
+            {
+                constexpr std::uint32_t size = 64;
+                ModelTexture::MipLevel level{ size, size, std::vector<std::uint8_t>(size * size * 4, 255) };
+                for (std::uint32_t y = 0; y < size; ++y)
+                {
+                    for (std::uint32_t x = 0; x < size; ++x)
+                    {
+                        const float dx = (static_cast<float>(x) + 0.5f) / size * 2.0f - 1.0f;
+                        const float dy = (static_cast<float>(y) + 0.5f) / size * 2.0f - 1.0f;
+                        const float falloff = std::clamp(1.0f - std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f);
+                        level.pixels[(y * size + x) * 4 + 3] = static_cast<std::uint8_t>(falloff * falloff * 255.0f);
+                    }
+                }
+                return ModelTexture{ { std::move(level) } };
+            }();
+            return sprite;
         }
 
         // The overlay's font atlas (BitmapFont): one level, sampled with point filtering
@@ -1213,6 +1345,11 @@ namespace LB::Systems::Rendering::Detail
         ComPtr<ID3D12PipelineState> m_modelPipelines[2][3];
         ComPtr<ID3D12RootSignature> m_overlayRootSignature;
         ComPtr<ID3D12PipelineState> m_overlayPipeline;
+        ComPtr<ID3D12RootSignature> m_particleRootSignature;
+        ComPtr<ID3D12PipelineState> m_particlePipeline;
+        ComPtr<ID3D12PipelineState> m_particleAlphaPipeline;
+        DirectX::XMFLOAT4 m_cameraRight{ 1.0f, 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 m_cameraUp{ 0.0f, 1.0f, 0.0f, 0.0f };
         ID3D12PipelineState* m_boundPipeline{nullptr};
         D3D12_GPU_VIRTUAL_ADDRESS m_paletteAddress{0};
         DeviceCallback m_onDeviceLost;

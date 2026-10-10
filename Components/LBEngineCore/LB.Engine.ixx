@@ -12,5 +12,6 @@ export import :World;
 export import :Animator;
 export import :Encounter;
 export import :Loot;
+export import :Particles;
 export import :CharacterScreen;
 export import :GameEngine;

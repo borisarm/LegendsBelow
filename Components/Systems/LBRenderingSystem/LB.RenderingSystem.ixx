@@ -115,6 +115,17 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
+    /// A particle: a soft round sprite facing the camera, hidden by nearer geometry. Glowing ones
+    /// (fire, sparks) add their light to what is behind them; the others (dust, smoke) blend over it.
+    /// </summary>
+    struct ParticleRenderData {
+        Vector3 position{};
+        float size{0.1f};                       // tiles across
+        Color color{1.0f, 0.6f, 0.2f, 1.0f};    // linear; alpha: brightness (glowing) or opacity
+        bool glowing{true};
+    };
+
+    /// <summary>
     /// The light everything shares: directional lights scaled (1: the default rig), and ambient
     /// </summary>
     struct SceneLighting {
@@ -274,6 +285,7 @@ export namespace LB::Systems::Rendering {
             meshQueue_.clear();
             modelQueue_.clear();
             lightQueue_.clear();
+            particleQueue_.clear();
 
             stats_.drawCalls = 0;
             stats_.meshesRendered = 0;
@@ -325,6 +337,19 @@ export namespace LB::Systems::Rendering {
 
         const std::vector<PointLight>& GetQueuedLights() const {
             return lightQueue_;
+        }
+
+        /// <summary>
+        /// Queue a particle for this frame (drawn after the models: dust first, then glowing ones;
+        /// one draw each)
+        /// </summary>
+        void DrawParticle(const ParticleRenderData& particle) {
+            if (!initialized_) return;
+            particleQueue_.push_back(particle);
+        }
+
+        const std::vector<ParticleRenderData>& GetQueuedParticles() const {
+            return particleQueue_;
         }
 
         static constexpr std::size_t MaxPointLights = 16;
@@ -563,6 +588,7 @@ export namespace LB::Systems::Rendering {
         std::vector<MeshRenderData> meshQueue_;
         std::vector<ModelRenderData> modelQueue_;
         std::vector<PointLight> lightQueue_;
+        std::vector<ParticleRenderData> particleQueue_;
         SceneLighting lighting_{};
         std::vector<std::vector<ModelInstance>> opaqueInstances_;   // per model, rebuilt each frame
         std::vector<std::vector<ModelInstance>> fadedInstances_;

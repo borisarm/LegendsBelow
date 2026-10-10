@@ -20,6 +20,7 @@ import :StepTimer;
 import :World;
 import :Encounter;
 import :Loot;
+import :Particles;
 import :CharacterScreen;
 
 export namespace LB::Engine {
@@ -146,6 +147,10 @@ export namespace LB::Engine {
         static constexpr float TorchLightRadius = 6.0f;
         static constexpr float TorchLightIntensity = 1.6f;
         static constexpr float DungeonDirectionalLight = 0.3f;
+        // Torch fire: flame and ember particles a second, for torches this close to the player
+        static constexpr float TorchFlamesPerSecond = 34.0f;
+        static constexpr float TorchEmbersPerSecond = 2.5f;
+        static constexpr float TorchFireRange = 16.0f;
 
         // The minimap reveals floor cells this far (cells) around the player, in sight
         static constexpr std::int32_t MapRevealCells = 4;
@@ -458,9 +463,16 @@ export namespace LB::Engine {
             float yaw{0.0f};             // faces into the room
             std::optional<std::size_t> wall;
             float phase{0.0f};           // flicker offset
+            float flameCarry{0.0f};      // fractions of particles owed to the next step
+            float emberCarry{0.0f};
         };
 
         [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return torches_; }
+
+        /// <summary>
+        /// Particles in the world: torch fire, hit sparks, dust, sparkles (Effects.cpp)
+        /// </summary>
+        [[nodiscard]] const ParticleField& GetParticles() const noexcept { return particles_; }
 
         /// <summary>
         /// Has the player seen this floor cell? (what the minimap shows)
@@ -741,7 +753,8 @@ export namespace LB::Engine {
             }
 
             combatEvents_.clear();
-            if (!paused_ && !screenWasOpen && !characterScreen_.IsOpen()) {
+            const bool running = !paused_ && !screenWasOpen && !characterScreen_.IsOpen();
+            if (running) {
                 gameTimeSeconds_ += elapsedSeconds;
                 // Attacks first: a swing that starts this step roots the player at once
                 UpdatePlayerCombat(static_cast<float>(elapsedSeconds));
@@ -751,6 +764,7 @@ export namespace LB::Engine {
                 if (dungeonMode_) RevealAround();
                 UpdateGroundItems(static_cast<float>(elapsedSeconds));
                 UpdateFloatingTexts(static_cast<float>(elapsedSeconds));
+                EmitCombatEffects();
             }
 
             if (playerId_) {
@@ -758,6 +772,9 @@ export namespace LB::Engine {
             }
             camera_.Update(static_cast<float>(elapsedSeconds));
             UpdateWallFade(static_cast<float>(elapsedSeconds));
+
+            // Fire keeps burning during the pause and on the character screen: it is only a look
+            UpdateEffects(static_cast<float>(elapsedSeconds), running);
 
             // This step has consumed the input frame; presses are seen by exactly one step
             inputSystem_.Update();
@@ -801,6 +818,7 @@ export namespace LB::Engine {
             DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
             DrawFloorProps(shade(1.0f, 1.0f, 1.0f));
             DrawTorches(shade(1.0f, 1.0f, 1.0f));
+            DrawParticles(shade(1.0f, 1.0f, 1.0f));
             DrawHud();
             DrawMinimap();
             DrawCharacterScreen();
@@ -1143,6 +1161,18 @@ export namespace LB::Engine {
         void BuildTorches();
         void RevealAround();
         void DrawTorches(const Systems::Rendering::Color& tint);
+        void UpdateTorchFire(float elapsedSeconds);
+
+        // Effects.cpp
+        float EffectRandom(float lo, float hi);
+        void EmitEffect(ParticleEffect effect, Systems::Rendering::Vector3 at, std::int32_t count, float strength = 1.0f);
+        void EmitStream(ParticleEffect effect, Systems::Rendering::Vector3 at, float perSecond, float elapsedSeconds);
+        void EmitCombatEffects();
+        void EmitHealingEffect();
+        void EmitLevelUpEffect();
+        void EmitChestEffect(WorldPoint chest);
+        void UpdateEffects(float elapsedSeconds, bool running);
+        void DrawParticles(const Systems::Rendering::Color& tint);
         void DrawMinimap();
         void WriteFloor(Systems::Persistence::SaveData& data) const;
         void ReadFloor(const Systems::Persistence::SaveData& data);
@@ -1882,6 +1912,9 @@ export namespace LB::Engine {
         std::int32_t depth_{0};
         std::vector<RoomState> rooms_;
         std::vector<Torch> torches_;
+        ParticleField particles_;
+        std::mt19937 effectsRng_{ 12345u };
+        WorldPoint effectsPlayerPosition_{};
         std::vector<std::uint8_t> explored_;
         bool mapExpanded_{false};
         std::uint32_t nextGroundItemId_{1};
