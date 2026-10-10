@@ -86,6 +86,12 @@ namespace LB::Content {
 
         constexpr std::string_view AttributeNames[] = { "STR", "DEX", "CON", "INT", "WIS", "CHA" };
 
+        constexpr EnumName<LB::AttributeType> AttributeTypes[] = {
+            {"STR", LB::AttributeType::Strength}, {"DEX", LB::AttributeType::Dexterity},
+            {"CON", LB::AttributeType::Constitution}, {"INT", LB::AttributeType::Intelligence},
+            {"WIS", LB::AttributeType::Wisdom}, {"CHA", LB::AttributeType::Charisma},
+        };
+
         /// <summary>
         /// Reads typed fields from one JSON object, recording errors with file and entry context
         /// </summary>
@@ -366,18 +372,12 @@ namespace LB::Content {
             reader.ReadEnum("class", definition.characterClass, CharacterClasses, true);
             reader.ReadString("name", definition.name, true);
             reader.ReadString("role", definition.role, false);
-            reader.ReadStringArray("primaryAttributes", definition.primaryAttributes);
+            reader.ReadEnumArray("primaryAttributes", definition.primaryAttributes, AttributeTypes, true);
             reader.ReadString("resource", definition.resource, true);
             reader.ReadFloat("baseMovementSpeed", definition.baseMovementSpeed, true);
-            reader.ReadEnumArray("armorProficiencies", definition.armorProficiencies, ArmorCategories, true);
             reader.ReadEnumArray("spellSchools", definition.spellSchools, SpellSchools, false);
             reader.ReadStringArray("signatureAbilities", definition.signatureAbilities);
 
-            for (const auto& attribute : definition.primaryAttributes) {
-                if (std::ranges::find(AttributeNames, std::string_view(attribute)) == std::end(AttributeNames)) {
-                    reader.Error(std::format("'primaryAttributes' has unknown attribute '{}'", attribute));
-                }
-            }
             if (definition.resource != "Mana" && definition.resource != "Stamina") {
                 if (!definition.resource.empty()) reader.Error(std::format("'resource' must be Mana or Stamina, not '{}'", definition.resource));
             }
@@ -399,6 +399,46 @@ namespace LB::Content {
                     *targets[i] = (*attributes)[name].get<int32_t>();
                 }
                 if (!definition.startingAttributes.IsValid()) reader.Error("'startingAttributes' values must be in [1, 30]");
+
+            }
+
+            // "attributeGrowth": { "autoPointsPerLevel": 1, "freePointsPerLevel": 1, caps }
+            if (const Json* growth = reader.Nested("attributeGrowth", true, false)) {
+                EntryReader growthReader(*growth, reader.Context() + ": attributeGrowth", reader.Errors());
+                auto& g = definition.attributeGrowth;
+                growthReader.ReadInt("autoPointsPerLevel", g.autoPointsPerLevel, true);
+                growthReader.ReadInt("freePointsPerLevel", g.freePointsPerLevel, true);
+                growthReader.ReadInt("primaryAttributeCap", g.primaryAttributeCap, true);
+                growthReader.ReadInt("otherAttributeCap", g.otherAttributeCap, true);
+                if (g.autoPointsPerLevel < 0 || g.freePointsPerLevel < 0) growthReader.Error("points per level must not be negative");
+                if (g.otherAttributeCap < 1 || g.primaryAttributeCap > 30) growthReader.Error("caps must be in [1, 30]");
+                if (g.primaryAttributeCap < g.otherAttributeCap) growthReader.Error("'primaryAttributeCap' must be at least 'otherAttributeCap'");
+            }
+
+            // "armorAdjustments": { "Heavy": { "movement": 0.5, "casting": 1.0 }, ... } - every category
+            if (const Json* adjustments = reader.Nested("armorAdjustments", true, false)) {
+                for (const auto& [name, value] : adjustments->items()) {
+                    const auto category = FindEnum(ArmorCategories, name);
+                    if (!category) {
+                        reader.Error(std::format("'armorAdjustments' has unknown armour category '{}'", name));
+                        continue;
+                    }
+                    if (!value.is_object()) {
+                        reader.Error(std::format("'armorAdjustments' value for '{}' must be an object", name));
+                        continue;
+                    }
+                    EntryReader adjustmentReader(value, std::format("{}: armorAdjustments.{}", reader.Context(), name), reader.Errors());
+                    ArmorAdjustment adjustment{};
+                    adjustmentReader.ReadFloat("movement", adjustment.movementScale, true);
+                    adjustmentReader.ReadFloat("casting", adjustment.castingScale, true);
+                    if (adjustment.movementScale < 0.0f || adjustment.castingScale < 0.0f) adjustmentReader.Error("scales must not be negative");
+                    definition.armorAdjustments[*category] = adjustment;
+                }
+                for (const auto& entry : ArmorCategories) {
+                    if (!definition.armorAdjustments.contains(entry.value)) {
+                        reader.Error(std::format("'armorAdjustments' has no value for '{}'", entry.name));
+                    }
+                }
             }
 
             // "weaponAdjustments": { "Sword": 3, ... } - one value for every weapon category
@@ -450,12 +490,19 @@ namespace LB::Content {
                     reader.Error(std::format("'progression' must list levels 1 to {} in order", ClassProgression::MaxLevel));
                 }
             }
+
+            // Starting attributes must respect the class caps (read above)
+            for (const auto& entry : AttributeTypes) {
+                const int32_t cap = definition.IsPrimaryAttribute(entry.value) ? definition.attributeGrowth.primaryAttributeCap : definition.attributeGrowth.otherAttributeCap;
+                if (definition.startingAttributes.Get(entry.value) > cap) {
+                    reader.Error(std::format("starting {} {} is above the class cap {}", entry.name, definition.startingAttributes.Get(entry.value), cap));
+                }
+            }
             return definition;
         }
 
-        // Rules spanning files: every class defined once, and armour/spells agree with class data
+        // Rules spanning files: every class defined once, and class spells agree with class schools
         void CheckClassRules(const std::vector<ClassDefinition>& classes, const std::vector<SpellDefinition>& spells,
-                             const std::vector<ArmorDefinition>& armour,
                              std::vector<String>& errors) {
             if (classes.empty()) return;  // no class data (tools, tests): nothing to check against
 
@@ -469,16 +516,6 @@ namespace LB::Content {
                 auto it = std::ranges::find(classes, c, &ClassDefinition::characterClass);
                 return it != classes.end() ? &*it : nullptr;
             };
-
-            for (const auto& armor : armour) {
-                for (auto allowed : armor.allowedClasses) {
-                    const auto* definition = find(allowed);
-                    if (definition && !definition->CanWear(armor.category)) {
-                        errors.push_back(std::format("armour.json: {}: allows {} but {} has no '{}' armour proficiency",
-                            armor.key, NameOf(CharacterClasses, allowed), definition->key, NameOf(ArmorCategories, armor.category)));
-                    }
-                }
-            }
 
             for (const auto& spell : spells) {
                 if (!spell.requiredClass) continue;
@@ -564,7 +601,7 @@ namespace LB::Content {
         auto armour = ReadArray<ArmorDefinition>(armourJson, "armour.json", ReadArmor, result.errors);
         auto classes = ReadArray<ClassDefinition>(classesJson, "classes.json", ReadClass, result.errors);
 
-        CheckClassRules(classes, spells, armour, result.errors);
+        CheckClassRules(classes, spells, result.errors);
 
         if (!result.Succeeded()) {
             Clear();

@@ -19,7 +19,12 @@ export namespace LB::Services::Character {
 	using LB::Character::CharacterId;
 
     using LB::Attributes;
+    using LB::AttributeType;
+    using LB::Character::ArmorAdjustment;
+    using LB::Character::AttributeGrowth;
     using LB::Character::ClassProgression;
+    using LB::Combat::ArmorCategory;
+    using LB::Combat::EquipmentSlot;
     using LB::Combat::WeaponType;
 
     /// <summary>
@@ -30,6 +35,20 @@ export namespace LB::Services::Character {
         float baseMovementSpeed{4.0f};                       // tiles per second before DEX and armour
         ClassProgression progression;                        // HP/MP gains, attack and save bonuses
         std::map<WeaponType, int32_t> weaponAdjustments;     // e.g. Sword: +3 Warrior, -5 Cleric
+        std::vector<AttributeType> primaryAttributes;        // receive the automatic level-up points
+        AttributeGrowth attributeGrowth;                     // points per level and attribute caps
+        std::map<ArmorCategory, ArmorAdjustment> armorAdjustments;  // scales armour penalties
+    };
+
+    /// <summary>
+    /// An equipped armour piece (from armour.json): what it costs in movement and casting
+    /// </summary>
+    struct ArmorPiece {
+        LB::Id armorId{LB::InvalidId};
+        EquipmentSlot slot{EquipmentSlot::None};
+        ArmorCategory category{ArmorCategory::None};
+        float movementPenalty{0.0f};   // fraction of speed, e.g. 0.15
+        float castPenalty{0.0f};       // fraction of cast time, e.g. 0.05
     };
     using LB::Position;
 
@@ -57,7 +76,8 @@ export namespace LB::Services::Character {
     struct CharacterProgressionResult {
         bool levelIncreased{false};
         int32_t newLevel{1};
-        Attributes attributeGains{};
+        Attributes attributeGains{0, 0, 0, 0, 0, 0};  // automatic class points applied (Attributes default to 10)
+        int32_t attributePointsGained{0};     // free points to assign (SpendAttributePoint)
         int32_t hitPointIncrease{0};
         int32_t manaPointIncrease{0};
         std::vector<LB::String> unlockedAbilities;
@@ -126,7 +146,8 @@ export namespace LB::Services::Character {
             auto characterId = generateNextId();
 
             // Apply class-specific modifiers
-            auto adjustedAttributes = applyClassModifiers(request.characterClass, request.baseAttributes);
+            // Starting attributes come from the class template / background; only the class caps apply
+            auto adjustedAttributes = clampToCaps(*rules, request.baseAttributes);
 
             // Starting hit points and mana from the class progression table at level 1
             auto startingHP = calculateMaxHitPoints(*rules, 1, adjustedAttributes);
@@ -210,23 +231,24 @@ export namespace LB::Services::Character {
             result.newLevel = newLevel;
 
             if (result.levelIncreased) {
-                // Calculate attribute gains per level
-                auto levelsGained = newLevel - oldLevel;
-                result.attributeGains = calculateAttributeGains(character.GetClass(), levelsGained);
+                const auto& rules = *GetClassRules(character.GetClass());
 
-                // Apply attribute gains
-                auto currentAttribs = character.GetAttributes();
-                auto newAttributes = Attributes{
-                    currentAttribs.strength + result.attributeGains.strength,
-                    currentAttribs.dexterity + result.attributeGains.dexterity,
-                    currentAttribs.constitution + result.attributeGains.constitution,
-                    currentAttribs.intelligence + result.attributeGains.intelligence,
-                    currentAttribs.wisdom + result.attributeGains.wisdom,
-                    currentAttribs.charisma + result.attributeGains.charisma
-                };
+                // Attribute growth: automatic class points into the primary attributes, free points
+                // for the player (design-character-system.md 5.2)
+                auto newAttributes = character.GetAttributes();
+                int32_t freePoints = 0;
+                for (int32_t level = oldLevel + 1; level <= newLevel; ++level) {
+                    for (int32_t point = 0; point < rules.attributeGrowth.autoPointsPerLevel; ++point) {
+                        if (!grantAutoPoint(rules, level + point, newAttributes, result.attributeGains)) {
+                            ++freePoints;  // every primary at its cap: the point becomes a free one
+                        }
+                    }
+                    freePoints += rules.attributeGrowth.freePointsPerLevel;
+                }
+                result.attributePointsGained = freePoints;
+                character.SetUnspentAttributePoints(character.GetUnspentAttributePoints() + freePoints);
 
                 // Recompute max HP and MP from the progression table at the new level
-                const auto& rules = *GetClassRules(character.GetClass());
                 const auto newMaxHP = calculateMaxHitPoints(rules, newLevel, newAttributes);
                 const auto newMaxMP = calculateMaxManaPoints(character.GetClass(), rules, newLevel, newAttributes);
                 result.hitPointIncrease = newMaxHP - character.GetMaxHitPoints();
@@ -364,9 +386,98 @@ export namespace LB::Services::Character {
                 return std::nullopt;
             }
 
-            const float speed = rules->baseMovementSpeed
+            // design-armour-system.md 4.2: BaseSpeed * (1 - sum of armour penalties), each penalty
+            // scaled by how well the class handles that armour category
+            const float baseSpeed = rules->baseMovementSpeed
                 + static_cast<float>(character.GetAttributes().GetDexterityModifier()) * 0.1f;
-            return std::max(MinimumMovementSpeed, speed);
+            float penalty = 0.0f;
+            for (const auto& piece : equippedArmorOf(id)) {
+                penalty += piece.movementPenalty * armorAdjustmentFor(*rules, piece.category).movementScale;
+            }
+            return std::max(MinimumMovementSpeed, baseSpeed * std::max(0.0f, 1.0f - penalty));
+        }
+
+        /// <summary>
+        /// Cast time multiplier from worn armour (design-armour-system.md 4.3): 1 + sum of the pieces'
+        /// cast penalties, each scaled by the class's casting adjustment for that armour category
+        /// </summary>
+        std::optional<float> GetCastTimeMultiplier(CharacterId id) const {
+            const auto* rules = GetRulesFor(id);
+            if (!rules) {
+                return std::nullopt;
+            }
+
+            float penalty = 0.0f;
+            for (const auto& piece : equippedArmorOf(id)) {
+                penalty += piece.castPenalty * armorAdjustmentFor(*rules, piece.category).castingScale;
+            }
+            return 1.0f + penalty;
+        }
+
+        /// <summary>
+        /// Wear an armour piece in its slot, replacing whatever was there
+        /// </summary>
+        bool EquipArmor(CharacterId id, const ArmorPiece& piece) {
+            if (!characters_.contains(id) || piece.slot == EquipmentSlot::None) {
+                return false;
+            }
+            equippedArmor_[id][piece.slot] = piece;
+            return true;
+        }
+
+        /// <summary>
+        /// Remove the armour piece in a slot
+        /// </summary>
+        bool UnequipArmor(CharacterId id, EquipmentSlot slot) {
+            auto it = equippedArmor_.find(id);
+            return it != equippedArmor_.end() && it->second.erase(slot) > 0;
+        }
+
+        /// <summary>
+        /// Armour pieces a character is wearing
+        /// </summary>
+        std::vector<ArmorPiece> GetEquippedArmor(CharacterId id) const {
+            return equippedArmorOf(id);
+        }
+
+        /// <summary>
+        /// Highest value an attribute can reach for this character's class
+        /// </summary>
+        std::optional<int32_t> GetAttributeCap(CharacterId id, AttributeType attribute) const {
+            const auto* rules = GetRulesFor(id);
+            if (!rules) {
+                return std::nullopt;
+            }
+            return attributeCap(*rules, attribute);
+        }
+
+        /// <summary>
+        /// Assign one free attribute point. Fails without unspent points or at the class cap.
+        /// Max HP/MP follow the new attribute; current HP/MP rise by the same amount.
+        /// </summary>
+        bool SpendAttributePoint(CharacterId id, AttributeType attribute) {
+            auto it = characters_.find(id);
+            const auto* rules = GetRulesFor(id);
+            if (it == characters_.end() || !rules) {
+                return false;
+            }
+
+            auto& character = it->second;
+            auto attributes = character.GetAttributes();
+            if (character.GetUnspentAttributePoints() <= 0 || attributes.Get(attribute) >= attributeCap(*rules, attribute)) {
+                return false;
+            }
+
+            attributes.Set(attribute, attributes.Get(attribute) + 1);
+            character.SetAttributes(attributes);
+            character.SetUnspentAttributePoints(character.GetUnspentAttributePoints() - 1);
+
+            const auto level = character.GetLevel();
+            const auto newMaxHP = calculateMaxHitPoints(*rules, level, attributes);
+            const auto newMaxMP = calculateMaxManaPoints(character.GetClass(), *rules, level, attributes);
+            character.SetHitPoints(std::clamp(character.GetCurrentHitPoints() + newMaxHP - character.GetMaxHitPoints(), 0, newMaxHP), newMaxHP);
+            character.SetManaPoints(std::clamp(character.GetCurrentManaPoints() + newMaxMP - character.GetMaxManaPoints(), 0, newMaxMP), newMaxMP);
+            return true;
         }
 
         /// <summary>
@@ -516,6 +627,7 @@ export namespace LB::Services::Character {
         /// Returns true if character was found and removed
         /// </summary>
         bool RemoveCharacter(CharacterId id) {
+            equippedArmor_.erase(id);
             return characters_.erase(id) > 0;
         }
 
@@ -595,21 +707,6 @@ export namespace LB::Services::Character {
         }
 
         /// <summary>
-        /// Equip armor to character
-        /// Placeholder for equipment system integration
-        /// </summary>
-        bool EquipArmor(CharacterId characterId, LB::Id armorId) {
-            auto it = characters_.find(characterId);
-            if (it == characters_.end()) {
-                return false;
-            }
-
-            // TODO: Integrate with inventory/equipment system
-            // For now, just validate the character exists
-            return true;
-        }
-
-        /// <summary>
         /// Learn new ability for character
         /// TODO: Implement ability tracking system
         /// </summary>
@@ -651,32 +748,18 @@ export namespace LB::Services::Character {
         /// </summary>
         void ClearAll() {
             characters_.clear();
+            equippedArmor_.clear();
             nextId_ = 1;
         }
 
     private:
         std::unordered_map<CharacterId, Character> characters_;
         std::unordered_map<CharacterClass, ClassRules> classRules_;
+        std::unordered_map<CharacterId, std::map<EquipmentSlot, ArmorPiece>> equippedArmor_;
         CharacterId nextId_{1};
 
         CharacterId generateNextId() {
             return nextId_++;
-        }
-
-        Attributes applyClassModifiers(CharacterClass charClass, const Attributes& base) const {
-            // Apply class-specific attribute modifiers
-            switch (charClass) {
-                case CharacterClass::Warrior:
-                    return Attributes{base.strength + 2, base.dexterity, base.constitution + 1, base.intelligence, base.wisdom, base.charisma};
-                case CharacterClass::Rogue:
-                    return Attributes{base.strength, base.dexterity + 2, base.constitution, base.intelligence, base.wisdom, base.charisma + 1};
-                case CharacterClass::Mage:
-                    return Attributes{base.strength, base.dexterity, base.constitution, base.intelligence + 2, base.wisdom + 1, base.charisma};
-                case CharacterClass::Cleric:
-                    return Attributes{base.strength, base.dexterity, base.constitution + 1, base.intelligence, base.wisdom + 2, base.charisma};
-                default:
-                    return base;
-            }
         }
 
         int32_t calculateExperienceForLevel(int32_t level) const {
@@ -694,40 +777,53 @@ export namespace LB::Services::Character {
             return level;
         }
 
-        Attributes calculateAttributeGains(CharacterClass charClass, int32_t levels) const {
-            // Per-level attribute gains based on class
-            Attributes gainsPerLevel{};
-
-            switch (charClass) {
-                case CharacterClass::Warrior:
-                    gainsPerLevel = Attributes{1, 0, 1, 0, 0, 0};
-                    break;
-                case CharacterClass::Rogue:
-                    gainsPerLevel = Attributes{0, 1, 0, 0, 0, 1};
-                    break;
-                case CharacterClass::Mage:
-                    gainsPerLevel = Attributes{0, 0, 0, 1, 1, 0};
-                    break;
-                case CharacterClass::Cleric:
-                    gainsPerLevel = Attributes{0, 0, 1, 0, 1, 0};
-                    break;
-                default:
-                    gainsPerLevel = Attributes{0, 0, 0, 0, 0, 0};
-                    break;
-            }
-
-            return Attributes{
-                gainsPerLevel.strength * levels,
-                gainsPerLevel.dexterity * levels,
-                gainsPerLevel.constitution * levels,
-                gainsPerLevel.intelligence * levels,
-                gainsPerLevel.wisdom * levels,
-                gainsPerLevel.charisma * levels
-            };
-        }
-
         // Slowest a character can move, however low its DEX
         static constexpr float MinimumMovementSpeed = 1.0f;
+
+        std::vector<ArmorPiece> equippedArmorOf(CharacterId id) const {
+            std::vector<ArmorPiece> pieces;
+            if (auto it = equippedArmor_.find(id); it != equippedArmor_.end()) {
+                for (const auto& [slot, piece] : it->second) pieces.push_back(piece);
+            }
+            return pieces;
+        }
+
+        static ArmorAdjustment armorAdjustmentFor(const ClassRules& rules, ArmorCategory category) {
+            auto it = rules.armorAdjustments.find(category);
+            return it != rules.armorAdjustments.end() ? it->second : ArmorAdjustment{};
+        }
+
+        static bool isPrimary(const ClassRules& rules, AttributeType attribute) {
+            return std::ranges::find(rules.primaryAttributes, attribute) != rules.primaryAttributes.end();
+        }
+
+        static int32_t attributeCap(const ClassRules& rules, AttributeType attribute) {
+            return isPrimary(rules, attribute) ? rules.attributeGrowth.primaryAttributeCap : rules.attributeGrowth.otherAttributeCap;
+        }
+
+        static Attributes clampToCaps(const ClassRules& rules, Attributes attributes) {
+            for (auto type : { AttributeType::Strength, AttributeType::Dexterity, AttributeType::Constitution,
+                               AttributeType::Intelligence, AttributeType::Wisdom, AttributeType::Charisma }) {
+                attributes.Set(type, std::min(attributes.Get(type), attributeCap(rules, type)));
+            }
+            return attributes;
+        }
+
+        // Give one automatic point to a primary attribute, rotating through the primaries by
+        // slot (level 2 -> first primary, level 3 -> second, ...). Primaries at their cap are
+        // skipped. Returns false when every primary is capped.
+        static bool grantAutoPoint(const ClassRules& rules, int32_t slot, Attributes& attributes, Attributes& gains) {
+            const auto count = static_cast<int32_t>(rules.primaryAttributes.size());
+            for (int32_t offset = 0; offset < count; ++offset) {
+                const auto attribute = rules.primaryAttributes[static_cast<std::size_t>((slot - 2 + offset) % count)];
+                if (attributes.Get(attribute) < attributeCap(rules, attribute)) {
+                    attributes.Set(attribute, attributes.Get(attribute) + 1);
+                    gains.Set(attribute, gains.Get(attribute) + 1);
+                    return true;
+                }
+            }
+            return false;
+        }
 
         const ClassRules* GetRulesFor(CharacterId id) const {
             auto it = characters_.find(id);

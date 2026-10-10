@@ -14,6 +14,8 @@ using namespace std;
 export namespace LB::Content {
     using LB::String;
     using LB::Character::CharacterClass;
+    using LB::Character::ArmorAdjustment;
+    using LB::Character::AttributeGrowth;
     using LB::Character::ClassLevelTotals;
     using LB::Character::ClassProgression;
     using LB::Combat::ArmorCategory;
@@ -131,11 +133,13 @@ export namespace LB::Content {
         CharacterClass characterClass{CharacterClass::None};
         String name;
         String role;
-        std::vector<String> primaryAttributes;        // "STR", "DEX", ...
+        std::vector<LB::AttributeType> primaryAttributes;   // "STR", "DEX", ... in the data
         LB::Attributes startingAttributes{};
         String resource;                              // "Mana" or "Stamina"
         float baseMovementSpeed{4.0f};                // tiles per second before DEX and armour
-        std::vector<ArmorCategory> armorProficiencies;
+        AttributeGrowth attributeGrowth;
+        // Movement/casting penalty scale per armour category; every category has a value
+        std::map<ArmorCategory, ArmorAdjustment> armorAdjustments;
         // Attack roll adjustment per weapon category for this class: +3 signature, +1 trained,
         // -1 untrained, -5 restricted. Every category has a value.
         std::map<WeaponType, int32_t> weaponAdjustments;
@@ -148,8 +152,13 @@ export namespace LB::Content {
             return it != weaponAdjustments.end() ? it->second : 0;
         }
 
-        [[nodiscard]] bool CanWear(ArmorCategory armor) const {
-            return std::ranges::find(armorProficiencies, armor) != armorProficiencies.end();
+        [[nodiscard]] ArmorAdjustment GetArmorAdjustment(ArmorCategory armor) const {
+            auto it = armorAdjustments.find(armor);
+            return it != armorAdjustments.end() ? it->second : ArmorAdjustment{};
+        }
+
+        [[nodiscard]] bool IsPrimaryAttribute(LB::AttributeType attribute) const {
+            return std::ranges::find(primaryAttributes, attribute) != primaryAttributes.end();
         }
 
         [[nodiscard]] bool HasSpellSchool(SpellSchool school) const {
