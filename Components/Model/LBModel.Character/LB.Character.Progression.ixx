@@ -35,6 +35,26 @@ export namespace LB::Character {
     };
 
     /// <summary>
+    /// How a class's attributes grow (design-character-system.md 5.2: 2 points per level, split
+    /// between automatic class points and points the player assigns), and the per-class caps
+    /// </summary>
+    struct AttributeGrowth {
+        int32_t autoPointsPerLevel{1};    // go to the class's primary attributes, alternating
+        int32_t freePointsPerLevel{1};    // assigned by the player
+        int32_t primaryAttributeCap{25};  // design 4.1 absolute cap
+        int32_t otherAttributeCap{18};    // top of the creation range
+    };
+
+    /// <summary>
+    /// How strongly a class feels an armour category's penalties: 0.5 signature, 1 trained,
+    /// 1.5 untrained, 2 restricted. Scales the armour pieces' movement and cast penalties.
+    /// </summary>
+    struct ArmorAdjustment {
+        float movementScale{1.0f};
+        float castingScale{1.0f};
+    };
+
+    /// <summary>
     /// A class's level 1..MaxLevel progression table
     /// </summary>
     struct ClassProgression {

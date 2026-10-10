@@ -1067,3 +1067,48 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
     const float speed = 8.0f + static_cast<float>(player.GetAttributes().GetDexterityModifier()) * 0.1f;
     EXPECT_NEAR(engine.GetPlayerPosition().x, speed * 30 * StepSeconds(engine), 1e-4);
 }
+
+// ============================================================================
+// GameEngine Class Growth and Armour Tests
+// ============================================================================
+
+TEST(GameEngineArmorTests, Player_HasExactClassStartingAttributes) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    const auto* warrior = engine.GetContent()->FindClass(LB::Character::CharacterClass::Warrior);
+    const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    EXPECT_EQ(player.GetAttributes().strength, warrior->startingAttributes.strength);       // 16, no hidden bonus
+    EXPECT_EQ(player.GetAttributes().constitution, warrior->startingAttributes.constitution);
+    EXPECT_EQ(*engine.GetCharacters().GetAttributeCap(*engine.GetPlayerId(), LB::AttributeType::Strength), 25);
+    EXPECT_EQ(*engine.GetCharacters().GetAttributeCap(*engine.GetPlayerId(), LB::AttributeType::Intelligence), 18);
+}
+
+TEST(GameEngineArmorTests, HeavyBreastplate_SlowsWarriorByScaledPenalty) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+    const float unarmored = PlayerSpeed(engine);
+
+    ASSERT_TRUE(engine.EquipPlayerArmor("armor_chest_rusted_breastplate_t1"));  // Heavy, 15% movement, 5% cast
+
+    // Warriors handle heavy armour at 0.5x: 7.5% slower
+    EXPECT_FLOAT_EQ(PlayerSpeed(engine), unarmored * (1.0f - 0.15f * 0.5f));
+    EXPECT_FLOAT_EQ(*engine.GetCharacters().GetCastTimeMultiplier(*engine.GetPlayerId()), 1.0f + 0.05f);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
+    EXPECT_NEAR(engine.GetPlayerPosition().x, unarmored * (1.0f - 0.075f) * 30 * StepSeconds(engine), 1e-4);
+}
+
+TEST(GameEngineArmorTests, EquipPlayerArmor_UnknownKey_Fails) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    EXPECT_FALSE(engine.EquipPlayerArmor("armor_does_not_exist"));
+}
+
+TEST(GameEngineArmorTests, EquipPlayerArmor_WithoutPlayer_Fails) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+
+    EXPECT_FALSE(engine.EquipPlayerArmor("armor_chest_rusted_breastplate_t1"));
+}

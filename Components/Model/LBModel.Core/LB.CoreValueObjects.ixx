@@ -51,6 +51,18 @@ export namespace LB {
     /// Six core attributes (D&D-style)
     /// Shared by Character, Combat, and Progression systems
     /// </summary>
+    /// <summary>
+    /// The six D&D-style attributes, for code that addresses one by name
+    /// </summary>
+    enum class AttributeType {
+        Strength = 0,
+        Dexterity,
+        Constitution,
+        Intelligence,
+        Wisdom,
+        Charisma
+    };
+
     struct Attributes {
         int32_t strength{10};
         int32_t dexterity{10};
@@ -83,6 +95,35 @@ export namespace LB {
                    intelligence >= 1 && intelligence <= 30 &&
                    wisdom >= 1 && wisdom <= 30 &&
                    charisma >= 1 && charisma <= 30;
+        }
+
+        /// <summary>
+        /// Value of one attribute
+        /// </summary>
+        [[nodiscard]] constexpr int32_t Get(AttributeType type) const noexcept {
+            switch (type) {
+                case AttributeType::Strength: return strength;
+                case AttributeType::Dexterity: return dexterity;
+                case AttributeType::Constitution: return constitution;
+                case AttributeType::Intelligence: return intelligence;
+                case AttributeType::Wisdom: return wisdom;
+                case AttributeType::Charisma: return charisma;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Set one attribute
+        /// </summary>
+        constexpr void Set(AttributeType type, int32_t value) noexcept {
+            switch (type) {
+                case AttributeType::Strength: strength = value; break;
+                case AttributeType::Dexterity: dexterity = value; break;
+                case AttributeType::Constitution: constitution = value; break;
+                case AttributeType::Intelligence: intelligence = value; break;
+                case AttributeType::Wisdom: wisdom = value; break;
+                case AttributeType::Charisma: charisma = value; break;
+            }
         }
     };
 

@@ -290,6 +290,23 @@ export namespace LB::Engine {
         [[nodiscard]] double GetGameTimeSeconds() const noexcept { return gameTimeSeconds_; }
 
         /// <summary>
+        /// Put an armour piece from armour.json on the player (replacing the piece in its slot).
+        /// Returns false without a player or for an unknown key.
+        /// </summary>
+        bool EquipPlayerArmor(std::string_view armorKey) {
+            const auto* armor = content_->FindArmor(armorKey);
+            if (!playerId_ || !armor) return false;
+
+            Services::Character::ArmorPiece piece{};
+            piece.armorId = armor->id;
+            piece.slot = armor->slot;
+            piece.category = armor->category;
+            piece.movementPenalty = armor->movementPenalty;
+            piece.castPenalty = armor->castPenalty;
+            return characterService_.EquipArmor(*playerId_, piece);
+        }
+
+        /// <summary>
         /// Save the game state to a slot
         /// </summary>
         bool SaveGame(std::int32_t slotIndex) {
@@ -414,6 +431,9 @@ export namespace LB::Engine {
                 rules.baseMovementSpeed = definition.baseMovementSpeed;
                 rules.progression = definition.progression;
                 rules.weaponAdjustments = definition.weaponAdjustments;
+                rules.primaryAttributes = definition.primaryAttributes;
+                rules.attributeGrowth = definition.attributeGrowth;
+                rules.armorAdjustments = definition.armorAdjustments;
                 characterService_.SetClassRules(definition.characterClass, std::move(rules));
             }
         }

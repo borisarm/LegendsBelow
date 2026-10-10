@@ -347,7 +347,10 @@ TEST_F(ShippedContentTests, Warrior_MatchesDesign) {
     EXPECT_EQ(warrior->startingAttributes.constitution, 14);
     EXPECT_EQ(warrior->startingAttributes.intelligence, 8);
     EXPECT_EQ(warrior->resource, "Stamina");
-    EXPECT_TRUE(warrior->CanWear(ArmorCategory::Heavy));
+    EXPECT_FLOAT_EQ(warrior->GetArmorAdjustment(ArmorCategory::Heavy).movementScale, 0.5f);  // signature
+    EXPECT_TRUE(warrior->IsPrimaryAttribute(LB::AttributeType::Strength));
+    EXPECT_TRUE(warrior->IsPrimaryAttribute(LB::AttributeType::Constitution));
+    EXPECT_FALSE(warrior->IsPrimaryAttribute(LB::AttributeType::Intelligence));
     EXPECT_TRUE(warrior->spellSchools.empty());
 }
 
@@ -412,14 +415,23 @@ namespace {
     constexpr const char* AllWeaponAdjustments =
         R"({"Sword":0,"Axe":0,"Mace":0,"Dagger":0,"Polearm":0,"Bow":0,"Crossbow":0,"Staff":0,"Wand":0})";
 
+    constexpr const char* AllArmorAdjustments =
+        R"({"Cloth":{"movement":1,"casting":1},"Light":{"movement":1,"casting":1},"Medium":{"movement":1,"casting":1},)"
+        R"("Heavy":{"movement":1,"casting":1},"Shield":{"movement":1,"casting":1}})";
+
+    constexpr const char* DefaultGrowth =
+        R"({"autoPointsPerLevel":1,"freePointsPerLevel":1,"primaryAttributeCap":25,"otherAttributeCap":18})";
+
     std::string ClassJson(const std::string& characterClass, const std::string& weapons = AllWeaponAdjustments,
-                          const std::string& armour = R"(["Cloth"])", const std::string& schools = "[]", int levels = 20) {
+                          const std::string& armour = AllArmorAdjustments, const std::string& schools = "[]", int levels = 20,
+                          const std::string& growth = DefaultGrowth) {
         std::string lower = characterClass;
         std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return std::format(R"({{"id":"class_{}","class":"{}","name":"{}","resource":"Mana","baseMovementSpeed":4.0,)"
                            R"("startingAttributes":{{"STR":10,"DEX":10,"CON":10,"INT":10,"WIS":10,"CHA":10}},)"
-                           R"("armorProficiencies":{},"weaponAdjustments":{},"spellSchools":{},"progression":{}}})",
-                           lower, characterClass, characterClass, armour, weapons, schools, Progression(levels));
+                           R"("primaryAttributes":["STR","CON"],"attributeGrowth":{},)"
+                           R"("armorAdjustments":{},"weaponAdjustments":{},"spellSchools":{},"progression":{}}})",
+                           lower, characterClass, characterClass, growth, armour, weapons, schools, Progression(levels));
     }
 
     std::string AllClasses(const std::string& warriorOverride = {}) {
@@ -458,7 +470,7 @@ TEST(ClassValidationTests, DuplicateClass_Rejected) {
 TEST(ClassValidationTests, IncompleteProgression_Rejected) {
     ContentDatabase content;
 
-    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", AllWeaponAdjustments, R"(["Cloth"])", "[]", 19)));
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", AllWeaponAdjustments, AllArmorAdjustments, "[]", 19)));
 
     EXPECT_TRUE(AnyErrorContains(result, "'progression' must list levels 1 to 20 in order")) << ErrorsOf(result);
 }
@@ -503,14 +515,60 @@ TEST(ClassValidationTests, WeaponAllowedForAnyAdjustment_Accepted) {
     EXPECT_TRUE(result.Succeeded()) << ErrorsOf(result);
 }
 
-TEST(ClassValidationTests, ArmourAllowedForClassWithoutProficiency_Rejected) {
+TEST(ClassValidationTests, MissingArmorCategory_Rejected) {
     ContentDatabase content;
-    // ValidArmor is Cloth allowed for Mage; this Mage can only wear Light
-    std::string classes = "[" + ClassJson("Warrior") + "," + ClassJson("Rogue") + "," + ClassJson("Mage", AllWeaponAdjustments, R"(["Light"])") + "," + ClassJson("Cleric") + "]";
 
-    auto result = content.LoadFromJson("[]", "[]", Array(ValidArmor), classes);
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", AllWeaponAdjustments, R"({"Cloth":{"movement":1,"casting":1}})")));
 
-    EXPECT_TRUE(AnyErrorContains(result, "armour.json: armor_a: allows Mage but class_mage has no 'Cloth' armour proficiency")) << ErrorsOf(result);
+    EXPECT_TRUE(AnyErrorContains(result, "'armorAdjustments' has no value for 'Heavy'")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, NegativeArmorScale_Rejected) {
+    ContentDatabase content;
+    std::string armour = AllArmorAdjustments;
+    armour.replace(armour.find(R"("Heavy":{"movement":1)"), 21, R"("Heavy":{"movement":-1)");
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", AllWeaponAdjustments, armour)));
+
+    EXPECT_TRUE(AnyErrorContains(result, "armorAdjustments.Heavy: scales must not be negative")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, ArmourAllowedForAnyClass_Accepted) {
+    ContentDatabase content;
+    // ValidArmor is Cloth allowed for Mage; penalties are scaled, nothing is banned
+
+    auto result = content.LoadFromJson("[]", "[]", Array(ValidArmor), AllClasses());
+
+    EXPECT_TRUE(result.Succeeded()) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, PrimaryCapBelowOtherCap_Rejected) {
+    ContentDatabase content;
+    const std::string growth = R"({"autoPointsPerLevel":1,"freePointsPerLevel":1,"primaryAttributeCap":15,"otherAttributeCap":18})";
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", AllWeaponAdjustments, AllArmorAdjustments, "[]", 20, growth)));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'primaryAttributeCap' must be at least 'otherAttributeCap'")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, StartingAttributeAboveCap_Rejected) {
+    ContentDatabase content;
+    std::string warrior = ClassJson("Warrior");
+    warrior.replace(warrior.find(R"("INT":10)"), 8, R"("INT":20)");  // INT is not a Warrior primary: cap 18
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(warrior));
+
+    EXPECT_TRUE(AnyErrorContains(result, "starting INT 20 is above the class cap 18")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, UnknownPrimaryAttribute_Rejected) {
+    ContentDatabase content;
+    std::string warrior = ClassJson("Warrior");
+    warrior.replace(warrior.find(R"(["STR","CON"])"), 13, R"(["STR","LUCK"])");
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(warrior));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'primaryAttributes' has unknown value 'LUCK'")) << ErrorsOf(result);
 }
 
 TEST(ClassValidationTests, ClassSpellOutsideClassSchools_Rejected) {
