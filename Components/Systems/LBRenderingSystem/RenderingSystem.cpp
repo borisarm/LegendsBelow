@@ -51,6 +51,17 @@ namespace LB::Systems::Rendering {
     void RenderingSystem::EndFrame() {
         if (!initialized_) return;
 
+        // Batch models: every copy of a model is one instanced draw per part. Faded copies
+        // (tint alpha < 1) are drawn after the opaque world, in two passes (depth, then blend).
+        opaqueInstances_.assign(models_.size(), {});
+        fadedInstances_.assign(models_.size(), {});
+        for (const auto& model : modelQueue_) {
+            const ModelInstance instance{ model.position, model.yawRadians, model.scale,
+                                          { model.tint.r, model.tint.g, model.tint.b, model.tint.a } };
+            auto& group = model.tint.a < 1.0f ? fadedInstances_ : opaqueInstances_;
+            group[model.model - 1].push_back(instance);
+        }
+
         if (gpu_) {
             gpu_->renderer.BeginFrame(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
 
@@ -65,10 +76,17 @@ namespace LB::Systems::Rendering {
                         mesh.size.x, mesh.size.y, mesh.size.z, mesh.yawRadians,
                         mesh.color.r, mesh.color.g, mesh.color.b, mesh.color.a);
                 }
-                for (const auto& model : modelQueue_) {
-                    gpu_->renderer.DrawModel(model.model - 1, model.position.x, model.position.y, model.position.z,
-                        model.yawRadians, model.scale, model.tint.r, model.tint.g, model.tint.b, model.tint.a);
-                }
+
+                using Pass = Detail::GpuRenderer::ModelPass;
+                gpu_->renderer.BeginModelPass();
+                const auto drawGroups = [this](const std::vector<std::vector<ModelInstance>>& groups, Pass pass) {
+                    for (std::size_t i = 0; i < groups.size(); ++i) {
+                        gpu_->renderer.DrawModelInstances(i, groups[i].data(), groups[i].size(), pass);
+                    }
+                };
+                drawGroups(opaqueInstances_, Pass::Opaque);
+                drawGroups(fadedInstances_, Pass::DepthOnly);
+                drawGroups(fadedInstances_, Pass::Transparent);
             }
 
             // 2D overlay: solid rectangles, back to front; clipped to the back buffer
@@ -88,8 +106,10 @@ namespace LB::Systems::Rendering {
         stats_.meshesRendered = static_cast<uint32_t>(meshQueue_.size());
         stats_.drawCalls += stats_.meshesRendered;
         stats_.modelsRendered = static_cast<uint32_t>(modelQueue_.size());
-        for (const auto& model : modelQueue_) {
-            stats_.drawCalls += static_cast<uint32_t>(models_[model.model - 1]->parts.size());
+        for (std::size_t i = 0; i < models_.size(); ++i) {
+            const auto parts = static_cast<uint32_t>(models_[i]->parts.size());
+            if (!opaqueInstances_[i].empty()) stats_.drawCalls += parts;
+            if (!fadedInstances_[i].empty()) stats_.drawCalls += 2 * parts;   // depth, then blend
         }
 
         // Sort and render all queued items

@@ -83,4 +83,14 @@ export namespace LB::Systems::Rendering {
         }
     };
 
+    /// <summary>
+    /// One placed copy of a model, as the renderer hands it to the GPU (instanced per part)
+    /// </summary>
+    struct ModelInstance {
+        Vector3 position{};
+        float yawRadians{0.0f};
+        float scale{1.0f};
+        std::array<float, 4> tint{1.0f, 1.0f, 1.0f, 1.0f};   // multiplies material colors; alpha < 1 fades
+    };
+
 } // namespace LB::Systems::Rendering

@@ -164,7 +164,39 @@
     </ClCompile>
     <ClCompile Include="LB.RenderingSystem.ixx" />
     <ClCompile Include="RenderingSystem.cpp" />
+    <!-- Plain C++ (not a module unit): includes the shader headers FXCompile writes to $(IntDir),
+         which do not exist yet when module dependencies are scanned -->
+    <ClCompile Include="ShaderBytecode.cpp">
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <!-- Shader Model 6.0 (dxc), compiled to byte arrays included by ShaderBytecode.cpp -->
+    <FxCompile Include="Shaders\ModelInstanced_VS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\ModelInstanced_PS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FxCompile>
+    <None Include="Shaders\ModelInstanced.hlsli" />
+    <ClInclude Include="ShaderBytecode.h" />
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <FxCompile>
+      <ShaderModel>6.0</ShaderModel>
+      <EntryPointName>main</EntryPointName>
+      <HeaderFileOutput>$(IntDir)%(Filename).inc</HeaderFileOutput>
+      <VariableName>g_%(Filename)</VariableName>
+      <ObjectFileOutput />
+    </FxCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <FxCompile>
+      <!-- Debug shaders carry their debug info inside the bytecode (for PIX) -->
+      <AdditionalOptions>-Qembed_debug %(AdditionalOptions)</AdditionalOptions>
+    </FxCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Model\LBModel.Core\LBModel.Core.vcxproj">
       <Project>{990b9ac5-23ad-45d1-b267-5bef0a4c6ebf}</Project>
