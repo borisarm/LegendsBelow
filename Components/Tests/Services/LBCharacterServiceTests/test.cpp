@@ -4,12 +4,42 @@ import LB.CharacterService;
 
 using namespace LB::Services::Character;
 
+namespace {
+    // Fixed class rules for tests (not the shipped classes.json): level 1 base values, then a
+    // constant gain per level. Shapes follow design-character-system.md section 3.
+    ClassRules MakeRules(float speed, int hp1, int mp1, int melee1, int ranged1, int hpGain, int mpGain, int swordAdjustment) {
+        ClassRules rules{};
+        rules.baseMovementSpeed = speed;
+        for (int level = 1; level <= ClassProgression::MaxLevel; ++level) {
+            LB::Character::ClassLevelGains row{};
+            row.level = level;
+            row.hpGain = level == 1 ? hp1 : hpGain;
+            row.mpGain = level == 1 ? mp1 : mpGain;
+            row.meleeAttackBonus = level == 1 ? melee1 : (level % 2 == 1 ? 1 : 0);
+            row.rangedAttackBonus = level == 1 ? ranged1 : (level % 4 == 0 ? 1 : 0);
+            rules.progression.levels.push_back(row);
+        }
+        rules.weaponAdjustments[WeaponType::Sword] = swordAdjustment;
+        rules.weaponAdjustments[WeaponType::Bow] = 1;
+        return rules;
+    }
+
+    CharacterService MakeTestService() {
+        CharacterService service;
+        service.SetClassRules(CharacterClass::Warrior, MakeRules(4.0f, 12, 3, 2, 0, 8, 2, +3));
+        service.SetClassRules(CharacterClass::Rogue, MakeRules(5.0f, 8, 6, 1, 2, 6, 4, +1));
+        service.SetClassRules(CharacterClass::Mage, MakeRules(4.0f, 6, 10, 0, 2, 4, 8, -1));
+        service.SetClassRules(CharacterClass::Cleric, MakeRules(4.0f, 10, 8, 1, 1, 7, 6, -5));
+        return service;
+    }
+}
+
 // ============================================================================
 // Character Creation Tests
 // ============================================================================
 
 TEST(CharacterServiceTests, CreateCharacter_ValidWarrior_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     CharacterCreationRequest request("TestWarrior", CharacterClass::Warrior, baseAttribs);
 
@@ -27,7 +57,7 @@ TEST(CharacterServiceTests, CreateCharacter_ValidWarrior_Success) {
 }
 
 TEST(CharacterServiceTests, CreateCharacter_ValidMage_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{8, 10, 8, 14, 12, 10};
     CharacterCreationRequest request("TestMage", CharacterClass::Mage, baseAttribs);
 
@@ -41,7 +71,7 @@ TEST(CharacterServiceTests, CreateCharacter_ValidMage_Success) {
 }
 
 TEST(CharacterServiceTests, CreateCharacter_ValidRogue_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 14, 10, 10, 10, 12};
     CharacterCreationRequest request("TestRogue", CharacterClass::Rogue, baseAttribs);
 
@@ -54,7 +84,7 @@ TEST(CharacterServiceTests, CreateCharacter_ValidRogue_Success) {
 }
 
 TEST(CharacterServiceTests, CreateCharacter_ValidCleric_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 12, 10, 14, 10};
     CharacterCreationRequest request("TestCleric", CharacterClass::Cleric, baseAttribs);
 
@@ -68,7 +98,7 @@ TEST(CharacterServiceTests, CreateCharacter_ValidCleric_Success) {
 }
 
 TEST(CharacterServiceTests, CreateCharacter_EmptyName_Fails) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     CharacterCreationRequest request("", CharacterClass::Warrior, baseAttribs);
 
@@ -78,7 +108,7 @@ TEST(CharacterServiceTests, CreateCharacter_EmptyName_Fails) {
 }
 
 TEST(CharacterServiceTests, CreateMultipleCharacters_UniqueIds) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     auto id1 = service.CreateCharacter(CharacterCreationRequest("Char1", CharacterClass::Warrior, baseAttribs));
@@ -98,7 +128,7 @@ TEST(CharacterServiceTests, CreateMultipleCharacters_UniqueIds) {
 // ============================================================================
 
 TEST(CharacterServiceTests, AwardExperience_NoLevelUp_ExperienceIncreases) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -114,7 +144,7 @@ TEST(CharacterServiceTests, AwardExperience_NoLevelUp_ExperienceIncreases) {
 }
 
 TEST(CharacterServiceTests, AwardExperience_LevelUp_StatsIncrease) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -136,7 +166,7 @@ TEST(CharacterServiceTests, AwardExperience_LevelUp_StatsIncrease) {
 }
 
 TEST(CharacterServiceTests, AwardExperience_MultipleLevel_ProgressionWorks) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Mage, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -149,7 +179,7 @@ TEST(CharacterServiceTests, AwardExperience_MultipleLevel_ProgressionWorks) {
 }
 
 TEST(CharacterServiceTests, AwardExperience_InvalidCharacter_Fails) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
 
     auto result = service.AwardExperience(999, 100);
 
@@ -157,7 +187,7 @@ TEST(CharacterServiceTests, AwardExperience_InvalidCharacter_Fails) {
 }
 
 TEST(CharacterServiceTests, AwardExperience_NegativeExperience_Fails) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -172,7 +202,7 @@ TEST(CharacterServiceTests, AwardExperience_NegativeExperience_Fails) {
 // ============================================================================
 
 TEST(CharacterServiceTests, DamageCharacter_ValidDamage_HealthDecreases) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -188,7 +218,7 @@ TEST(CharacterServiceTests, DamageCharacter_ValidDamage_HealthDecreases) {
 }
 
 TEST(CharacterServiceTests, DamageCharacter_WithReduction_ReducedDamage) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -205,7 +235,7 @@ TEST(CharacterServiceTests, DamageCharacter_WithReduction_ReducedDamage) {
 }
 
 TEST(CharacterServiceTests, DamageCharacter_Lethal_CharacterDies) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Mage, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -218,7 +248,7 @@ TEST(CharacterServiceTests, DamageCharacter_Lethal_CharacterDies) {
 }
 
 TEST(CharacterServiceTests, HealCharacter_ValidHeal_HealthIncreases) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -235,7 +265,7 @@ TEST(CharacterServiceTests, HealCharacter_ValidHeal_HealthIncreases) {
 }
 
 TEST(CharacterServiceTests, HealCharacter_OverMax_CapsAtMaxHP) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -254,7 +284,7 @@ TEST(CharacterServiceTests, HealCharacter_OverMax_CapsAtMaxHP) {
 // ============================================================================
 
 TEST(CharacterServiceTests, MoveCharacter_ValidDistance_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -269,7 +299,7 @@ TEST(CharacterServiceTests, MoveCharacter_ValidDistance_Success) {
 }
 
 TEST(CharacterServiceTests, MoveCharacter_TooFar_Fails) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -288,7 +318,7 @@ TEST(CharacterServiceTests, MoveCharacter_TooFar_Fails) {
 // ============================================================================
 
 TEST(CharacterServiceTests, RestCharacter_FullRest_RestoresAll) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 14, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Mage, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -305,12 +335,14 @@ TEST(CharacterServiceTests, RestCharacter_FullRest_RestoresAll) {
 }
 
 TEST(CharacterServiceTests, RestCharacter_ShortRest_PartialRestore) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 14, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Mage, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
 
-    service.DamageCharacter(characterId.value(), 6);
+    // Leave 1 HP so a half-max short rest cannot fully heal (Mage level 1 has few HP)
+    const auto maxHitPoints = service.GetCharacterStatus(characterId.value())->maxHitPoints;
+    service.DamageCharacter(characterId.value(), maxHitPoints - 1);
     auto statusBefore = service.GetCharacterStatus(characterId.value());
 
     bool success = service.RestCharacter(characterId.value(), false);
@@ -322,7 +354,7 @@ TEST(CharacterServiceTests, RestCharacter_ShortRest_PartialRestore) {
 }
 
 TEST(CharacterServiceTests, ConsumeMana_SufficientMana_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 14, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Mage, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -338,7 +370,7 @@ TEST(CharacterServiceTests, ConsumeMana_SufficientMana_Success) {
 }
 
 TEST(CharacterServiceTests, ConsumeMana_InsufficientMana_Fails) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 14, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Mage, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -350,7 +382,7 @@ TEST(CharacterServiceTests, ConsumeMana_InsufficientMana_Fails) {
 }
 
 TEST(CharacterServiceTests, RestoreMana_ValidAmount_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 14, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Mage, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -370,7 +402,7 @@ TEST(CharacterServiceTests, RestoreMana_ValidAmount_Success) {
 // ============================================================================
 
 TEST(CharacterServiceTests, GetAllCharacterIds_MultipleCharacters_ReturnsAll) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     service.CreateCharacter(CharacterCreationRequest("Char1", CharacterClass::Warrior, baseAttribs));
@@ -383,7 +415,7 @@ TEST(CharacterServiceTests, GetAllCharacterIds_MultipleCharacters_ReturnsAll) {
 }
 
 TEST(CharacterServiceTests, GetCharactersByClass_FiltersByClass) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     service.CreateCharacter(CharacterCreationRequest("Warrior1", CharacterClass::Warrior, baseAttribs));
@@ -398,7 +430,7 @@ TEST(CharacterServiceTests, GetCharactersByClass_FiltersByClass) {
 }
 
 TEST(CharacterServiceTests, GetAliveCharacters_ExcludesDead) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     auto id1 = service.CreateCharacter(CharacterCreationRequest("Char1", CharacterClass::Warrior, baseAttribs));
@@ -413,7 +445,7 @@ TEST(CharacterServiceTests, GetAliveCharacters_ExcludesDead) {
 }
 
 TEST(CharacterServiceTests, HasCharacter_ExistingCharacter_ReturnsTrue) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
 
@@ -422,7 +454,7 @@ TEST(CharacterServiceTests, HasCharacter_ExistingCharacter_ReturnsTrue) {
 }
 
 TEST(CharacterServiceTests, RemoveCharacter_ExistingCharacter_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -434,7 +466,7 @@ TEST(CharacterServiceTests, RemoveCharacter_ExistingCharacter_Success) {
 }
 
 TEST(CharacterServiceTests, GetCharacterCount_TracksCount) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     EXPECT_EQ(service.GetCharacterCount(), size_t(0));
@@ -454,7 +486,7 @@ TEST(CharacterServiceTests, GetCharacterCount_TracksCount) {
 // ============================================================================
 
 TEST(CharacterServiceTests, LearnAbility_ValidAbility_Success) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -465,7 +497,7 @@ TEST(CharacterServiceTests, LearnAbility_ValidAbility_Success) {
 }
 
 TEST(CharacterServiceTests, ReviveCharacter_DeadCharacter_BecomesAlive) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -482,7 +514,7 @@ TEST(CharacterServiceTests, ReviveCharacter_DeadCharacter_BecomesAlive) {
 }
 
 TEST(CharacterServiceTests, ReviveCharacter_AliveCharacter_Fails) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     auto characterId = service.CreateCharacter(CharacterCreationRequest("TestChar", CharacterClass::Warrior, baseAttribs));
     ASSERT_TRUE(characterId.has_value());
@@ -493,7 +525,7 @@ TEST(CharacterServiceTests, ReviveCharacter_AliveCharacter_Fails) {
 }
 
 TEST(CharacterServiceTests, ClearAll_RemovesAllCharacters) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     service.CreateCharacter(CharacterCreationRequest("Char1", CharacterClass::Warrior, baseAttribs));
@@ -510,7 +542,7 @@ TEST(CharacterServiceTests, ClearAll_RemovesAllCharacters) {
 // ============================================================================
 
 TEST(CharacterServiceTests, WarriorClass_HasHighHP) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     auto warriorId = service.CreateCharacter(CharacterCreationRequest("Warrior", CharacterClass::Warrior, baseAttribs));
@@ -523,7 +555,7 @@ TEST(CharacterServiceTests, WarriorClass_HasHighHP) {
 }
 
 TEST(CharacterServiceTests, MageClass_HasHighMana) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
 
     auto warriorId = service.CreateCharacter(CharacterCreationRequest("Warrior", CharacterClass::Warrior, baseAttribs));
@@ -536,7 +568,7 @@ TEST(CharacterServiceTests, MageClass_HasHighMana) {
 }
 
 TEST(CharacterServiceTests, RogueClass_HasHighDexterity) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
     CharacterCreationRequest request("TestRogue", CharacterClass::Rogue, baseAttribs);
 
@@ -564,13 +596,13 @@ namespace {
 }
 
 TEST(CharacterServiceTests, GetMovementSpeed_UnknownCharacter_Nullopt) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
 
     EXPECT_FALSE(service.GetMovementSpeed(999).has_value());
 }
 
 TEST(CharacterServiceTests, GetMovementSpeed_Warrior_UsesBaseSpeedAndDex) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     auto id = CreateTestCharacter(service, CharacterClass::Warrior, 14);
 
     auto speed = service.GetMovementSpeed(id);
@@ -580,7 +612,7 @@ TEST(CharacterServiceTests, GetMovementSpeed_Warrior_UsesBaseSpeedAndDex) {
 }
 
 TEST(CharacterServiceTests, GetMovementSpeed_HigherDex_Faster) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     auto slow = CreateTestCharacter(service, CharacterClass::Warrior, 8);
     auto fast = CreateTestCharacter(service, CharacterClass::Warrior, 18);
 
@@ -588,14 +620,14 @@ TEST(CharacterServiceTests, GetMovementSpeed_HigherDex_Faster) {
 }
 
 TEST(CharacterServiceTests, GetMovementSpeed_Rogue_FasterBaseThanWarrior) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     auto rogue = CreateTestCharacter(service, CharacterClass::Rogue, 12);
 
     EXPECT_FLOAT_EQ(*service.GetMovementSpeed(rogue), ExpectedSpeed(service, rogue, 5.0f));
 }
 
 TEST(CharacterServiceTests, GetMovementSpeed_NeverBelowMinimum) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     auto id = CreateTestCharacter(service, CharacterClass::Mage, 1);
 
     EXPECT_GE(*service.GetMovementSpeed(id), 1.0f);
@@ -606,7 +638,7 @@ TEST(CharacterServiceTests, GetMovementSpeed_NeverBelowMinimum) {
 // ============================================================================
 
 TEST(CharacterServiceTests, PlaceCharacter_FarPosition_BypassesMoveValidation) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
     auto id = CreateTestCharacter(service, CharacterClass::Warrior, 10);
     const Position far{50, -40};
 
@@ -617,7 +649,146 @@ TEST(CharacterServiceTests, PlaceCharacter_FarPosition_BypassesMoveValidation) {
 }
 
 TEST(CharacterServiceTests, PlaceCharacter_UnknownCharacter_Fails) {
-    CharacterService service;
+    CharacterService service = MakeTestService();
 
     EXPECT_FALSE(service.PlaceCharacter(999, Position{1, 1}));
+}
+
+// ============================================================================
+// Class Rules Tests (progression tables, weapon adjustments)
+// ============================================================================
+
+namespace {
+    const Character& Get(const CharacterService& service, CharacterId id) {
+        return service.GetCharacter(id)->get();
+    }
+}
+
+TEST(CharacterServiceRulesTests, CreateCharacter_ClassWithoutRules_Fails) {
+    CharacterService unconfigured;
+    CharacterCreationRequest request("Nobody", CharacterClass::Warrior, Attributes{10, 10, 10, 10, 10, 10});
+
+    EXPECT_FALSE(unconfigured.CreateCharacter(request).has_value());
+}
+
+TEST(CharacterServiceRulesTests, GetClassRules_ConfiguredAndMissing) {
+    CharacterService service = MakeTestService();
+    CharacterService unconfigured;
+
+    EXPECT_NE(service.GetClassRules(CharacterClass::Mage), nullptr);
+    EXPECT_EQ(unconfigured.GetClassRules(CharacterClass::Mage), nullptr);
+}
+
+TEST(CharacterServiceRulesTests, StartingHitPoints_TablePlusConModifier) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("Tank", CharacterClass::Warrior, Attributes{10, 10, 14, 10, 10, 10}));
+
+    const auto& warrior = Get(service, id);
+    // MaxHP = table HP at level 1 (12) + CON_mod * 1
+    EXPECT_EQ(warrior.GetMaxHitPoints(), 12 + warrior.GetAttributes().GetConstitutionModifier());
+    EXPECT_EQ(warrior.GetCurrentHitPoints(), warrior.GetMaxHitPoints());
+}
+
+TEST(CharacterServiceRulesTests, StartingMana_CasterModifierOnlyForCasters) {
+    CharacterService service = MakeTestService();
+    auto mageId = *service.CreateCharacter(CharacterCreationRequest("Caster", CharacterClass::Mage, Attributes{10, 10, 10, 16, 10, 10}));
+    auto clericId = *service.CreateCharacter(CharacterCreationRequest("Healer", CharacterClass::Cleric, Attributes{10, 10, 10, 10, 16, 10}));
+    auto warriorId = *service.CreateCharacter(CharacterCreationRequest("Brute", CharacterClass::Warrior, Attributes{10, 10, 10, 16, 10, 10}));
+
+    const auto& mage = Get(service, mageId);
+    const auto& cleric = Get(service, clericId);
+    EXPECT_EQ(mage.GetMaxManaPoints(), 10 + mage.GetAttributes().GetIntelligenceModifier());   // INT for Mages
+    EXPECT_EQ(cleric.GetMaxManaPoints(), 8 + cleric.GetAttributes().GetWisdomModifier());      // WIS for Clerics
+    EXPECT_EQ(Get(service, warriorId).GetMaxManaPoints(), 3);                                  // no caster modifier
+}
+
+TEST(CharacterServiceRulesTests, LevelUp_MaxHitPointsFromTable) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("Tank", CharacterClass::Warrior, Attributes{10, 10, 12, 10, 10, 10}));
+    const int32_t before = Get(service, id).GetMaxHitPoints();
+
+    auto result = service.AwardExperience(id, 100);  // level 2
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->newLevel, 2);
+    const auto& warrior = Get(service, id);
+    // MaxHP = (12 + 8) + CON_mod * 2, with the level-up attribute gains applied
+    EXPECT_EQ(warrior.GetMaxHitPoints(), 20 + warrior.GetAttributes().GetConstitutionModifier() * 2);
+    EXPECT_EQ(result->hitPointIncrease, warrior.GetMaxHitPoints() - before);
+    EXPECT_EQ(warrior.GetMaxManaPoints(), 3 + 2);  // Warrior: table MP only
+}
+
+TEST(CharacterServiceRulesTests, BeyondMaxLevel_NoMoreTableGains) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("Veteran", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
+
+    service.AwardExperience(id, 1'000'000);
+
+    const auto& mage = Get(service, id);
+    ASSERT_GT(mage.GetLevel(), ClassProgression::MaxLevel);
+    const auto& rules = *service.GetClassRules(CharacterClass::Mage);
+    EXPECT_EQ(mage.GetMaxHitPoints(),
+              rules.progression.TotalsAt(ClassProgression::MaxLevel).maxHitPoints + mage.GetAttributes().GetConstitutionModifier() * mage.GetLevel());
+}
+
+TEST(CharacterServiceRulesTests, WeaponAdjustment_SwordByClass) {
+    CharacterService service = MakeTestService();
+    const Attributes attributes{10, 10, 10, 10, 10, 10};
+    auto warrior = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, attributes));
+    auto rogue = *service.CreateCharacter(CharacterCreationRequest("R", CharacterClass::Rogue, attributes));
+    auto mage = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, attributes));
+    auto cleric = *service.CreateCharacter(CharacterCreationRequest("C", CharacterClass::Cleric, attributes));
+
+    EXPECT_EQ(*service.GetWeaponAdjustment(warrior, WeaponType::Sword), 3);
+    EXPECT_EQ(*service.GetWeaponAdjustment(rogue, WeaponType::Sword), 1);
+    EXPECT_EQ(*service.GetWeaponAdjustment(mage, WeaponType::Sword), -1);
+    EXPECT_EQ(*service.GetWeaponAdjustment(cleric, WeaponType::Sword), -5);
+}
+
+TEST(CharacterServiceRulesTests, WeaponAdjustment_UnlistedCategoryIsZero) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 10, 10, 10, 10}));
+
+    EXPECT_EQ(*service.GetWeaponAdjustment(id, WeaponType::Axe), 0);
+    EXPECT_FALSE(service.GetWeaponAdjustment(999, WeaponType::Sword).has_value());
+}
+
+TEST(CharacterServiceRulesTests, AttackBonus_MeleeUsesStrengthAndAdjustment) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{14, 10, 10, 10, 10, 10}));
+    const auto& warrior = Get(service, id);
+
+    // melee table bonus at level 1 (2) + STR_mod + sword adjustment (+3)
+    EXPECT_EQ(*service.GetAttackBonus(id, WeaponType::Sword), 2 + warrior.GetAttributes().GetStrengthModifier() + 3);
+}
+
+TEST(CharacterServiceRulesTests, AttackBonus_ClericSwordPenalty) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("C", CharacterClass::Cleric, Attributes{10, 10, 10, 10, 10, 10}));
+    const auto& cleric = Get(service, id);
+
+    EXPECT_EQ(*service.GetAttackBonus(id, WeaponType::Sword), 1 + cleric.GetAttributes().GetStrengthModifier() - 5);
+}
+
+TEST(CharacterServiceRulesTests, AttackBonus_RangedUsesDexterity) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("R", CharacterClass::Rogue, Attributes{8, 16, 10, 10, 10, 10}));
+    const auto& rogue = Get(service, id);
+
+    // ranged table bonus at level 1 (2) + DEX_mod + bow adjustment (+1)
+    EXPECT_EQ(*service.GetAttackBonus(id, WeaponType::Bow), 2 + rogue.GetAttributes().GetDexterityModifier() + 1);
+}
+
+TEST(CharacterServiceRulesTests, AttackBonus_UnknownCharacter_Nullopt) {
+    CharacterService service = MakeTestService();
+
+    EXPECT_FALSE(service.GetAttackBonus(999, WeaponType::Sword).has_value());
+}
+
+TEST(CharacterServiceRulesTests, MovementSpeed_FromClassRules) {
+    CharacterService service = MakeTestService();
+    auto rogue = *service.CreateCharacter(CharacterCreationRequest("R", CharacterClass::Rogue, Attributes{10, 12, 10, 10, 10, 10}));
+
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(rogue),
+                    5.0f + static_cast<float>(Get(service, rogue).GetAttributes().GetDexterityModifier()) * 0.1f);
 }

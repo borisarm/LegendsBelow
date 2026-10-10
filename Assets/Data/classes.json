@@ -1,0 +1,266 @@
+[
+  {
+    "id": "class_warrior",
+    "class": "Warrior",
+    "name": "Warrior",
+    "role": "Frontline tank / melee DPS",
+    "primaryAttributes": [
+      "STR",
+      "CON"
+    ],
+    "startingAttributes": {
+      "STR": 16,
+      "DEX": 12,
+      "CON": 14,
+      "INT": 8,
+      "WIS": 10,
+      "CHA": 10
+    },
+    "resource": "Stamina",
+    "baseMovementSpeed": 4.0,
+    "armorProficiencies": [
+      "Light",
+      "Medium",
+      "Heavy",
+      "Shield"
+    ],
+    "weaponAdjustments": {
+      "Sword": 3,
+      "Axe": 3,
+      "Mace": 3,
+      "Polearm": 3,
+      "Dagger": 1,
+      "Staff": 1,
+      "Bow": 1,
+      "Crossbow": 1,
+      "Wand": -5
+    },
+    "spellSchools": [],
+    "signatureAbilities": [
+      "Battle Rage",
+      "Shield Bash",
+      "Taunting Shout"
+    ],
+    "progression": [
+      { "level": 1, "hpGain": 12, "mpGain": 3, "meleeAttackBonus": 2, "rangedAttackBonus": 0, "physicalSaveBonus": 2, "mentalSaveBonus": 0 },
+      { "level": 2, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 3, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 4, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 5, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 6, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 7, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 8, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 9, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 10, "hpGain": 8, "mpGain": 2, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 11, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 12, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 13, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 14, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 },
+      { "level": 15, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 16, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 17, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 18, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 19, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 20, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
+    ]
+  },
+  {
+    "id": "class_rogue",
+    "class": "Rogue",
+    "name": "Rogue",
+    "role": "Single-target burst, traps and utility",
+    "primaryAttributes": [
+      "DEX",
+      "INT"
+    ],
+    "startingAttributes": {
+      "STR": 10,
+      "DEX": 16,
+      "CON": 12,
+      "INT": 12,
+      "WIS": 10,
+      "CHA": 10
+    },
+    "resource": "Mana",
+    "baseMovementSpeed": 5.0,
+    "armorProficiencies": [
+      "Cloth",
+      "Light"
+    ],
+    "weaponAdjustments": {
+      "Sword": 1,
+      "Axe": -1,
+      "Mace": -1,
+      "Polearm": -1,
+      "Dagger": 3,
+      "Staff": -1,
+      "Bow": 3,
+      "Crossbow": 1,
+      "Wand": -1
+    },
+    "spellSchools": [],
+    "signatureAbilities": [
+      "Sneak Attack",
+      "Evasion",
+      "Shadowstep"
+    ],
+    "progression": [
+      { "level": 1, "hpGain": 8, "mpGain": 6, "meleeAttackBonus": 1, "rangedAttackBonus": 2, "physicalSaveBonus": 1, "mentalSaveBonus": 1 },
+      { "level": 2, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 3, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 4, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 5, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 6, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 7, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 8, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 9, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 10, "hpGain": 6, "mpGain": 4, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 11, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 12, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 13, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 14, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 },
+      { "level": 15, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 16, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 17, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 18, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 19, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 20, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
+    ]
+  },
+  {
+    "id": "class_mage",
+    "class": "Mage",
+    "name": "Mage",
+    "role": "Ranged caster, AoE and control",
+    "primaryAttributes": [
+      "INT",
+      "WIS"
+    ],
+    "startingAttributes": {
+      "STR": 8,
+      "DEX": 10,
+      "CON": 10,
+      "INT": 16,
+      "WIS": 12,
+      "CHA": 12
+    },
+    "resource": "Mana",
+    "baseMovementSpeed": 4.0,
+    "armorProficiencies": [
+      "Cloth"
+    ],
+    "weaponAdjustments": {
+      "Sword": -1,
+      "Axe": -5,
+      "Mace": -1,
+      "Polearm": -5,
+      "Dagger": 1,
+      "Staff": 3,
+      "Bow": -1,
+      "Crossbow": -1,
+      "Wand": 3
+    },
+    "spellSchools": [
+      "Evocation",
+      "Frost",
+      "Utility"
+    ],
+    "signatureAbilities": [
+      "Arcane Bolt",
+      "Fireball",
+      "Frost Nova",
+      "Spell Mastery"
+    ],
+    "progression": [
+      { "level": 1, "hpGain": 6, "mpGain": 10, "meleeAttackBonus": 0, "rangedAttackBonus": 2, "physicalSaveBonus": 0, "mentalSaveBonus": 2 },
+      { "level": 2, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 3, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 4, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 5, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 6, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 7, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 8, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 9, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 10, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 11, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 12, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 13, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 14, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 15, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 16, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 17, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 18, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 19, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 20, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 }
+    ]
+  },
+  {
+    "id": "class_cleric",
+    "class": "Cleric",
+    "name": "Cleric",
+    "role": "Healer, buffer, hybrid frontliner",
+    "primaryAttributes": [
+      "WIS",
+      "CON"
+    ],
+    "startingAttributes": {
+      "STR": 12,
+      "DEX": 10,
+      "CON": 12,
+      "INT": 10,
+      "WIS": 16,
+      "CHA": 10
+    },
+    "resource": "Mana",
+    "baseMovementSpeed": 4.0,
+    "armorProficiencies": [
+      "Cloth",
+      "Light",
+      "Medium",
+      "Heavy",
+      "Shield"
+    ],
+    "weaponAdjustments": {
+      "Sword": -5,
+      "Axe": -5,
+      "Mace": 3,
+      "Polearm": -5,
+      "Dagger": -5,
+      "Staff": 1,
+      "Bow": -1,
+      "Crossbow": 1,
+      "Wand": -1
+    },
+    "spellSchools": [
+      "Holy"
+    ],
+    "signatureAbilities": [
+      "Divine Light",
+      "Smite",
+      "Bless",
+      "Divine Intervention"
+    ],
+    "progression": [
+      { "level": 1, "hpGain": 10, "mpGain": 8, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 2 },
+      { "level": 2, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 3, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 4, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 5, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 6, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 7, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 8, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 9, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 10, "hpGain": 7, "mpGain": 6, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 11, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 12, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 13, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 14, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 },
+      { "level": 15, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 16, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 17, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 1, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
+      { "level": 18, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
+      { "level": 19, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
+      { "level": 20, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
+    ]
+  }
+]

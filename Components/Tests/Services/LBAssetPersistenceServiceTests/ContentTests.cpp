@@ -310,7 +310,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 3u) << ErrorsOf(result);
+    EXPECT_EQ(result.errors.size(), 4u) << ErrorsOf(result);  // spells, weapons, armour, classes
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -323,4 +323,211 @@ TEST(ContentValidationTests, Lookups_OutOfRange_ReturnNull) {
     EXPECT_EQ(content.FindSpell(2), nullptr);
     EXPECT_EQ(content.FindWeapon("weapon_missing"), nullptr);
     EXPECT_NE(content.FindArmor("armor_a"), nullptr);
+}
+
+// ============================================================================
+// Shipped Class Data Tests (classes.json)
+// ============================================================================
+
+TEST_F(ShippedContentTests, Classes_AllFourDefined) {
+    ASSERT_EQ(content_.GetClasses().size(), 4u);
+    for (auto c : { CharacterClass::Warrior, CharacterClass::Rogue, CharacterClass::Mage, CharacterClass::Cleric }) {
+        EXPECT_NE(content_.FindClass(c), nullptr);
+    }
+    EXPECT_EQ(content_.FindClass("class_mage"), content_.FindClass(CharacterClass::Mage));
+}
+
+TEST_F(ShippedContentTests, Warrior_MatchesDesign) {
+    const auto* warrior = content_.FindClass(CharacterClass::Warrior);
+    ASSERT_NE(warrior, nullptr);
+
+    // game-design.md: STR 16, DEX 12, CON 14, INT 8, WIS 10, CHA 10
+    EXPECT_EQ(warrior->startingAttributes.strength, 16);
+    EXPECT_EQ(warrior->startingAttributes.dexterity, 12);
+    EXPECT_EQ(warrior->startingAttributes.constitution, 14);
+    EXPECT_EQ(warrior->startingAttributes.intelligence, 8);
+    EXPECT_EQ(warrior->resource, "Stamina");
+    EXPECT_TRUE(warrior->CanWear(ArmorCategory::Heavy));
+    EXPECT_TRUE(warrior->spellSchools.empty());
+}
+
+TEST_F(ShippedContentTests, WeaponAdjustments_SwordColumn) {
+    // Class adjustment model: a sword is +3 for Warriors, +1 Rogues, -1 Mages, -5 Clerics
+    EXPECT_EQ(content_.FindClass(CharacterClass::Warrior)->GetWeaponAdjustment(WeaponType::Sword), 3);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Rogue)->GetWeaponAdjustment(WeaponType::Sword), 1);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Mage)->GetWeaponAdjustment(WeaponType::Sword), -1);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Cleric)->GetWeaponAdjustment(WeaponType::Sword), -5);
+}
+
+TEST_F(ShippedContentTests, WeaponAdjustments_EveryClassCoversEveryCategory) {
+    for (const auto& definition : content_.GetClasses()) {
+        EXPECT_EQ(definition.weaponAdjustments.size(), 9u) << definition.key;  // Polearm is Spear
+        EXPECT_TRUE(definition.weaponAdjustments.contains(WeaponType::Spear)) << definition.key;
+    }
+}
+
+TEST_F(ShippedContentTests, ProgressionTotals_MatchDesignTables) {
+    // design-character-system.md section 3: level 1 base + per-level gains
+    EXPECT_EQ(content_.FindClass(CharacterClass::Warrior)->TotalsAt(1).maxHitPoints, 12);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Warrior)->TotalsAt(20).maxHitPoints, 12 + 9 * 8 + 10 * 10);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Rogue)->TotalsAt(20).maxHitPoints, 8 + 9 * 6 + 10 * 7);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Mage)->TotalsAt(20).maxManaPoints, 10 + 9 * 8 + 10 * 9);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Cleric)->TotalsAt(10).maxHitPoints, 10 + 9 * 7);
+
+    const auto mage = content_.FindClass(CharacterClass::Mage)->TotalsAt(20);
+    EXPECT_EQ(mage.meleeAttackBonus, 0);
+    EXPECT_EQ(mage.rangedAttackBonus, 11);  // +2 at level 1, +1 on every odd level 3-19
+    EXPECT_EQ(mage.mentalSaveBonus, 11);
+}
+
+TEST_F(ShippedContentTests, TotalsAt_ClampsLevel) {
+    const auto* warrior = content_.FindClass(CharacterClass::Warrior);
+
+    EXPECT_EQ(warrior->TotalsAt(0).maxHitPoints, warrior->TotalsAt(1).maxHitPoints);
+    EXPECT_EQ(warrior->TotalsAt(99).maxHitPoints, warrior->TotalsAt(20).maxHitPoints);
+}
+
+TEST_F(ShippedContentTests, Classes_SpellSchoolsAndSpeeds) {
+    EXPECT_TRUE(content_.FindClass(CharacterClass::Mage)->HasSpellSchool(SpellSchool::Evocation));
+    EXPECT_TRUE(content_.FindClass(CharacterClass::Cleric)->HasSpellSchool(SpellSchool::Holy));
+    EXPECT_FALSE(content_.FindClass(CharacterClass::Cleric)->HasSpellSchool(SpellSchool::Frost));
+    EXPECT_GT(content_.FindClass(CharacterClass::Rogue)->baseMovementSpeed,
+              content_.FindClass(CharacterClass::Warrior)->baseMovementSpeed);
+}
+
+// ============================================================================
+// Class Validation Tests
+// ============================================================================
+
+namespace {
+    std::string Progression(int levels) {
+        std::string rows;
+        for (int level = 1; level <= levels; ++level) {
+            if (level > 1) rows += ",";
+            rows += std::format(R"({{"level":{},"hpGain":5,"mpGain":5,"meleeAttackBonus":0,"rangedAttackBonus":0,"physicalSaveBonus":0,"mentalSaveBonus":0}})", level);
+        }
+        return "[" + rows + "]";
+    }
+
+    constexpr const char* AllWeaponAdjustments =
+        R"({"Sword":0,"Axe":0,"Mace":0,"Dagger":0,"Polearm":0,"Bow":0,"Crossbow":0,"Staff":0,"Wand":0})";
+
+    std::string ClassJson(const std::string& characterClass, const std::string& weapons = AllWeaponAdjustments,
+                          const std::string& armour = R"(["Cloth"])", const std::string& schools = "[]", int levels = 20) {
+        std::string lower = characterClass;
+        std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return std::format(R"({{"id":"class_{}","class":"{}","name":"{}","resource":"Mana","baseMovementSpeed":4.0,)"
+                           R"("startingAttributes":{{"STR":10,"DEX":10,"CON":10,"INT":10,"WIS":10,"CHA":10}},)"
+                           R"("armorProficiencies":{},"weaponAdjustments":{},"spellSchools":{},"progression":{}}})",
+                           lower, characterClass, characterClass, armour, weapons, schools, Progression(levels));
+    }
+
+    std::string AllClasses(const std::string& warriorOverride = {}) {
+        return "[" + (warriorOverride.empty() ? ClassJson("Warrior") : warriorOverride) + "," + ClassJson("Rogue") + "," +
+               ClassJson("Mage") + "," + ClassJson("Cleric") + "]";
+    }
+}
+
+TEST(ClassValidationTests, ValidClasses_Load) {
+    ContentDatabase content;
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses());
+
+    ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
+    EXPECT_EQ(content.GetClasses().size(), 4u);
+}
+
+TEST(ClassValidationTests, MissingClass_Rejected) {
+    ContentDatabase content;
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", "[" + ClassJson("Warrior") + "," + ClassJson("Rogue") + "," + ClassJson("Mage") + "]");
+
+    EXPECT_TRUE(AnyErrorContains(result, "class 'Cleric' is not defined")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, DuplicateClass_Rejected) {
+    ContentDatabase content;
+    std::string second = ClassJson("Warrior");
+    second.replace(second.find("class_warrior"), 13, "class_warrior2");
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", "[" + second + "," + AllClasses().substr(1));
+
+    EXPECT_TRUE(AnyErrorContains(result, "class 'Warrior' is defined 2 times")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, IncompleteProgression_Rejected) {
+    ContentDatabase content;
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", AllWeaponAdjustments, R"(["Cloth"])", "[]", 19)));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'progression' must list levels 1 to 20 in order")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, UnknownWeaponCategory_Rejected) {
+    ContentDatabase content;
+    std::string weapons = AllWeaponAdjustments;
+    weapons.insert(1, R"("Whip":2,)");
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", weapons)));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'weaponAdjustments' has unknown weapon category 'Whip'")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, MissingWeaponCategory_Rejected) {
+    ContentDatabase content;
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", R"({"Sword":3})")));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'weaponAdjustments' has no value for 'Axe'")) << ErrorsOf(result);
+    EXPECT_TRUE(AnyErrorContains(result, "'weaponAdjustments' has no value for 'Spear'")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, PolearmAndSpearBoth_Rejected) {
+    ContentDatabase content;
+    std::string weapons = AllWeaponAdjustments;
+    weapons.insert(1, R"("Spear":1,)");
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(ClassJson("Warrior", weapons)));
+
+    EXPECT_TRUE(AnyErrorContains(result, "lists 'Spear' more than once")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, WeaponAllowedForAnyAdjustment_Accepted) {
+    ContentDatabase content;
+    // ValidWeapon is a Sword allowed for Warrior; a -5 adjustment is a penalty, not a ban
+    std::string weapons = AllWeaponAdjustments;
+    weapons.replace(weapons.find(R"("Sword":0)"), 9, R"("Sword":-5)");
+
+    auto result = content.LoadFromJson("[]", Array(ValidWeapon), "[]", AllClasses(ClassJson("Warrior", weapons)));
+
+    EXPECT_TRUE(result.Succeeded()) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, ArmourAllowedForClassWithoutProficiency_Rejected) {
+    ContentDatabase content;
+    // ValidArmor is Cloth allowed for Mage; this Mage can only wear Light
+    std::string classes = "[" + ClassJson("Warrior") + "," + ClassJson("Rogue") + "," + ClassJson("Mage", AllWeaponAdjustments, R"(["Light"])") + "," + ClassJson("Cleric") + "]";
+
+    auto result = content.LoadFromJson("[]", "[]", Array(ValidArmor), classes);
+
+    EXPECT_TRUE(AnyErrorContains(result, "armour.json: armor_a: allows Mage but class_mage has no 'Cloth' armour proficiency")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, ClassSpellOutsideClassSchools_Rejected) {
+    ContentDatabase content;
+    const std::string spell = R"({"id":"spell_a","name":"A","school":"Holy","level":1,"categories":["Heal"],"requiredClass":"Mage","manaCost":5,"castTimeSeconds":1.0})";
+
+    auto result = content.LoadFromJson(Array(spell), "[]", "[]", AllClasses());
+
+    EXPECT_TRUE(AnyErrorContains(result, "spells.json: spell_a: requires Mage but class_mage has no 'Holy' spell school")) << ErrorsOf(result);
+}
+
+TEST(ClassValidationTests, BadStartingAttributes_Rejected) {
+    ContentDatabase content;
+    std::string warrior = ClassJson("Warrior");
+    warrior.replace(warrior.find(R"("STR":10)"), 8, R"("STR":40)");
+
+    auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(warrior));
+
+    EXPECT_TRUE(AnyErrorContains(result, "'startingAttributes' values must be in [1, 30]")) << ErrorsOf(result);
 }

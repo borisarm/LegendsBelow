@@ -75,6 +75,17 @@ namespace LB::Content {
             return std::nullopt;
         }
 
+        // First (canonical) name of a value, for error messages
+        template<typename E, std::size_t N>
+        std::string_view NameOf(const EnumName<E> (&table)[N], E value) {
+            for (const auto& entry : table) {
+                if (entry.value == value) return entry.name;
+            }
+            return "?";
+        }
+
+        constexpr std::string_view AttributeNames[] = { "STR", "DEX", "CON", "INT", "WIS", "CHA" };
+
         /// <summary>
         /// Reads typed fields from one JSON object, recording errors with file and entry context
         /// </summary>
@@ -89,6 +100,20 @@ namespace LB::Content {
 
             bool Has(const char* field) const {
                 return object_.contains(field) && !object_.at(field).is_null();
+            }
+
+            const std::string& Context() const noexcept { return context_; }
+            std::vector<String>& Errors() noexcept { return errors_; }
+
+            // A nested value, or null after reporting a missing required field / wrong type
+            const Json* Nested(const char* field, bool required, bool isArray) {
+                if (!Present(field, required)) return nullptr;
+                const auto& value = object_.at(field);
+                if (isArray ? !value.is_array() : !value.is_object()) {
+                    TypeError(field, isArray ? "an array" : "an object");
+                    return nullptr;
+                }
+                return &value;
             }
 
             void ReadString(const char* field, String& out, bool required) {
@@ -335,6 +360,136 @@ namespace LB::Content {
             return armor;
         }
 
+        ClassDefinition ReadClass(EntryReader& reader) {
+            ClassDefinition definition{};
+            reader.ReadString("id", definition.key, true);
+            reader.ReadEnum("class", definition.characterClass, CharacterClasses, true);
+            reader.ReadString("name", definition.name, true);
+            reader.ReadString("role", definition.role, false);
+            reader.ReadStringArray("primaryAttributes", definition.primaryAttributes);
+            reader.ReadString("resource", definition.resource, true);
+            reader.ReadFloat("baseMovementSpeed", definition.baseMovementSpeed, true);
+            reader.ReadEnumArray("armorProficiencies", definition.armorProficiencies, ArmorCategories, true);
+            reader.ReadEnumArray("spellSchools", definition.spellSchools, SpellSchools, false);
+            reader.ReadStringArray("signatureAbilities", definition.signatureAbilities);
+
+            for (const auto& attribute : definition.primaryAttributes) {
+                if (std::ranges::find(AttributeNames, std::string_view(attribute)) == std::end(AttributeNames)) {
+                    reader.Error(std::format("'primaryAttributes' has unknown attribute '{}'", attribute));
+                }
+            }
+            if (definition.resource != "Mana" && definition.resource != "Stamina") {
+                if (!definition.resource.empty()) reader.Error(std::format("'resource' must be Mana or Stamina, not '{}'", definition.resource));
+            }
+            if (definition.baseMovementSpeed <= 0.0f) reader.Error("'baseMovementSpeed' must be positive");
+
+            // "startingAttributes": { "STR": 16, ... } - all six, each in the domain's [1, 30]
+            if (const Json* attributes = reader.Nested("startingAttributes", true, false)) {
+                int32_t* targets[] = {
+                    &definition.startingAttributes.strength, &definition.startingAttributes.dexterity,
+                    &definition.startingAttributes.constitution, &definition.startingAttributes.intelligence,
+                    &definition.startingAttributes.wisdom, &definition.startingAttributes.charisma,
+                };
+                for (std::size_t i = 0; i < std::size(AttributeNames); ++i) {
+                    const std::string name(AttributeNames[i]);
+                    if (!attributes->contains(name) || !(*attributes)[name].is_number_integer()) {
+                        reader.Error(std::format("'startingAttributes' needs an integer '{}'", name));
+                        continue;
+                    }
+                    *targets[i] = (*attributes)[name].get<int32_t>();
+                }
+                if (!definition.startingAttributes.IsValid()) reader.Error("'startingAttributes' values must be in [1, 30]");
+            }
+
+            // "weaponAdjustments": { "Sword": 3, ... } - one value for every weapon category
+            if (const Json* adjustments = reader.Nested("weaponAdjustments", true, false)) {
+                for (const auto& [name, value] : adjustments->items()) {
+                    const auto weapon = FindEnum(WeaponTypes, name);
+                    if (!weapon) {
+                        reader.Error(std::format("'weaponAdjustments' has unknown weapon category '{}'", name));
+                        continue;
+                    }
+                    if (!value.is_number_integer()) {
+                        reader.Error(std::format("'weaponAdjustments' value for '{}' must be an integer", name));
+                        continue;
+                    }
+                    if (!definition.weaponAdjustments.emplace(*weapon, value.get<int32_t>()).second) {
+                        reader.Error(std::format("'weaponAdjustments' lists '{}' more than once (Polearm is Spear)", NameOf(WeaponTypes, *weapon)));
+                    }
+                }
+                for (const auto& entry : WeaponTypes) {
+                    if (!definition.weaponAdjustments.contains(entry.value) && entry.name == NameOf(WeaponTypes, entry.value)) {
+                        reader.Error(std::format("'weaponAdjustments' has no value for '{}'", entry.name));
+                    }
+                }
+            }
+
+            // "progression": levels 1..MaxLevel in order
+            if (const Json* rows = reader.Nested("progression", true, true)) {
+                std::size_t index = 0;
+                for (const auto& row : *rows) {
+                    const std::string context = std::format("{}: progression[{}]", reader.Context(), index++);
+                    if (!row.is_object()) {
+                        reader.Errors().push_back(std::format("{}: must be a JSON object", context));
+                        continue;
+                    }
+                    EntryReader rowReader(row, context, reader.Errors());
+                    LB::Character::ClassLevelGains level{};
+                    rowReader.ReadInt("level", level.level, true);
+                    rowReader.ReadInt("hpGain", level.hpGain, true);
+                    rowReader.ReadInt("mpGain", level.mpGain, true);
+                    rowReader.ReadInt("meleeAttackBonus", level.meleeAttackBonus, true);
+                    rowReader.ReadInt("rangedAttackBonus", level.rangedAttackBonus, true);
+                    rowReader.ReadInt("physicalSaveBonus", level.physicalSaveBonus, true);
+                    rowReader.ReadInt("mentalSaveBonus", level.mentalSaveBonus, true);
+                    if (level.hpGain < 0 || level.mpGain < 0) rowReader.Error("gains must not be negative");
+                    definition.progression.levels.push_back(level);
+                }
+
+                if (!definition.progression.IsComplete()) {
+                    reader.Error(std::format("'progression' must list levels 1 to {} in order", ClassProgression::MaxLevel));
+                }
+            }
+            return definition;
+        }
+
+        // Rules spanning files: every class defined once, and armour/spells agree with class data
+        void CheckClassRules(const std::vector<ClassDefinition>& classes, const std::vector<SpellDefinition>& spells,
+                             const std::vector<ArmorDefinition>& armour,
+                             std::vector<String>& errors) {
+            if (classes.empty()) return;  // no class data (tools, tests): nothing to check against
+
+            for (const auto& entry : CharacterClasses) {
+                const auto count = std::ranges::count(classes, entry.value, &ClassDefinition::characterClass);
+                if (count == 0) errors.push_back(std::format("classes.json: class '{}' is not defined", entry.name));
+                if (count > 1) errors.push_back(std::format("classes.json: class '{}' is defined {} times", entry.name, count));
+            }
+
+            const auto find = [&classes](CharacterClass c) {
+                auto it = std::ranges::find(classes, c, &ClassDefinition::characterClass);
+                return it != classes.end() ? &*it : nullptr;
+            };
+
+            for (const auto& armor : armour) {
+                for (auto allowed : armor.allowedClasses) {
+                    const auto* definition = find(allowed);
+                    if (definition && !definition->CanWear(armor.category)) {
+                        errors.push_back(std::format("armour.json: {}: allows {} but {} has no '{}' armour proficiency",
+                            armor.key, NameOf(CharacterClasses, allowed), definition->key, NameOf(ArmorCategories, armor.category)));
+                    }
+                }
+            }
+
+            for (const auto& spell : spells) {
+                if (!spell.requiredClass) continue;
+                const auto* definition = find(*spell.requiredClass);
+                if (definition && !definition->HasSpellSchool(spell.school)) {
+                    errors.push_back(std::format("spells.json: {}: requires {} but {} has no '{}' spell school",
+                        spell.key, NameOf(CharacterClasses, *spell.requiredClass), definition->key, NameOf(SpellSchools, spell.school)));
+                }
+            }
+        }
+
         // Parse one content file: a JSON array of objects. Assigns ids and checks key uniqueness.
         template<typename T, typename ReadFn>
         std::vector<T> ReadArray(const String& text, const std::string& source, ReadFn read, std::vector<String>& errors) {
@@ -386,9 +541,9 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[3];
-        constexpr const char* files[3] = { "spells.json", "weapons.json", "armour.json" };
-        for (int i = 0; i < 3; ++i) {
+        String texts[4];
+        constexpr const char* files[4] = { "spells.json", "weapons.json", "armour.json", "classes.json" };
+        for (int i = 0; i < 4; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -397,15 +552,19 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3]);
     }
 
-    ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson) {
+    ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
+                                                    const String& classesJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
         auto weapons = ReadArray<WeaponDefinition>(weaponsJson, "weapons.json", ReadWeapon, result.errors);
         auto armour = ReadArray<ArmorDefinition>(armourJson, "armour.json", ReadArmor, result.errors);
+        auto classes = ReadArray<ClassDefinition>(classesJson, "classes.json", ReadClass, result.errors);
+
+        CheckClassRules(classes, spells, armour, result.errors);
 
         if (!result.Succeeded()) {
             Clear();
@@ -415,6 +574,7 @@ namespace LB::Content {
         spells_ = std::move(spells);
         weapons_ = std::move(weapons);
         armour_ = std::move(armour);
+        classes_ = std::move(classes);
         return result;
     }
 

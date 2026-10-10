@@ -147,6 +147,9 @@
     <ProjectReference Include="..\..\Model\LBModel.Character\LBModel.Character.vcxproj">
       <Project>{fbb9b480-2be7-44ac-8d85-7431db9b6959}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\..\Model\LBModel.Combat\LBModel.Combat.vcxproj">
+      <Project>{c259bb9e-7a4a-44c2-9a54-aefffa5228e3}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\..\Model\LBModel.Core\LBModel.Core.vcxproj">
       <Project>{990b9ac5-23ad-45d1-b267-5bef0a4c6ebf}</Project>
     </ProjectReference>
