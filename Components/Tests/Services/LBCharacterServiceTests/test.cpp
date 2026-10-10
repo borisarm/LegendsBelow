@@ -24,12 +24,30 @@ namespace {
         return rules;
     }
 
+    // Primary attributes, 1 automatic + 1 free point per level, caps 25/18, and the approved
+    // armour scales (movement, casting): 0.5 signature, 1 trained, 1.5 untrained, 2 restricted
+    ClassRules WithGrowthAndArmor(ClassRules rules, AttributeType first, AttributeType second,
+                                  std::initializer_list<std::pair<ArmorCategory, ArmorAdjustment>> armour) {
+        rules.primaryAttributes = { first, second };
+        rules.attributeGrowth = AttributeGrowth{ 1, 1, 25, 18 };
+        for (const auto& [category, adjustment] : armour) rules.armorAdjustments[category] = adjustment;
+        return rules;
+    }
+
     CharacterService MakeTestService() {
         CharacterService service;
-        service.SetClassRules(CharacterClass::Warrior, MakeRules(4.0f, 12, 3, 2, 0, 8, 2, +3));
-        service.SetClassRules(CharacterClass::Rogue, MakeRules(5.0f, 8, 6, 1, 2, 6, 4, +1));
-        service.SetClassRules(CharacterClass::Mage, MakeRules(4.0f, 6, 10, 0, 2, 4, 8, -1));
-        service.SetClassRules(CharacterClass::Cleric, MakeRules(4.0f, 10, 8, 1, 1, 7, 6, -5));
+        service.SetClassRules(CharacterClass::Warrior, WithGrowthAndArmor(MakeRules(4.0f, 12, 3, 2, 0, 8, 2, +3),
+            AttributeType::Strength, AttributeType::Constitution,
+            { {ArmorCategory::Heavy, {0.5f, 1.0f}}, {ArmorCategory::Shield, {0.5f, 1.0f}} }));
+        service.SetClassRules(CharacterClass::Rogue, WithGrowthAndArmor(MakeRules(5.0f, 8, 6, 1, 2, 6, 4, +1),
+            AttributeType::Dexterity, AttributeType::Intelligence,
+            { {ArmorCategory::Light, {0.5f, 1.0f}}, {ArmorCategory::Heavy, {2.0f, 1.0f}} }));
+        service.SetClassRules(CharacterClass::Mage, WithGrowthAndArmor(MakeRules(4.0f, 6, 10, 0, 2, 4, 8, -1),
+            AttributeType::Intelligence, AttributeType::Wisdom,
+            { {ArmorCategory::Light, {1.5f, 1.5f}}, {ArmorCategory::Heavy, {2.0f, 2.0f}} }));
+        service.SetClassRules(CharacterClass::Cleric, WithGrowthAndArmor(MakeRules(4.0f, 10, 8, 1, 1, 7, 6, -5),
+            AttributeType::Wisdom, AttributeType::Constitution,
+            { {ArmorCategory::Medium, {1.0f, 0.5f}}, {ArmorCategory::Heavy, {1.0f, 1.0f}} }));
         return service;
     }
 }
@@ -567,14 +585,14 @@ TEST(CharacterServiceTests, MageClass_HasHighMana) {
     EXPECT_GT(mageStatus->maxManaPoints, warriorStatus->maxManaPoints);
 }
 
-TEST(CharacterServiceTests, RogueClass_HasHighDexterity) {
+TEST(CharacterServiceTests, RogueClass_LevelUpRaisesDexterity) {
     CharacterService service = MakeTestService();
     Attributes baseAttribs{10, 10, 10, 10, 10, 10};
-    CharacterCreationRequest request("TestRogue", CharacterClass::Rogue, baseAttribs);
+    auto characterId = service.CreateCharacter(CharacterCreationRequest("TestRogue", CharacterClass::Rogue, baseAttribs));
 
-    auto characterId = service.CreateCharacter(request);
+    service.AwardExperience(characterId.value(), 100);  // level 2: the automatic point goes to DEX
+
     auto status = service.GetCharacterStatus(characterId.value());
-
     EXPECT_GT(status->currentAttributes.dexterity, baseAttribs.dexterity);
 }
 // ============================================================================
@@ -791,4 +809,233 @@ TEST(CharacterServiceRulesTests, MovementSpeed_FromClassRules) {
 
     EXPECT_FLOAT_EQ(*service.GetMovementSpeed(rogue),
                     5.0f + static_cast<float>(Get(service, rogue).GetAttributes().GetDexterityModifier()) * 0.1f);
+}
+
+// ============================================================================
+// Attribute Growth Tests
+// ============================================================================
+
+TEST(CharacterServiceGrowthTests, CreateCharacter_KeepsStartingAttributes) {
+    CharacterService service = MakeTestService();
+    const Attributes start{16, 12, 14, 8, 10, 10};
+
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, start));
+
+    const auto& attributes = Get(service, id).GetAttributes();
+    EXPECT_EQ(attributes.strength, 16);  // no hidden class bonus on top of the class template
+    EXPECT_EQ(attributes.constitution, 14);
+    EXPECT_EQ(Get(service, id).GetUnspentAttributePoints(), 0);
+}
+
+TEST(CharacterServiceGrowthTests, CreateCharacter_ClampsToClassCaps) {
+    CharacterService service = MakeTestService();
+
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{28, 10, 10, 22, 10, 10}));
+
+    EXPECT_EQ(Get(service, id).GetAttributes().strength, 25);      // primary cap
+    EXPECT_EQ(Get(service, id).GetAttributes().intelligence, 18);  // other cap
+}
+
+TEST(CharacterServiceGrowthTests, LevelUp_AutoPointsAlternatePrimaries) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 10, 10, 10, 10}));
+
+    auto toLevel2 = service.AwardExperience(id, 100);
+    EXPECT_EQ(toLevel2->attributeGains.strength, 1);       // level 2 -> first primary
+    EXPECT_EQ(toLevel2->attributeGains.constitution, 0);
+
+    auto toLevel3 = service.AwardExperience(id, 183);      // 283 total: level 3
+    ASSERT_EQ(toLevel3->newLevel, 3);
+    EXPECT_EQ(toLevel3->attributeGains.constitution, 1);   // level 3 -> second primary
+
+    const auto& attributes = Get(service, id).GetAttributes();
+    EXPECT_EQ(attributes.strength, 11);
+    EXPECT_EQ(attributes.constitution, 11);
+    EXPECT_EQ(attributes.intelligence, 10);                // non-primaries only grow with free points
+}
+
+TEST(CharacterServiceGrowthTests, LevelUp_GrantsFreePoints) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
+
+    auto result = service.AwardExperience(id, 283);  // level 1 -> 3
+
+    EXPECT_EQ(result->attributePointsGained, 2);
+    EXPECT_EQ(Get(service, id).GetUnspentAttributePoints(), 2);
+}
+
+TEST(CharacterServiceGrowthTests, LevelUp_CappedPrimariesTurnIntoFreePoints) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{25, 10, 25, 10, 10, 10}));
+
+    auto result = service.AwardExperience(id, 100);  // level 2
+
+    EXPECT_EQ(result->attributeGains.strength, 0);
+    EXPECT_EQ(result->attributePointsGained, 2);     // 1 free + 1 automatic that had nowhere to go
+    EXPECT_EQ(Get(service, id).GetAttributes().strength, 25);
+}
+
+TEST(CharacterServiceGrowthTests, SpendAttributePoint_RaisesAttributeAndConsumesPoint) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("R", CharacterClass::Rogue, Attributes{10, 14, 10, 10, 10, 10}));
+    service.AwardExperience(id, 100);
+    const int32_t charismaBefore = Get(service, id).GetAttributes().charisma;
+
+    ASSERT_TRUE(service.SpendAttributePoint(id, AttributeType::Charisma));  // a non-primary: classes can blur
+
+    EXPECT_EQ(Get(service, id).GetAttributes().charisma, charismaBefore + 1);
+    EXPECT_EQ(Get(service, id).GetUnspentAttributePoints(), 0);
+}
+
+TEST(CharacterServiceGrowthTests, SpendAttributePoint_WithoutPoints_Fails) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("R", CharacterClass::Rogue, Attributes{10, 10, 10, 10, 10, 10}));
+
+    EXPECT_FALSE(service.SpendAttributePoint(id, AttributeType::Strength));
+}
+
+TEST(CharacterServiceGrowthTests, SpendAttributePoint_AtOtherCap_Fails) {
+    CharacterService service = MakeTestService();
+    // STR is not a Mage primary: capped at 18, so the barrier between classes holds
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{18, 10, 10, 10, 10, 10}));
+    service.AwardExperience(id, 100);
+
+    EXPECT_FALSE(service.SpendAttributePoint(id, AttributeType::Strength));
+    EXPECT_EQ(*service.GetAttributeCap(id, AttributeType::Strength), 18);
+    EXPECT_EQ(*service.GetAttributeCap(id, AttributeType::Intelligence), 25);
+    EXPECT_TRUE(service.SpendAttributePoint(id, AttributeType::Intelligence));
+}
+
+TEST(CharacterServiceGrowthTests, SpendAttributePoint_ConstitutionRaisesHitPoints) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 11, 10, 10, 10}));
+    service.AwardExperience(id, 100);  // level 2: the automatic point goes to STR, CON stays 11
+    const auto& before = Get(service, id);
+    const int32_t maxBefore = before.GetMaxHitPoints();
+    const int32_t modifierBefore = before.GetAttributes().GetConstitutionModifier();
+
+    ASSERT_TRUE(service.SpendAttributePoint(id, AttributeType::Constitution));  // 11 -> 12: modifier +1
+
+    const auto& after = Get(service, id);
+    EXPECT_EQ(after.GetAttributes().GetConstitutionModifier(), modifierBefore + 1);
+    EXPECT_EQ(after.GetMaxHitPoints(), maxBefore + after.GetLevel());  // CON_mod x level
+}
+
+// ============================================================================
+// Armour Penalty Tests
+// ============================================================================
+
+namespace {
+    ArmorPiece HeavyChest() {
+        return ArmorPiece{ 7, LB::Combat::EquipmentSlot::Chest, ArmorCategory::Heavy, 0.15f, 0.05f };
+    }
+
+    ArmorPiece MediumHead() {
+        return ArmorPiece{ 3, LB::Combat::EquipmentSlot::Head, ArmorCategory::Medium, 0.05f, 0.01f };
+    }
+
+    float BaseSpeed(const CharacterService& service, CharacterId id, float classSpeed) {
+        return classSpeed + static_cast<float>(Get(service, id).GetAttributes().GetDexterityModifier()) * 0.1f;
+    }
+}
+
+TEST(CharacterServiceArmorTests, NoArmor_NoPenalties) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
+
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), BaseSpeed(service, id, 4.0f));
+    EXPECT_FLOAT_EQ(*service.GetCastTimeMultiplier(id), 1.0f);
+    EXPECT_TRUE(service.GetEquippedArmor(id).empty());
+}
+
+TEST(CharacterServiceArmorTests, HeavyArmor_WarriorHalvesMovementPenalty) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 10, 10, 10, 10}));
+
+    ASSERT_TRUE(service.EquipArmor(id, HeavyChest()));
+
+    // 15% penalty x 0.5 (signature) = 7.5%
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), BaseSpeed(service, id, 4.0f) * (1.0f - 0.075f));
+    EXPECT_FLOAT_EQ(*service.GetCastTimeMultiplier(id), 1.0f + 0.05f);  // casting scale 1
+}
+
+TEST(CharacterServiceArmorTests, HeavyArmor_MageDoublesBothPenalties) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
+
+    service.EquipArmor(id, HeavyChest());
+
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), BaseSpeed(service, id, 4.0f) * (1.0f - 0.30f));
+    EXPECT_FLOAT_EQ(*service.GetCastTimeMultiplier(id), 1.0f + 0.10f);
+}
+
+TEST(CharacterServiceArmorTests, MediumArmor_ClericCastsWithHalfPenalty) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("C", CharacterClass::Cleric, Attributes{10, 10, 10, 10, 10, 10}));
+
+    service.EquipArmor(id, MediumHead());
+
+    EXPECT_FLOAT_EQ(*service.GetCastTimeMultiplier(id), 1.0f + 0.01f * 0.5f);
+}
+
+TEST(CharacterServiceArmorTests, PenaltiesAddUpAcrossPieces) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
+
+    service.EquipArmor(id, HeavyChest());
+    service.EquipArmor(id, MediumHead());  // Medium has no entry in the test rules: scale 1
+
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), BaseSpeed(service, id, 4.0f) * (1.0f - (0.30f + 0.05f)));
+    EXPECT_EQ(service.GetEquippedArmor(id).size(), 2u);
+}
+
+TEST(CharacterServiceArmorTests, EquipSameSlot_Replaces) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 10, 10, 10, 10}));
+    service.EquipArmor(id, HeavyChest());
+
+    ArmorPiece robe{ 9, LB::Combat::EquipmentSlot::Chest, ArmorCategory::Cloth, 0.0f, 0.0f };
+    service.EquipArmor(id, robe);
+
+    ASSERT_EQ(service.GetEquippedArmor(id).size(), 1u);
+    EXPECT_EQ(service.GetEquippedArmor(id)[0].armorId, 9);
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), BaseSpeed(service, id, 4.0f));
+}
+
+TEST(CharacterServiceArmorTests, Unequip_RemovesPenalty) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
+    service.EquipArmor(id, HeavyChest());
+
+    EXPECT_TRUE(service.UnequipArmor(id, LB::Combat::EquipmentSlot::Chest));
+    EXPECT_FALSE(service.UnequipArmor(id, LB::Combat::EquipmentSlot::Chest));
+    EXPECT_FLOAT_EQ(*service.GetCastTimeMultiplier(id), 1.0f);
+}
+
+TEST(CharacterServiceArmorTests, EquipArmor_InvalidTargets_Fail) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 10, 10, 10, 10}));
+
+    EXPECT_FALSE(service.EquipArmor(999, HeavyChest()));
+    ArmorPiece noSlot = HeavyChest();
+    noSlot.slot = LB::Combat::EquipmentSlot::None;
+    EXPECT_FALSE(service.EquipArmor(id, noSlot));
+}
+
+TEST(CharacterServiceArmorTests, HugePenalty_SpeedNeverBelowMinimum) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
+    service.EquipArmor(id, ArmorPiece{ 1, LB::Combat::EquipmentSlot::Chest, ArmorCategory::Heavy, 0.9f, 0.0f });  // x2 = 180%
+
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), 1.0f);
+}
+
+TEST(CharacterServiceArmorTests, RemoveCharacter_ForgetsArmor) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 10, 10, 10, 10}));
+    service.EquipArmor(id, HeavyChest());
+
+    service.RemoveCharacter(id);
+
+    EXPECT_TRUE(service.GetEquippedArmor(id).empty());
 }

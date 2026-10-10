@@ -26,6 +26,7 @@ export namespace LB::Character {
         int32_t maxManaPoints_;
         int32_t armorClass_;
         LB::Position position_;
+        int32_t unspentAttributePoints_{0};
 
     public:
         Character(CharacterId id, const LB::String& name, CharacterClass characterClass, LB::Attributes attributes)
@@ -64,6 +65,10 @@ export namespace LB::Character {
         void SetPosition(const LB::Position& pos) { position_ = pos; }
 
         [[nodiscard]] bool IsAlive() const noexcept { return currentHitPoints_ > 0; }
+
+        // Attribute points earned on level-up that the player has not assigned yet
+        [[nodiscard]] int32_t GetUnspentAttributePoints() const noexcept { return unspentAttributePoints_; }
+        void SetUnspentAttributePoints(int32_t points) { unspentAttributePoints_ = points; }
     };
 
     /// <summary>

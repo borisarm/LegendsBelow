@@ -5,9 +5,11 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ## [Unreleased]
 
 ### Added
-- Class data file `Assets/Data/classes.json`: starting attributes (game-design.md), armour proficiencies, weapon adjustments, spell schools, resource, base movement speed, and the level 1-20 progression tables parsed from design-character-system.md. Loaded as `ClassDefinition`, validated, and cross-checked against armour and spells.
+- Class data file `Assets/Data/classes.json`: starting attributes (game-design.md), weapon adjustments, spell schools, resource, base movement speed, and the level 1-20 progression tables parsed from design-character-system.md. Loaded as `ClassDefinition`, validated, and cross-checked against spells.
 - Class weapon adjustment model: every class has an attack adjustment for every weapon category (+3 signature, +1 trained, -1 untrained, -5 restricted; e.g. a sword is +3 for Warriors, +1 Rogues, -1 Mages, -5 Clerics). `CharacterService::GetAttackBonus` = class attack progression + STR (melee) or DEX (bows, crossbows) + adjustment.
 - `LB::Character::ClassProgression` domain type shared by content loading and `CharacterService`.
+- Attribute growth (classes.json `attributeGrowth`, `primaryAttributes`): per level 1 automatic point alternating between the class's primary attributes and 1 free point the player assigns with `CharacterService::SpendAttributePoint`; primary attributes cap at 25, others at 18. `CharacterProgressionResult::attributePointsGained`, `Character::GetUnspentAttributePoints`, `LB::AttributeType`.
+- Class armour adjustment model (classes.json `armorAdjustments`): per class and armour category, scales on the pieces' movement and cast penalties (e.g. Warriors feel heavy armour at x0.5 on movement, Mages pay x2 on movement and casting beyond Light, Clerics cast in Light/Medium/Shield at x0.5). `CharacterService::EquipArmor`/`UnequipArmor`/`GetEquippedArmor`, armour-aware `GetMovementSpeed`, `GetCastTimeMultiplier`; `GameEngine::EquipPlayerArmor`.
 - Audio wired into the engine: XAudio2 output device (`LB.AudioSystem:XAudio2Backend`), master volume, suspend/resume with the window, gameplay channels paused during the tactical pause (music keeps playing), volumes restored from and saved to preferences.
 - Persistence backed by files: save slots (metadata + key/value `SaveData`) and preferences as JSON in `%LOCALAPPDATA%\LegendsBelow\Saves`, written atomically and discovered at startup. Quick save/load on F5/F9 (game clock and player position).
 - Player movement: the engine owns a Warrior (CharacterService) moving in real time with WASD/arrows or the left stick at `ClassBaseSpeed + DEX_mod * 0.1` tiles/s (design-character-system.md 4.2), inside a placeholder test arena; stops while paused.
@@ -27,6 +29,7 @@ All notable changes to LegendsBelow. Dates are commit dates.
 
 ### Changed
 - `CharacterService` uses data-driven class rules: HP/MP come from the class progression tables (MaxHP = table HP + CON_mod x level; MaxMP = table MP + INT/WIS_mod x level for Mages/Clerics), replacing the hard-coded formulas. Characters can only be created for classes whose rules are configured; the engine configures them from classes.json and runs without a player when there is no content.
+- Removed the hard-coded class attribute bonus on creation (classes.json starting attributes are the class template) and the fixed per-level attribute gains. Armour proficiency lists replaced by the armour adjustment model; armour.json `allowedClasses` is no longer cross-checked against them.
 - LegendsBelow is now a Win32/GDK shell: `Main.cpp` imports `LB.Engine` and forwards window events; `Game`, `DeviceResources`, and `StepTimer` removed from the executable.
 - `vcpkg.json` moved to the repository root so all projects share one manifest.
 - LBEngineCore references only the projects it imports (LBRenderingSystem, LBModel.Core).

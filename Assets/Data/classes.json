@@ -18,12 +18,34 @@
     },
     "resource": "Stamina",
     "baseMovementSpeed": 4.0,
-    "armorProficiencies": [
-      "Light",
-      "Medium",
-      "Heavy",
-      "Shield"
-    ],
+    "attributeGrowth": {
+      "autoPointsPerLevel": 1,
+      "freePointsPerLevel": 1,
+      "primaryAttributeCap": 25,
+      "otherAttributeCap": 18
+    },
+    "armorAdjustments": {
+      "Cloth": {
+        "movement": 1.0,
+        "casting": 1.0
+      },
+      "Light": {
+        "movement": 1.0,
+        "casting": 1.0
+      },
+      "Medium": {
+        "movement": 0.5,
+        "casting": 1.0
+      },
+      "Heavy": {
+        "movement": 0.5,
+        "casting": 1.0
+      },
+      "Shield": {
+        "movement": 0.5,
+        "casting": 1.0
+      }
+    },
     "weaponAdjustments": {
       "Sword": 3,
       "Axe": 3,
@@ -83,10 +105,34 @@
     },
     "resource": "Mana",
     "baseMovementSpeed": 5.0,
-    "armorProficiencies": [
-      "Cloth",
-      "Light"
-    ],
+    "attributeGrowth": {
+      "autoPointsPerLevel": 1,
+      "freePointsPerLevel": 1,
+      "primaryAttributeCap": 25,
+      "otherAttributeCap": 18
+    },
+    "armorAdjustments": {
+      "Cloth": {
+        "movement": 1.0,
+        "casting": 1.0
+      },
+      "Light": {
+        "movement": 0.5,
+        "casting": 1.0
+      },
+      "Medium": {
+        "movement": 1.5,
+        "casting": 1.0
+      },
+      "Heavy": {
+        "movement": 2.0,
+        "casting": 1.0
+      },
+      "Shield": {
+        "movement": 1.5,
+        "casting": 1.0
+      }
+    },
     "weaponAdjustments": {
       "Sword": 1,
       "Axe": -1,
@@ -146,9 +192,34 @@
     },
     "resource": "Mana",
     "baseMovementSpeed": 4.0,
-    "armorProficiencies": [
-      "Cloth"
-    ],
+    "attributeGrowth": {
+      "autoPointsPerLevel": 1,
+      "freePointsPerLevel": 1,
+      "primaryAttributeCap": 25,
+      "otherAttributeCap": 18
+    },
+    "armorAdjustments": {
+      "Cloth": {
+        "movement": 1.0,
+        "casting": 1.0
+      },
+      "Light": {
+        "movement": 1.5,
+        "casting": 1.5
+      },
+      "Medium": {
+        "movement": 2.0,
+        "casting": 2.0
+      },
+      "Heavy": {
+        "movement": 2.0,
+        "casting": 2.0
+      },
+      "Shield": {
+        "movement": 2.0,
+        "casting": 2.0
+      }
+    },
     "weaponAdjustments": {
       "Sword": -1,
       "Axe": -5,
@@ -213,13 +284,34 @@
     },
     "resource": "Mana",
     "baseMovementSpeed": 4.0,
-    "armorProficiencies": [
-      "Cloth",
-      "Light",
-      "Medium",
-      "Heavy",
-      "Shield"
-    ],
+    "attributeGrowth": {
+      "autoPointsPerLevel": 1,
+      "freePointsPerLevel": 1,
+      "primaryAttributeCap": 25,
+      "otherAttributeCap": 18
+    },
+    "armorAdjustments": {
+      "Cloth": {
+        "movement": 1.0,
+        "casting": 1.0
+      },
+      "Light": {
+        "movement": 1.0,
+        "casting": 0.5
+      },
+      "Medium": {
+        "movement": 1.0,
+        "casting": 0.5
+      },
+      "Heavy": {
+        "movement": 1.0,
+        "casting": 1.0
+      },
+      "Shield": {
+        "movement": 1.0,
+        "casting": 0.5
+      }
+    },
     "weaponAdjustments": {
       "Sword": -5,
       "Axe": -5,
