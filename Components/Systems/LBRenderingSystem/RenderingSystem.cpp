@@ -27,6 +27,9 @@ namespace LB::Systems::Rendering {
                 [this] { if (onDeviceLost_) onDeviceLost_(); },
                 [this] { if (onDeviceRestored_) onDeviceRestored_(); });
             backend->renderer.Initialize(nativeWindow, screenWidth, screenHeight);
+            for (const auto& model : models_) {
+                backend->renderer.AddModel(model);  // loaded before the device existed
+            }
             gpu_ = std::move(backend);
         }
         catch (const std::exception&) {
@@ -40,6 +43,8 @@ namespace LB::Systems::Rendering {
     void RenderingSystem::Shutdown() {
         // Destroying the renderer waits for the GPU before releasing resources
         gpu_.reset();
+        models_.clear();
+        modelPaths_.clear();
         initialized_ = false;
     }
 
@@ -49,8 +54,8 @@ namespace LB::Systems::Rendering {
         if (gpu_) {
             gpu_->renderer.BeginFrame(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
 
-            // World pass: lit 3D shapes through the camera, depth-tested
-            if (!meshQueue_.empty()) {
+            // World pass: lit 3D shapes and models through the camera, depth-tested
+            if (!meshQueue_.empty() || !modelQueue_.empty()) {
                 const auto& view = cameraView_;
                 gpu_->renderer.SetCamera(view.eye.x, view.eye.y, view.eye.z, view.target.x, view.target.y, view.target.z,
                                          view.verticalFovRadians, view.nearPlane, view.farPlane);
@@ -59,6 +64,10 @@ namespace LB::Systems::Rendering {
                         mesh.position.x, mesh.position.y, mesh.position.z,
                         mesh.size.x, mesh.size.y, mesh.size.z, mesh.yawRadians,
                         mesh.color.r, mesh.color.g, mesh.color.b, mesh.color.a);
+                }
+                for (const auto& model : modelQueue_) {
+                    gpu_->renderer.DrawModel(model.model - 1, model.position.x, model.position.y, model.position.z,
+                        model.yawRadians, model.scale, model.tint.r, model.tint.g, model.tint.b, model.tint.a);
                 }
             }
 
@@ -78,6 +87,10 @@ namespace LB::Systems::Rendering {
 
         stats_.meshesRendered = static_cast<uint32_t>(meshQueue_.size());
         stats_.drawCalls += stats_.meshesRendered;
+        stats_.modelsRendered = static_cast<uint32_t>(modelQueue_.size());
+        for (const auto& model : modelQueue_) {
+            stats_.drawCalls += static_cast<uint32_t>(models_[model.model - 1]->parts.size());
+        }
 
         // Sort and render all queued items
         RenderSprites();
@@ -86,6 +99,35 @@ namespace LB::Systems::Rendering {
         if (gpu_) {
             gpu_->renderer.EndFrame();
         }
+    }
+
+    ModelLoadResult RenderingSystem::LoadModel(const std::filesystem::path& path) {
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(path, ec);
+        if (ec) canonical = path;
+
+        for (std::size_t i = 0; i < modelPaths_.size(); ++i) {
+            if (modelPaths_[i] == canonical) return ModelLoadResult{ static_cast<ModelId>(i + 1), {} };
+        }
+
+        auto loaded = Detail::LoadGltfModel(path);
+        if (!loaded.error.empty()) {
+            return ModelLoadResult{ InvalidModelId, std::move(loaded.error) };
+        }
+
+        auto model = std::make_shared<const ModelData>(std::move(loaded.model));
+        if (gpu_) {
+            try {
+                gpu_->renderer.AddModel(model);
+            }
+            catch (const std::exception& e) {
+                return ModelLoadResult{ InvalidModelId, std::format("{}: GPU upload failed ({})", path.filename().string(), e.what()) };
+            }
+        }
+
+        models_.push_back(std::move(model));
+        modelPaths_.push_back(std::move(canonical));
+        return ModelLoadResult{ static_cast<ModelId>(models_.size()), {} };
     }
 
     void RenderingSystem::OnWindowSizeChanged(int32_t width, int32_t height) {

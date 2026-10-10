@@ -30,6 +30,8 @@ export namespace LB::Engine {
         std::string saveDirectory;
         // Game content (spells.json, weapons.json, armour.json); empty starts without content
         std::string contentDirectory;
+        // 3D models (KayKit glTF files); empty draws the world with placeholder primitives
+        std::string modelDirectory;
     };
 
     /// <summary>
@@ -64,6 +66,15 @@ export namespace LB::Engine {
         static constexpr float PlayerSizeTiles = 0.75f;
         static constexpr float WallHeight = 1.2f;
 
+        // KayKit models are built on a 2-unit grid (small floor tile 2x2, wall segment 4 wide):
+        // one uniform scale maps them onto 1-unit tiles
+        static constexpr float ModelScale = 0.5f;
+        static constexpr std::string_view FloorModel = "tileBrickB_small.glb";
+        static constexpr std::string_view FloorVariantModel = "tileBrickA_small.glb";
+        static constexpr std::string_view WallModel = "wall.glb";
+        static constexpr std::string_view CornerModel = "pillar.glb";
+        static constexpr std::string_view PlayerModel = "character_knight.gltf";
+
         GameEngine() {
             timer_.SetFixedTimeStep(true);
             timer_.SetTargetElapsedSeconds(DefaultTargetElapsedSeconds);
@@ -90,6 +101,11 @@ export namespace LB::Engine {
 
             if (!renderingSystem_.Initialize(nativeWindow, width, height)) {
                 initializationError_ = "Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.";
+                return false;
+            }
+
+            if (!LoadModels(options.modelDirectory)) {
+                renderingSystem_.Shutdown();
                 return false;
             }
 
@@ -141,6 +157,7 @@ export namespace LB::Engine {
             persistenceSystem_.Shutdown();
             characterService_.ClearAll();
             playerId_.reset();
+            models_ = {};
             renderingSystem_.Shutdown();
             paused_ = false;
             initialized_ = false;
@@ -416,10 +433,12 @@ export namespace LB::Engine {
 
             renderingSystem_.BeginFrame();
 
-            // Placeholder pause feedback until there is a pause menu: dim the whole frame
+            // Placeholder pause feedback until there is a pause menu: dim the whole frame.
+            // Colors are picked as display (sRGB) values and handed to the renderer as linear.
             const float dim = paused_ ? 0.4f : 1.0f;
             const auto shade = [dim](float r, float g, float b) {
-                return Systems::Rendering::Color{ r * dim, g * dim, b * dim, 1.0f };
+                const auto linear = [dim](float c) { return std::pow(c * dim, 2.2f); };
+                return Systems::Rendering::Color{ linear(r), linear(g), linear(b), 1.0f };
             };
 
             // Dim ambient background (design-technical-directx12.md 2.2), then the 3D world
@@ -429,6 +448,40 @@ export namespace LB::Engine {
             DrawPlayer(shade);
 
             renderingSystem_.EndFrame();
+        }
+
+        /// <summary>
+        /// Load the arena and player models. Without a model directory the world is drawn with
+        /// primitives; a missing or invalid model stops startup with every problem listed.
+        /// </summary>
+        bool LoadModels(const std::string& modelDirectory) {
+            models_ = {};
+            if (modelDirectory.empty()) return true;
+
+            const auto directory = std::filesystem::path(std::u8string(modelDirectory.begin(), modelDirectory.end()));
+            std::vector<std::string> errors;
+            const auto load = [&](std::string_view file) {
+                const auto result = renderingSystem_.LoadModel(directory / file);
+                if (!result.Succeeded()) errors.push_back(result.error);
+                return result.id;
+            };
+
+            models_.floor = load(FloorModel);
+            models_.floorVariant = load(FloorVariantModel);
+            models_.wall = load(WallModel);
+            models_.corner = load(CornerModel);
+            models_.player = load(PlayerModel);
+
+            if (!errors.empty()) {
+                initializationError_ = std::format("3D models in '{}' could not be loaded ({} problems):", modelDirectory, errors.size());
+                for (const auto& error : errors) {
+                    initializationError_ += "\n" + error;
+                }
+                models_ = {};
+                return false;
+            }
+            models_.loaded = true;
+            return true;
         }
 
         bool LoadContent(const std::string& contentDirectory) {
@@ -581,6 +634,11 @@ export namespace LB::Engine {
         // around it. Tile (tx, ty) covers [tx, tx + 1) x [ty, ty + 1); ground y is world Z.
         template<typename Shade>
         void DrawArena(const Shade& shade) {
+            if (models_.loaded) {
+                DrawArenaModels(shade);
+                return;
+            }
+
             using Systems::Rendering::MeshRenderData;
             using Systems::Rendering::MeshShape;
 
@@ -611,10 +669,68 @@ export namespace LB::Engine {
             }
         }
 
-        // Placeholder hero: a body, a head, and a visor showing where they face
+        // Arena from KayKit pieces: a floor tile per tile (top at height 0), wall segments two tiles
+        // long whose inner face is on the arena edge, and pillars filling the corners
+        template<typename Shade>
+        void DrawArenaModels(const Shade& shade) {
+            using Systems::Rendering::ModelRenderData;
+
+            const auto tint = shade(1.0f, 1.0f, 1.0f);
+            const auto place = [&](Systems::Rendering::ModelId model, float x, float y, float z, float yaw) {
+                renderingSystem_.DrawModel(ModelRenderData{ model, { x, y, z }, yaw, ModelScale, tint });
+            };
+            const auto bottomOf = [&](Systems::Rendering::ModelId model) {
+                return renderingSystem_.GetModel(model)->boundsMin.y * ModelScale;
+            };
+            const auto topOf = [&](Systems::Rendering::ModelId model) {
+                return renderingSystem_.GetModel(model)->boundsMax.y * ModelScale;
+            };
+
+            const auto tilesX = static_cast<std::int32_t>(ArenaHalfWidth);
+            const auto tilesY = static_cast<std::int32_t>(ArenaHalfHeight);
+            for (std::int32_t ty = -tilesY; ty < tilesY; ++ty) {
+                for (std::int32_t tx = -tilesX; tx < tilesX; ++tx) {
+                    // A fixed scatter of the decorated variant breaks up the grid
+                    const bool variant = ((tx * 7 + ty * 13) % 11 + 11) % 11 == 0;
+                    const auto model = variant ? models_.floorVariant : models_.floor;
+                    place(model, static_cast<float>(tx) + 0.5f, -topOf(model), static_cast<float>(ty) + 0.5f, 0.0f);
+                }
+            }
+
+            const auto* wall = renderingSystem_.GetModel(models_.wall);
+            const float segment = (wall->boundsMax.x - wall->boundsMin.x) * ModelScale;     // 2 tiles
+            const float halfDepth = (wall->boundsMax.z - wall->boundsMin.z) * ModelScale * 0.5f;
+            const float wallY = -bottomOf(models_.wall);
+            constexpr float quarterTurn = std::numbers::pi_v<float> * 0.5f;
+            for (float x = -ArenaHalfWidth + segment * 0.5f; x < ArenaHalfWidth; x += segment) {
+                place(models_.wall, x, wallY, -ArenaHalfHeight - halfDepth, 0.0f);
+                place(models_.wall, x, wallY, ArenaHalfHeight + halfDepth, 0.0f);
+            }
+            for (float z = -ArenaHalfHeight + segment * 0.5f; z < ArenaHalfHeight; z += segment) {
+                place(models_.wall, -ArenaHalfWidth - halfDepth, wallY, z, quarterTurn);
+                place(models_.wall, ArenaHalfWidth + halfDepth, wallY, z, quarterTurn);
+            }
+
+            const float cornerY = -bottomOf(models_.corner);
+            for (float sx : { -1.0f, 1.0f }) {
+                for (float sz : { -1.0f, 1.0f }) {
+                    place(models_.corner, sx * (ArenaHalfWidth + halfDepth), cornerY, sz * (ArenaHalfHeight + halfDepth), 0.0f);
+                }
+            }
+        }
+
+        // Placeholder hero: a body, a head, and a visor showing where they face (or the knight model)
         template<typename Shade>
         void DrawPlayer(const Shade& shade) {
             if (!playerId_) return;
+
+            if (models_.loaded) {
+                // Feet on the floor, facing the walk direction (glTF characters face +Z)
+                const float feet = -renderingSystem_.GetModel(models_.player)->boundsMin.y * ModelScale;
+                renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{
+                    models_.player, { playerPosition_.x, feet, playerPosition_.y }, playerFacingYaw_, ModelScale, shade(1.0f, 1.0f, 1.0f) });
+                return;
+            }
 
             using Systems::Rendering::MeshRenderData;
             using Systems::Rendering::MeshShape;
@@ -731,6 +847,17 @@ export namespace LB::Engine {
         WorldPoint playerPosition_{};
         float playerFacingYaw_{0.0f};             // radians around the vertical axis; 0 faces +Z (south)
         Systems::Rendering::IsometricCamera camera_;
+
+        // Models used to draw the world (all valid when loaded is true)
+        struct WorldModels {
+            bool loaded{false};
+            Systems::Rendering::ModelId floor{};
+            Systems::Rendering::ModelId floorVariant{};
+            Systems::Rendering::ModelId wall{};
+            Systems::Rendering::ModelId corner{};
+            Systems::Rendering::ModelId player{};
+        };
+        WorldModels models_;
         WorldPoint previousRightStick_{};         // for right stick flick detection
         StepTimer timer_;
         double gameTimeSeconds_{0.0};

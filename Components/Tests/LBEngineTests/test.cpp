@@ -1358,3 +1358,144 @@ TEST(GameEngineCameraTests, Render_UsesCameraView) {
     EXPECT_FLOAT_EQ(rendered.eye.y, expected.eye.y);
     EXPECT_FLOAT_EQ(rendered.eye.z, expected.eye.z);
 }
+
+// ============================================================================
+// GameEngine Model Tests
+// ============================================================================
+
+namespace {
+    // Assets/Models next to Assets/Data
+    std::string ShippedModelDirectory() {
+        const auto content = ShippedContentDirectory();
+        if (content.empty()) return {};
+        const auto models = std::filesystem::path(std::u8string(content.begin(), content.end())).parent_path() / "Models";
+        const auto text = models.u8string();
+        return std::string(text.begin(), text.end());
+    }
+
+    void InitializeWithModels(GameEngine& engine) {
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+            .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory() }))
+            << engine.GetInitializationError();
+    }
+
+    using LB::Systems::Rendering::ModelRenderData;
+
+    // Queued draws of one model by name
+    std::vector<ModelRenderData> DrawsOf(const GameEngine& engine, std::string_view name) {
+        std::vector<ModelRenderData> draws;
+        const auto& rendering = engine.GetRendering();
+        for (const auto& draw : rendering.GetQueuedModels()) {
+            if (rendering.GetModel(draw.model)->name == name) draws.push_back(draw);
+        }
+        return draws;
+    }
+
+    const LB::Systems::Rendering::ModelData& ModelNamed(const GameEngine& engine, std::string_view name) {
+        return *engine.GetRendering().GetModel(*engine.GetRendering().FindModel(name));
+    }
+}
+
+TEST(GameEngineModelTests, Render_DrawsArenaAndPlayerFromModels) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+
+    engine.Tick(OneSixtieth);
+
+    const auto tiles = static_cast<std::size_t>(GameEngine::ArenaHalfWidth * 2 * GameEngine::ArenaHalfHeight * 2);
+    const auto walls = static_cast<std::size_t>(2 * (GameEngine::ArenaHalfWidth + GameEngine::ArenaHalfHeight));  // perimeter / 2-tile segments
+    EXPECT_EQ(DrawsOf(engine, "tileBrickB_small").size() + DrawsOf(engine, "tileBrickA_small").size(), tiles);
+    EXPECT_GT(DrawsOf(engine, "tileBrickA_small").size(), 0u);
+    EXPECT_EQ(DrawsOf(engine, "wall").size(), walls);
+    EXPECT_EQ(DrawsOf(engine, "pillar").size(), 4u);
+    EXPECT_EQ(DrawsOf(engine, "character_knight").size(), 1u);
+    EXPECT_TRUE(engine.GetRendering().GetQueuedMeshes().empty());
+}
+
+TEST(GameEngineModelTests, FloorTiles_TopAtGroundLevel) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    engine.Tick(OneSixtieth);
+
+    const auto& tile = ModelNamed(engine, "tileBrickB_small");
+    for (const auto& draw : DrawsOf(engine, "tileBrickB_small")) {
+        EXPECT_NEAR(draw.position.y + tile.boundsMax.y * draw.scale, 0.0f, 1e-5);
+        EXPECT_NEAR((tile.boundsMax.x - tile.boundsMin.x) * draw.scale, 1.0f, 0.05f);  // one tile wide
+    }
+}
+
+TEST(GameEngineModelTests, Walls_InnerFaceOnArenaEdge) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    engine.Tick(OneSixtieth);
+
+    const auto& wall = ModelNamed(engine, "wall");
+    const float halfDepth = wall.boundsMax.z * GameEngine::ModelScale;
+    for (const auto& draw : DrawsOf(engine, "wall")) {
+        EXPECT_NEAR(draw.position.y + wall.boundsMin.y * draw.scale, 0.0f, 1e-5);  // standing on the floor
+        if (draw.yawRadians == 0.0f) {
+            EXPECT_NEAR(std::abs(draw.position.z) - halfDepth, GameEngine::ArenaHalfHeight, 1e-4);
+            EXPECT_LT(std::abs(draw.position.x), GameEngine::ArenaHalfWidth);
+        }
+        else {
+            EXPECT_NEAR(std::abs(draw.position.x) - halfDepth, GameEngine::ArenaHalfWidth, 1e-4);
+            EXPECT_LT(std::abs(draw.position.z), GameEngine::ArenaHalfHeight);
+        }
+    }
+}
+
+TEST(GameEngineModelTests, Player_StandsAtPositionFacingWalkDirection) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 20);
+
+    const auto draws = DrawsOf(engine, "character_knight");
+    ASSERT_EQ(draws.size(), 1u);
+    const auto& knight = ModelNamed(engine, "character_knight");
+    EXPECT_FLOAT_EQ(draws[0].position.x, engine.GetPlayerPosition().x);
+    EXPECT_FLOAT_EQ(draws[0].position.z, engine.GetPlayerPosition().y);
+    EXPECT_NEAR(draws[0].position.y + knight.boundsMin.y * draws[0].scale, 0.0f, 1e-5);
+
+    // Facing (sin yaw, cos yaw) is the ground direction of screen-right
+    const auto right = Ground(engine, 1.0f, 0.0f);
+    EXPECT_NEAR(std::sin(draws[0].yawRadians), right.x, 1e-5);
+    EXPECT_NEAR(std::cos(draws[0].yawRadians), right.y, 1e-5);
+}
+
+TEST(GameEngineModelTests, Paused_DimsModels) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    engine.Tick(OneSixtieth);
+    const float normal = engine.GetRendering().GetQueuedModels().front().tint.r;
+
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_LT(engine.GetRendering().GetQueuedModels().front().tint.r, normal * 0.5f);
+}
+
+TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
+    GameEngine engine;
+    const auto empty = std::filesystem::temp_directory_path() / "lb_no_models_here";
+    std::filesystem::create_directories(empty);
+
+    const bool ok = engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .modelDirectory = empty.string() });
+
+    EXPECT_FALSE(ok);
+    const auto& error = engine.GetInitializationError();
+    EXPECT_NE(error.find("5 problems"), std::string::npos) << error;
+    EXPECT_NE(error.find("wall.glb"), std::string::npos) << error;
+    EXPECT_NE(error.find("character_knight.gltf"), std::string::npos) << error;
+    std::filesystem::remove_all(empty);
+}
+
+TEST(GameEngineModelTests, NoModelDirectory_FallsBackToPrimitives) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_TRUE(engine.GetRendering().GetQueuedModels().empty());
+    EXPECT_FALSE(engine.GetRendering().GetQueuedMeshes().empty());
+}
