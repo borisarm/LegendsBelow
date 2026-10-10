@@ -143,6 +143,7 @@
   <ItemGroup>
     <ClCompile Include="LB.Dungeon.Entities.ixx" />
     <ClCompile Include="LB.Dungeon.Enums.ixx" />
+    <ClCompile Include="LB.Dungeon.Layout.ixx" />
     <ClCompile Include="LB.Dungeon.ixx" />
     <ClCompile Include="LB.Dungeon.ValueObjects.ixx" />
   </ItemGroup>

@@ -1,6 +1,7 @@
 #include "pch.h"
 
 import LB.DungeonService;
+import std;
 
 using namespace LB::Services::Dungeon;
 
@@ -477,4 +478,136 @@ TEST(DungeonServiceTests, Dungeon_GetClearedRoomCount_CountsCleared) {
 
     auto updated = service.GetDungeon(dungeon.dungeonId);
     EXPECT_EQ(updated->GetClearedRoomCount(), 1);
+}
+// ============================================================================
+// Floor Layout Generation Tests
+// ============================================================================
+
+namespace {
+    // Floor cells reachable from a room's center (4-neighbors)
+    std::int32_t ReachableFloorCells(const FloorLayout& layout, std::int32_t room) {
+        const auto& area = layout.rooms[static_cast<std::size_t>(room)].area;
+        std::vector<bool> seen(layout.cells.size(), false);
+        std::vector<std::pair<std::int32_t, std::int32_t>> frontier{ { area.CenterX(), area.CenterY() } };
+        seen[static_cast<std::size_t>(area.CenterY() * layout.width + area.CenterX())] = true;
+        for (std::size_t head = 0; head < frontier.size(); ++head) {
+            const auto [x, y] = frontier[head];
+            for (const auto& [dx, dy] : { std::pair{ 1, 0 }, std::pair{ -1, 0 }, std::pair{ 0, 1 }, std::pair{ 0, -1 } }) {
+                if (!layout.IsFloor(x + dx, y + dy)) continue;
+                const auto index = static_cast<std::size_t>((y + dy) * layout.width + x + dx);
+                if (seen[index]) continue;
+                seen[index] = true;
+                frontier.emplace_back(x + dx, y + dy);
+            }
+        }
+        return static_cast<std::int32_t>(frontier.size());
+    }
+
+    bool Overlap(const CellRect& a, const CellRect& b) {
+        return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    }
+}
+
+TEST(FloorGenerationTests, SameSeed_SameFloor_OtherSeed_Different) {
+    DungeonService service;
+    const FloorGenerationParams params{};
+
+    const auto a = service.GenerateFloor(params, 42);
+    const auto b = service.GenerateFloor(params, 42);
+    const auto c = service.GenerateFloor(params, 43);
+
+    EXPECT_EQ(a.cells, b.cells);
+    EXPECT_EQ(a.rooms.size(), b.rooms.size());
+    EXPECT_TRUE(a.cells != c.cells || a.width != c.width || a.height != c.height);
+}
+
+TEST(FloorGenerationTests, ManySeeds_ValidFloors) {
+    DungeonService service;
+    FloorGenerationParams params{};
+    params.criticalPathRooms = 7;
+
+    for (std::uint32_t seed = 1; seed <= 200; ++seed) {
+        const auto layout = service.GenerateFloor(params, seed);
+        SCOPED_TRACE(seed);
+
+        // The critical path, its ends, and the rooms' types
+        ASSERT_GE(layout.rooms.size(), 7u);
+        EXPECT_EQ(layout.rooms[static_cast<std::size_t>(layout.entranceRoom)].type, RoomType::Entrance);
+        EXPECT_EQ(layout.rooms[static_cast<std::size_t>(layout.exitRoom)].type, RoomType::Exit);
+        EXPECT_EQ(layout.exitRoom, 6);
+        for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
+            const auto& room = layout.rooms[i];
+            if (room.onCriticalPath) continue;
+            EXPECT_TRUE(room.type == RoomType::Treasure || room.type == RoomType::Elite || room.type == RoomType::Safe);
+        }
+
+        // Rooms inside the border, apart from each other, made of floor, and connected both ways
+        for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
+            const auto& area = layout.rooms[i].area;
+            EXPECT_GE(area.x, 1);
+            EXPECT_GE(area.y, 1);
+            EXPECT_LE(area.x + area.width, layout.width - 1);
+            EXPECT_LE(area.y + area.height, layout.height - 1);
+            EXPECT_TRUE(layout.IsFloor(area.CenterX(), area.CenterY()));
+            for (std::size_t j = i + 1; j < layout.rooms.size(); ++j) EXPECT_FALSE(Overlap(area, layout.rooms[j].area));
+            for (const auto other : layout.rooms[i].connections) {
+                const auto& back = layout.rooms[static_cast<std::size_t>(other)].connections;
+                EXPECT_NE(std::ranges::find(back, static_cast<std::int32_t>(i)), back.end());
+            }
+        }
+
+        // The border is solid and every floor cell is reachable from the entrance
+        for (std::int32_t x = 0; x < layout.width; ++x) {
+            EXPECT_FALSE(layout.IsFloor(x, 0));
+            EXPECT_FALSE(layout.IsFloor(x, layout.height - 1));
+        }
+        for (std::int32_t y = 0; y < layout.height; ++y) {
+            EXPECT_FALSE(layout.IsFloor(0, y));
+            EXPECT_FALSE(layout.IsFloor(layout.width - 1, y));
+        }
+        EXPECT_EQ(ReachableFloorCells(layout, layout.entranceRoom), layout.FloorCellCount());
+    }
+}
+
+TEST(FloorGenerationTests, Branches_AddSideRooms) {
+    DungeonService service;
+    FloorGenerationParams none{};
+    none.branchChance = 0.0f;
+    FloorGenerationParams always{};
+    always.branchChance = 1.0f;
+    always.maxBranchLength = 1;
+
+    const auto straight = service.GenerateFloor(none, 7);
+    const auto branched = service.GenerateFloor(always, 7);
+
+    EXPECT_EQ(straight.rooms.size(), static_cast<std::size_t>(none.criticalPathRooms));
+    EXPECT_GT(branched.rooms.size(), straight.rooms.size());
+    EXPECT_LE(branched.rooms.size(), static_cast<std::size_t>(2 * always.criticalPathRooms - 2));
+}
+
+TEST(FloorGenerationTests, RoomSizes_WithinTheParams) {
+    DungeonService service;
+    FloorGenerationParams params{};
+    params.minRoomSize = 4;
+    params.maxRoomSize = 5;
+
+    const auto layout = service.GenerateFloor(params, 99);
+
+    for (const auto& room : layout.rooms) {
+        EXPECT_GE(room.area.width, 4);
+        EXPECT_LE(room.area.width, 5);
+        EXPECT_GE(room.area.height, 4);
+        EXPECT_LE(room.area.height, 5);
+    }
+}
+
+TEST(FloorGenerationTests, SingleRoom_IsTheWholeFloor) {
+    const auto layout = FloorLayout::SingleRoom(10, 7);
+
+    EXPECT_EQ(layout.width, 12);
+    EXPECT_EQ(layout.height, 9);
+    EXPECT_EQ(layout.FloorCellCount(), 70);
+    EXPECT_EQ(layout.RoomAt(1, 1), 0);
+    EXPECT_EQ(layout.RoomAt(0, 0), -1);
+    EXPECT_FALSE(layout.IsFloor(-1, 3));
 }

@@ -4,6 +4,8 @@
     <ClCompile Include="LB.Engine.ixx" />
     <ClCompile Include="Animator.ixx" />
     <ClCompile Include="Encounter.ixx" />
+    <ClCompile Include="World.ixx" />
+    <ClCompile Include="DungeonFloor.cpp" />
     <ClCompile Include="Loot.ixx" />
     <ClCompile Include="CharacterScreen.ixx" />
     <ClCompile Include="PlayerProgress.cpp" />

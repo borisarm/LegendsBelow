@@ -209,7 +209,8 @@ namespace LB::Engine {
         for (auto drop : lootRoller_.Roll(*table, *content_)) {
             const auto offset = lootRoller_.Scatter(0.45f);
             drop.id = nextGroundItemId_++;
-            drop.position = ClampToArena({ at.x + offset.x, at.y + offset.y });
+            const WorldPoint spot{ at.x + offset.x, at.y + offset.y };
+            drop.position = world_.CircleFits(spot, 0.2f) ? spot : at;
             groundItems_.push_back(drop);
         }
     }

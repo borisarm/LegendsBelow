@@ -8,6 +8,8 @@ import LB.CharacterService;
 import LB.Combat;
 import LB.CombatService;
 import LB.Content;
+import LB.Dungeon;
+import LB.DungeonService;
 import LB.Inventory;
 import LB.InventoryService;
 import LB.AudioSystem;
@@ -15,6 +17,7 @@ import LB.InputSystem;
 import LB.PersistenceSystem;
 import LB.RenderingSystem;
 import :StepTimer;
+import :World;
 import :Encounter;
 import :Loot;
 import :CharacterScreen;
@@ -35,8 +38,11 @@ export namespace LB::Engine {
         std::string fontDirectory;
         // Waves of enemies from enemies.json fight the player (needs content with a player)
         bool spawnEnemies{true};
-        // Fixed seed for dice and spawn points (tests, replays); empty: random
+        // Fixed seed for dice, spawn points, and dungeon floors (tests, replays); empty: random
         std::optional<std::uint32_t> randomSeed;
+        // Generated dungeon floors (rooms, corridors, a trapdoor to the next floor); off: the
+        // placeholder test arena with waves of enemies
+        bool dungeon{false};
     };
 
     /// <summary>
@@ -84,7 +90,7 @@ export namespace LB::Engine {
         // Save slot used by quick save/load (F5/F9)
         static constexpr std::int32_t QuickSaveSlot = 0;
 
-        // Placeholder test arena until dungeon generation is wired in: centered on the origin
+        // Placeholder test arena (without EngineOptions::dungeon): centered on the origin
         static constexpr float ArenaHalfWidth = 10.0f;
         static constexpr float ArenaHalfHeight = 7.0f;
         static constexpr float PlayerSizeTiles = 0.75f;
@@ -125,6 +131,14 @@ export namespace LB::Engine {
         static constexpr std::int32_t BagCapacity = 20;
         static constexpr float PickupRadius = 0.7f;
 
+        // Dungeon floors: props, how close the player steps to open a chest or take the trapdoor,
+        // and the loot table of treasure chests
+        static constexpr std::string_view ChestModel = "chest_common.glb";
+        static constexpr std::string_view OpenChestModel = "chest_common_empty.glb";
+        static constexpr std::string_view TrapdoorModel = "trapdoor.glb";
+        static constexpr std::string_view ChestLootTable = "loot_chest";
+        static constexpr float InteractRadius = 1.0f;
+
         // Damage numbers rise this far (tiles) over their lifetime, fading out at the end
         static constexpr float FloatingTextSeconds = 1.0f;
         static constexpr float FloatingTextRise = 0.8f;
@@ -157,6 +171,12 @@ export namespace LB::Engine {
                 return false;
             }
 
+            dungeonMode_ = options.dungeon;
+            baseSeed_ = options.randomSeed ? *options.randomSeed : std::random_device{}();
+            world_ = WorldMap::Arena(ArenaHalfWidth, ArenaHalfHeight);
+            depth_ = 0;
+            rooms_.clear();
+
             if (!renderingSystem_.Initialize(nativeWindow, width, height)) {
                 initializationError_ = "Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.";
                 return false;
@@ -186,6 +206,9 @@ export namespace LB::Engine {
             lootRoller_ = options.randomSeed ? LootRoller(*options.randomSeed + 1) : LootRoller();
             spawnEnemies_ = options.spawnEnemies;
             GiveStartingKit();
+            if (dungeonMode_ && playerId_) {
+                StartFloor(1);
+            }
             StartEncounter();
 
             inputSystem_.Initialize();
@@ -393,8 +416,35 @@ export namespace LB::Engine {
         [[nodiscard]] double GetGameTimeSeconds() const noexcept { return gameTimeSeconds_; }
 
         /// <summary>
-        /// The enemies and waves of the arena
+        /// The walkable world: the test arena, or the current dungeon floor
         /// </summary>
+        [[nodiscard]] const WorldMap& GetWorld() const noexcept { return world_; }
+
+        /// <summary>
+        /// The dungeon floor the player is on (1 for the first; 0 in the test arena)
+        /// </summary>
+        [[nodiscard]] std::int32_t GetDepth() const noexcept { return depth_; }
+
+        /// <summary>
+        /// State of a room of the current floor: enemies raised (when the player first walks in),
+        /// all of them dead, a chest opened
+        /// </summary>
+        struct RoomState {
+            bool triggered{false};
+            bool cleared{false};
+            bool chestOpened{false};
+            std::vector<std::uint32_t> enemies;
+        };
+
+        [[nodiscard]] const std::vector<RoomState>& GetRoomStates() const noexcept { return rooms_; }
+
+        /// <summary>
+        /// Go down to the next floor (normally by stepping on the trapdoor of a cleared exit room)
+        /// </summary>
+        void Descend();
+
+        /// <summary>
+        /// The enemies and waves of the arena
         [[nodiscard]] const Encounter& GetEncounter() const noexcept { return encounter_; }
 
         /// <summary>
@@ -581,6 +631,7 @@ export namespace LB::Engine {
                 data["player.x"] = std::format("{}", playerPosition_.x);
                 data["player.y"] = std::format("{}", playerPosition_.y);
                 WriteProgress(data);
+                if (dungeonMode_) WriteFloor(data);
             }
 
             return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
@@ -607,8 +658,12 @@ export namespace LB::Engine {
             const bool hasPlayerPosition = ParseDouble(result.data, "player.x", playerX) && ParseDouble(result.data, "player.y", playerY);
 
             gameTimeSeconds_ = gameTime;
-            if (playerId_ && hasPlayerPosition) {
-                playerPosition_ = ClampToArena(WorldPoint{ static_cast<float>(playerX), static_cast<float>(playerY) });
+            if (playerId_ && dungeonMode_) {
+                ReadFloor(result.data);      // the floor first: the position is on it
+            }
+            const WorldPoint saved{ static_cast<float>(playerX), static_cast<float>(playerY) };
+            if (playerId_ && hasPlayerPosition && world_.CircleFits(saved, PlayerRadius)) {
+                playerPosition_ = saved;
                 characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
                 camera_.SnapTo({ playerPosition_.x, playerPosition_.y });  // instant refocus
             }
@@ -693,6 +748,7 @@ export namespace LB::Engine {
             DrawPlayer(shade);
             DrawEnemies(shade);
             DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
+            DrawFloorProps(shade(1.0f, 1.0f, 1.0f));
             DrawHud();
             DrawCharacterScreen();
 
@@ -724,7 +780,10 @@ export namespace LB::Engine {
             models_.playerWeapon = load(PlayerWeaponModel);
             characterModels_.clear();
 
-            // Loot on the floor and weapons in the knight's hand (KayKit Dungeon Pack props)
+            // Loot on the floor, weapons in the knight's hand, and dungeon props (KayKit Dungeon Pack)
+            for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel }) {
+                characterModels_[std::string(file)] = load(file);
+            }
             for (const auto file : PropModels) {
                 characterModels_[std::string(file)] = load(file);
             }
@@ -795,28 +854,41 @@ export namespace LB::Engine {
             return piece;
         }
 
-        // Wall segments two tiles long whose inner face is on the arena edge, and pillars filling
-        // the corners
+        // Walls along every edge between a floor cell and a solid one (a wall segment is one cell
+        // long; its inner face sits on the edge), and pillars filling the outer corners of rooms
         void BuildWalls() {
             walls_.clear();
             const auto* wall = renderingSystem_.GetModel(models_.wall);
-            const float segment = (wall->boundsMax.x - wall->boundsMin.x) * ModelScale;     // 2 tiles
             const float halfDepth = (wall->boundsMax.z - wall->boundsMin.z) * ModelScale * 0.5f;
             const float wallY = -wall->boundsMin.y * ModelScale;
+            const float cornerY = -renderingSystem_.GetModel(models_.corner)->boundsMin.y * ModelScale;
             constexpr float quarterTurn = std::numbers::pi_v<float> * 0.5f;
-            for (float x = -ArenaHalfWidth + segment * 0.5f; x < ArenaHalfWidth; x += segment) {
-                walls_.push_back(PlacePiece(models_.wall, x, wallY, -ArenaHalfHeight - halfDepth, 0.0f));
-                walls_.push_back(PlacePiece(models_.wall, x, wallY, ArenaHalfHeight + halfDepth, 0.0f));
-            }
-            for (float z = -ArenaHalfHeight + segment * 0.5f; z < ArenaHalfHeight; z += segment) {
-                walls_.push_back(PlacePiece(models_.wall, -ArenaHalfWidth - halfDepth, wallY, z, quarterTurn));
-                walls_.push_back(PlacePiece(models_.wall, ArenaHalfWidth + halfDepth, wallY, z, quarterTurn));
+            constexpr float cell = WorldMap::CellTiles;
+
+            const auto& layout = world_.Layout();
+            for (std::int32_t y = 0; y < layout.height; ++y) {
+                for (std::int32_t x = 0; x < layout.width; ++x) {
+                    if (!layout.IsFloor(x, y)) continue;
+                    const auto corner = world_.CellCorner(x, y);
+                    const float midX = corner.x + cell * 0.5f;
+                    const float midZ = corner.y + cell * 0.5f;
+                    if (!layout.IsFloor(x, y - 1)) walls_.push_back(PlacePiece(models_.wall, midX, wallY, corner.y - halfDepth, 0.0f));
+                    if (!layout.IsFloor(x, y + 1)) walls_.push_back(PlacePiece(models_.wall, midX, wallY, corner.y + cell + halfDepth, 0.0f));
+                    if (!layout.IsFloor(x - 1, y)) walls_.push_back(PlacePiece(models_.wall, corner.x - halfDepth, wallY, midZ, quarterTurn));
+                    if (!layout.IsFloor(x + 1, y)) walls_.push_back(PlacePiece(models_.wall, corner.x + cell + halfDepth, wallY, midZ, quarterTurn));
+                }
             }
 
-            const float cornerY = -renderingSystem_.GetModel(models_.corner)->boundsMin.y * ModelScale;
-            for (float sx : { -1.0f, 1.0f }) {
-                for (float sz : { -1.0f, 1.0f }) {
-                    walls_.push_back(PlacePiece(models_.corner, sx * (ArenaHalfWidth + halfDepth), cornerY, sz * (ArenaHalfHeight + halfDepth), 0.0f));
+            // Corners: where only one of the four cells around a grid point is floor, the walls of
+            // its two edges leave a gap at the point; a pillar fills it, set back from the floor
+            for (std::int32_t y = 0; y <= layout.height; ++y) {
+                for (std::int32_t x = 0; x <= layout.width; ++x) {
+                    const bool cells[4] = { layout.IsFloor(x - 1, y - 1), layout.IsFloor(x, y - 1), layout.IsFloor(x - 1, y), layout.IsFloor(x, y) };
+                    if (std::ranges::count(cells, true) != 1) continue;
+                    const float sx = cells[0] || cells[2] ? 1.0f : -1.0f;   // away from the floor cell
+                    const float sz = cells[0] || cells[1] ? 1.0f : -1.0f;
+                    const auto point = world_.CellCorner(x, y);
+                    walls_.push_back(PlacePiece(models_.corner, point.x + sx * halfDepth, cornerY, point.y + sz * halfDepth, 0.0f));
                 }
             }
         }
@@ -917,10 +989,10 @@ export namespace LB::Engine {
 
         // Waves start once there is a player to fight (and enemies are enabled)
         void StartEncounter() {
-            encounter_.Configure(content_->FindEnemy(LightEnemy), content_->FindEnemy(HeavyEnemy), ArenaHalfWidth, ArenaHalfHeight);
+            encounter_.Configure(content_->FindEnemy(LightEnemy), content_->FindEnemy(HeavyEnemy), world_);
             encounter_.SetClips(enemyClips_);
             encounter_.Reset();
-            if (spawnEnemies_ && playerId_) {
+            if (spawnEnemies_ && playerId_ && !dungeonMode_) {
                 encounter_.StartWave(1, playerPosition_);
             }
         }
@@ -986,6 +1058,9 @@ export namespace LB::Engine {
             if (!playerId_) return;
 
             const PlayerTarget target{ playerPosition_, IsPlayerAlive(), GetPlayerDefense() };
+            if (dungeonMode_) {
+                UpdateFloorInteractions();
+            }
             const auto wave = encounter_.GetWave();
             for (const auto& event : encounter_.Update(elapsedSeconds, target)) {
                 combatEvents_.push_back(event);
@@ -1002,7 +1077,18 @@ export namespace LB::Engine {
             if (encounter_.GetWave() != wave) {
                 characterService_.RestCharacter(*playerId_);
             }
+            if (dungeonMode_) {
+                UpdateRooms();
+            }
         }
+
+        // Dungeon floors (DungeonFloor.cpp)
+        void StartFloor(std::int32_t depth);
+        void UpdateRooms();
+        void UpdateFloorInteractions();
+        void DrawFloorProps(const Systems::Rendering::Color& tint);
+        void WriteFloor(Systems::Persistence::SaveData& data) const;
+        void ReadFloor(const Systems::Persistence::SaveData& data);
 
         // Player progression and items (PlayerProgress.cpp)
         void GiveStartingKit();
@@ -1077,10 +1163,17 @@ export namespace LB::Engine {
             }
         }
 
-        // Back on the feet at the arena's center with full health; the waves start over
+        // Back on the feet with full health: at the arena's center (the waves start over), or at
+        // the floor's entrance (rooms not yet cleared raise their enemies again)
         void RespawnPlayer() {
             characterService_.ReviveCharacter(*playerId_, 1.0f);
-            playerPosition_ = WorldPoint{};
+            playerPosition_ = dungeonMode_ ? world_.RoomCenter(world_.Layout().entranceRoom) : WorldPoint{};
+            for (auto& room : rooms_) {
+                if (!room.cleared) {
+                    room.triggered = false;
+                    room.enemies.clear();
+                }
+            }
             characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
             camera_.SnapTo({ playerPosition_.x, playerPosition_.y });
             playerCombat_ = {};
@@ -1213,9 +1306,7 @@ export namespace LB::Engine {
             playerFacingYaw_ = std::atan2(direction.x, direction.y);
 
             const float speed = characterService_.GetMovementSpeed(*playerId_).value_or(0.0f);
-            playerPosition_ = ClampToArena(WorldPoint{
-                playerPosition_.x + direction.x * speed * elapsedSeconds,
-                playerPosition_.y + direction.y * speed * elapsedSeconds });
+            playerPosition_ = world_.Move(playerPosition_, { direction.x * speed * elapsedSeconds, direction.y * speed * elapsedSeconds }, PlayerRadius);
 
             // Keep the domain's tile position in sync (at most one tile per step at these speeds)
             const auto tile = ToTile(playerPosition_);
@@ -1224,19 +1315,15 @@ export namespace LB::Engine {
             }
         }
 
-        static WorldPoint ClampToArena(WorldPoint point) noexcept {
-            constexpr float halfPlayer = PlayerSizeTiles * 0.5f;
-            point.x = std::clamp(point.x, -ArenaHalfWidth + halfPlayer, ArenaHalfWidth - halfPlayer);
-            point.y = std::clamp(point.y, -ArenaHalfHeight + halfPlayer, ArenaHalfHeight - halfPlayer);
-            return point;
-        }
+        // The player's body keeps this far (tiles) from walls
+        static constexpr float PlayerRadius = PlayerSizeTiles * 0.5f;
 
         static LB::Position ToTile(WorldPoint point) noexcept {
             return LB::Position{ static_cast<std::int32_t>(std::floor(point.x)), static_cast<std::int32_t>(std::floor(point.y)) };
         }
 
-        // Placeholder 3D arena: one floor slab per tile (top at height 0) and a ring of wall blocks
-        // around it. Tile (tx, ty) covers [tx, tx + 1) x [ty, ty + 1); ground y is world Z.
+        // The world with primitives: one floor slab per tile (top at height 0) and wall blocks
+        // around the floor. Tile (tx, ty) covers [tx, tx + 1) x [ty, ty + 1); ground y is world Z.
         template<typename Shade>
         void DrawArena(const Shade& shade) {
             if (models_.loaded) {
@@ -1247,25 +1334,38 @@ export namespace LB::Engine {
             using Systems::Rendering::MeshRenderData;
             using Systems::Rendering::MeshShape;
 
+            // Every tile of a floor cell is a flagstone; every solid tile touching one is a wall block
             constexpr float FloorThickness = 0.2f;
-            const auto tilesX = static_cast<std::int32_t>(ArenaHalfWidth);
-            const auto tilesY = static_cast<std::int32_t>(ArenaHalfHeight);
-            for (std::int32_t ty = -tilesY - 1; ty <= tilesY; ++ty) {
-                for (std::int32_t tx = -tilesX - 1; tx <= tilesX; ++tx) {
-                    const bool wall = tx < -tilesX || tx >= tilesX || ty < -tilesY || ty >= tilesY;
-                    const float centerX = static_cast<float>(tx) + 0.5f;
-                    const float centerZ = static_cast<float>(ty) + 0.5f;
+            const auto& layout = world_.Layout();
+            const auto origin = world_.Origin();
+            const auto tiles = static_cast<std::int32_t>(WorldMap::CellTiles);
+            const auto isFloorTile = [&](std::int32_t tx, std::int32_t ty) {
+                return layout.IsFloor(static_cast<std::int32_t>(std::floor(static_cast<float>(tx) / WorldMap::CellTiles)),
+                                      static_cast<std::int32_t>(std::floor(static_cast<float>(ty) / WorldMap::CellTiles)));
+            };
+            for (std::int32_t ty = 0; ty < layout.height * tiles; ++ty) {
+                for (std::int32_t tx = 0; tx < layout.width * tiles; ++tx) {
+                    const bool floor = isFloorTile(tx, ty);
+                    bool wall = false;
+                    for (std::int32_t dy = -1; dy <= 1 && !floor && !wall; ++dy) {
+                        for (std::int32_t dx = -1; dx <= 1 && !wall; ++dx) wall = isFloorTile(tx + dx, ty + dy);
+                    }
+                    if (!floor && !wall) continue;
 
+                    const float worldX = origin.x + static_cast<float>(tx);
+                    const float worldZ = origin.y + static_cast<float>(ty);
                     MeshRenderData mesh{};
                     mesh.shape = MeshShape::Box;
                     if (wall) {
-                        mesh.position = { centerX, WallHeight * 0.5f - FloorThickness * 0.5f, centerZ };
+                        mesh.position = { worldX + 0.5f, WallHeight * 0.5f - FloorThickness * 0.5f, worldZ + 0.5f };
                         mesh.size = { 1.0f, WallHeight + FloorThickness, 1.0f };
                         mesh.color = shade(0.42f, 0.40f, 0.38f);
                     }
                     else {
-                        const bool light = ((tx + ty) & 1) == 0;
-                        mesh.position = { centerX, -FloorThickness * 0.5f, centerZ };
+                        const auto ix = static_cast<std::int32_t>(std::floor(worldX));
+                        const auto iz = static_cast<std::int32_t>(std::floor(worldZ));
+                        const bool light = ((ix + iz) & 1) == 0;
+                        mesh.position = { worldX + 0.5f, -FloorThickness * 0.5f, worldZ + 0.5f };
                         mesh.size = { 0.96f, FloorThickness, 0.96f };  // thin seams between flagstones
                         mesh.color = light ? shade(0.30f, 0.29f, 0.27f) : shade(0.24f, 0.23f, 0.22f);
                     }
@@ -1274,8 +1374,8 @@ export namespace LB::Engine {
             }
         }
 
-        // Arena from KayKit pieces: a floor tile per tile (top at height 0), wall segments two tiles
-        // long whose inner face is on the arena edge, and pillars filling the corners
+        // The world from KayKit pieces: a floor tile per tile (top at height 0), wall segments two
+        // tiles long whose inner face is on the floor's edge, and pillars filling the corners
         template<typename Shade>
         void DrawArenaModels(const Shade& shade) {
             using Systems::Rendering::ModelRenderData;
@@ -1288,14 +1388,21 @@ export namespace LB::Engine {
                 return renderingSystem_.GetModel(model)->boundsMax.y * ModelScale;
             };
 
-            const auto tilesX = static_cast<std::int32_t>(ArenaHalfWidth);
-            const auto tilesY = static_cast<std::int32_t>(ArenaHalfHeight);
-            for (std::int32_t ty = -tilesY; ty < tilesY; ++ty) {
-                for (std::int32_t tx = -tilesX; tx < tilesX; ++tx) {
-                    // A fixed scatter of the decorated variant breaks up the grid
-                    const bool variant = ((tx * 7 + ty * 13) % 11 + 11) % 11 == 0;
-                    const auto model = variant ? models_.floorVariant : models_.floor;
-                    place(model, static_cast<float>(tx) + 0.5f, -topOf(model), static_cast<float>(ty) + 0.5f, 0.0f);
+            const auto& layout = world_.Layout();
+            for (std::int32_t cy = 0; cy < layout.height; ++cy) {
+                for (std::int32_t cx = 0; cx < layout.width; ++cx) {
+                    if (!layout.IsFloor(cx, cy)) continue;
+                    const auto corner = world_.CellCorner(cx, cy);
+                    for (std::int32_t dy = 0; dy < static_cast<std::int32_t>(WorldMap::CellTiles); ++dy) {
+                        for (std::int32_t dx = 0; dx < static_cast<std::int32_t>(WorldMap::CellTiles); ++dx) {
+                            const auto tx = static_cast<std::int32_t>(std::floor(corner.x)) + dx;
+                            const auto ty = static_cast<std::int32_t>(std::floor(corner.y)) + dy;
+                            // A fixed scatter of the decorated variant breaks up the grid
+                            const bool variant = ((tx * 7 + ty * 13) % 11 + 11) % 11 == 0;
+                            const auto model = variant ? models_.floorVariant : models_.floor;
+                            place(model, static_cast<float>(tx) + 0.5f, -topOf(model), static_cast<float>(ty) + 0.5f, 0.0f);
+                        }
+                    }
                 }
             }
 
@@ -1535,8 +1642,8 @@ export namespace LB::Engine {
                 bar(static_cast<std::int32_t>(point.x) - 22, static_cast<std::int32_t>(point.y) - 8, 44, 5, fraction, display(0.85f, 0.20f, 0.15f));
             }
 
-            if (encounter_.GetWave() > 0) {
-                const auto wave = std::format("WAVE {}", encounter_.GetWave());
+            if (encounter_.GetWave() > 0 || depth_ > 0) {
+                const auto wave = depth_ > 0 ? std::format("DEPTH {}", depth_) : std::format("WAVE {}", encounter_.GetWave());
                 const auto size = renderingSystem_.MeasureText(wave, 3.0f);
                 label(wave, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), 14, 3.0f, display(0.95f, 0.75f, 0.30f), 13);
             }
@@ -1709,6 +1816,12 @@ export namespace LB::Engine {
         Services::Inventory::InventoryService inventoryService_;
         std::int32_t gold_{0};
         std::vector<GroundItem> groundItems_;
+        WorldMap world_;
+        Services::Dungeon::DungeonService dungeonService_;
+        bool dungeonMode_{false};
+        std::uint32_t baseSeed_{0};
+        std::int32_t depth_{0};
+        std::vector<RoomState> rooms_;
         std::uint32_t nextGroundItemId_{1};
         LootRoller lootRoller_;
         CharacterScreen characterScreen_;

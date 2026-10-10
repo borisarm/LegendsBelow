@@ -9,6 +9,7 @@ export import LB.Character;
 export import LB.Dungeon.Enums;
 export import LB.Dungeon.ValueObjects;
 export import LB.Dungeon.Entities;
+export import LB.Dungeon.Layout;
 
 export namespace LB::Dungeon {
     // Module version

@@ -142,6 +142,8 @@
   <ItemGroup>
     <ClCompile Include="Animator.ixx" />
     <ClCompile Include="Encounter.ixx" />
+    <ClCompile Include="World.ixx" />
+    <ClCompile Include="DungeonFloor.cpp" />
     <ClCompile Include="Loot.ixx" />
     <ClCompile Include="CharacterScreen.ixx" />
     <ClCompile Include="PlayerProgress.cpp" />
@@ -161,6 +163,12 @@
     </ProjectReference>
     <ProjectReference Include="..\Services\LBAssetPersistenceService\LBAssetPersistenceService.vcxproj">
       <Project>{cc3058fb-9cf7-4f26-b020-5d8ee70368a3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Services\LBDungeonService\LBDungeonService.vcxproj">
+      <Project>{dc0d706c-8aec-44d1-a396-c1e82dfbabe6}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Model\LBModel.Dungeon\LBModel.Dungeon.vcxproj">
+      <Project>{4c51a10e-e6dd-4b60-9c5b-b5fc1d27c6b6}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Services\LBInventoryService\LBInventoryService.vcxproj">
       <Project>{0660e29a-5d0d-4024-bca2-70d97491cf45}</Project>

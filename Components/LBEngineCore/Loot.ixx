@@ -4,7 +4,7 @@ export module LB.Engine:Loot;
 import std;
 import LB.Core;
 import LB.Content;
-import :Encounter;
+import :World;
 
 export namespace LB::Engine {
 

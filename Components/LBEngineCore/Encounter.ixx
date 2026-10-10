@@ -8,16 +8,9 @@ import LB.Content;
 import LB.CombatService;
 import LB.RenderingSystem;
 import :Animator;
+import :World;
 
 export namespace LB::Engine {
-
-    /// <summary>
-    /// Continuous position in world tiles (tile (0, 0) covers [0, 1) x [0, 1))
-    /// </summary>
-    struct WorldPoint {
-        float x{0.0f};
-        float y{0.0f};
-    };
 
     /// <summary>
     /// What an enemy is doing (design-combat-system.md 9.1, Tier 1: move to the target and attack)
@@ -115,9 +108,10 @@ export namespace LB::Engine {
     };
 
     /// <summary>
-    /// The enemies of the test arena: spawns waves of a light and a heavy enemy type, runs their
-    /// AI (notice the player, close in, attack on a timer, reel from hits, die), and resolves
-    /// attacks both ways with CombatService. Rendering-independent: animation clips are optional.
+    /// The enemies of a floor: spawns them (waves of a light and a heavy type in the test arena,
+    /// groups in dungeon rooms), runs their AI (notice the player in sight, close in around walls
+    /// along a flow field, attack on a timer, reel from hits, die), and resolves attacks both ways
+    /// with CombatService. Rendering-independent: animation clips are optional.
     /// </summary>
     class Encounter {
     public:
@@ -154,14 +148,13 @@ export namespace LB::Engine {
         explicit Encounter(std::uint32_t seed) : combat_(seed), rng_(seed) {}
 
         /// <summary>
-        /// Enemy types for waves (heavy may be null: light enemies only) and the arena they fight in
-        /// (centered on the origin)
+        /// Enemy types for waves (heavy may be null: light enemies only) and the world they move in
+        /// (kept by reference: it must outlive the encounter's use of it)
         /// </summary>
-        void Configure(const Content::EnemyDefinition* light, const Content::EnemyDefinition* heavy, float arenaHalfWidth, float arenaHalfHeight) {
+        void Configure(const Content::EnemyDefinition* light, const Content::EnemyDefinition* heavy, const WorldMap& world) {
             light_ = light;
             heavy_ = heavy;
-            arenaHalfWidth_ = arenaHalfWidth;
-            arenaHalfHeight_ = arenaHalfHeight;
+            world_ = &world;
         }
 
         void SetClips(const EnemyClips& clips) {
@@ -227,7 +220,7 @@ export namespace LB::Engine {
             Enemy enemy;
             enemy.id = nextId_++;
             enemy.definition = &type;
-            enemy.position = ClampToArena(at);
+            enemy.position = at;
             enemy.facingYaw = facingYaw;
             enemy.maxHitPoints = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(type.hitPoints) * scaling.hitPoints)));
             enemy.hitPoints = enemy.maxHitPoints;
@@ -245,6 +238,7 @@ export namespace LB::Engine {
         /// </summary>
         std::vector<CombatEvent> Update(float elapsedSeconds, const PlayerTarget& player) {
             std::vector<CombatEvent> events;
+            flowFieldReady_ = false;
             for (auto& enemy : enemies_) {
                 UpdateEnemy(enemy, elapsedSeconds, player, events);
             }
@@ -261,6 +255,35 @@ export namespace LB::Engine {
                 }
             }
             return events;
+        }
+
+        /// <summary>
+        /// Raise a group in a room of the world: each enemy at a random spot of the room away from
+        /// the player (when the room allows), facing them, as tough as `depth` makes it. Returns
+        /// the new enemies' ids.
+        /// </summary>
+        std::vector<std::uint32_t> SpawnInRoom(const Content::EnemyDefinition& type, std::int32_t count, std::int32_t room,
+                                               WorldPoint player, std::int32_t depth) {
+            std::vector<std::uint32_t> ids;
+            if (!world_) return ids;
+            for (std::int32_t i = 0; i < count; ++i) {
+                WorldPoint at = world_->RoomCenter(room);
+                float bestScore = -1.0f;
+                for (int attempt = 0; attempt < 24; ++attempt) {
+                    const auto candidate = world_->RandomPointInRoom(room, 1.0f, rng_);
+                    if (!world_->CircleFits(candidate, CharacterRadius)) continue;
+                    float nearest = Distance(candidate, player);
+                    for (const auto& enemy : enemies_) {
+                        if (!enemy.IsDead()) nearest = std::min(nearest, Distance(candidate, enemy.position) * 2.5f);
+                    }
+                    if (nearest > bestScore) {
+                        bestScore = nearest;
+                        at = candidate;
+                    }
+                }
+                ids.push_back(Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, depth));
+            }
+            return ids;
         }
 
         /// <summary>
@@ -437,8 +460,9 @@ export namespace LB::Engine {
                 if (enemy.state != EnemyState::Idle) Enter(enemy, EnemyState::Idle);
                 return;
             }
+            const bool inSight = !world_ || world_->LineOfSight(enemy.position, player.position);
             if (enemy.state == EnemyState::Idle) {
-                if (distance > type.aggroRange) return;
+                if (distance > type.aggroRange || !inSight) return;
                 Enter(enemy, EnemyState::Chasing);
             }
 
@@ -455,10 +479,27 @@ export namespace LB::Engine {
                 return;
             }
 
-            // Close in, stopping a little inside reach
-            const float step = std::min(type.movementSpeed * dt, distance - type.attackRange * 0.9f);
-            enemy.position = ClampToArena({ enemy.position.x + dx / distance * step, enemy.position.y + dy / distance * step });
-            TurnToward(enemy, dx, dy, dt);
+            // Close in: straight at the player when in sight (stopping a little inside reach), else
+            // along the flow field around the walls
+            float tx = dx, ty = dy;
+            float step = std::min(type.movementSpeed * dt, distance - type.attackRange * 0.9f);
+            if (!inSight && world_) {
+                if (!flowFieldReady_) {
+                    world_->BuildFlowField(player.position);
+                    flowFieldReady_ = true;
+                }
+                const auto waypoint = world_->NextWaypoint(enemy.position);
+                if (!waypoint) {
+                    enemy.animator.Play(clips_.idle, true);
+                    return;
+                }
+                tx = waypoint->x - enemy.position.x;
+                ty = waypoint->y - enemy.position.y;
+                step = type.movementSpeed * dt;
+            }
+            const float length = std::max(1e-4f, std::hypot(tx, ty));
+            enemy.position = MoveBody(enemy.position, { tx / length * step, ty / length * step });
+            TurnToward(enemy, tx, ty, dt);
             enemy.animator.Play(clips_.walk, true, type.movementSpeed / WalkAnimationSpeed);
         }
 
@@ -490,8 +531,8 @@ export namespace LB::Engine {
                     const float nx = distance > 1e-4f ? dx / distance : 1.0f;
                     const float ny = distance > 1e-4f ? dy / distance : 0.0f;
                     const float push = (minimum - distance) * 0.5f;
-                    a.position = ClampToArena({ a.position.x - nx * push, a.position.y - ny * push });
-                    b.position = ClampToArena({ b.position.x + nx * push, b.position.y + ny * push });
+                    a.position = MoveBody(a.position, { -nx * push, -ny * push });
+                    b.position = MoveBody(b.position, { nx * push, ny * push });
                 }
 
                 if (player.alive) {
@@ -501,29 +542,27 @@ export namespace LB::Engine {
                     if (distance < minimum) {
                         const float nx = distance > 1e-4f ? dx / distance : 1.0f;
                         const float ny = distance > 1e-4f ? dy / distance : 0.0f;
-                        a.position = ClampToArena({ player.position.x + nx * minimum, player.position.y + ny * minimum });
+                        a.position = MoveBody(a.position, { player.position.x + nx * minimum - a.position.x, player.position.y + ny * minimum - a.position.y });
                     }
                 }
             }
         }
 
-        WorldPoint ClampToArena(WorldPoint point) const noexcept {
-            const float x = std::max(0.0f, arenaHalfWidth_ - CharacterRadius);
-            const float y = std::max(0.0f, arenaHalfHeight_ - CharacterRadius);
-            return { std::clamp(point.x, -x, x), std::clamp(point.y, -y, y) };
+        // A body's move, sliding along the world's walls (unbounded without a world)
+        WorldPoint MoveBody(WorldPoint from, WorldPoint step) const noexcept {
+            if (!world_) return { from.x + step.x, from.y + step.y };
+            return world_->Move(from, step, CharacterRadius);
         }
 
-        // A random spot in the arena away from the player and the other enemies (the farthest
-        // candidate when none qualifies)
+        // A random spot in the world's first room away from the player and the other enemies (the
+        // farthest candidate when none qualifies)
         WorldPoint FindSpawnPoint(WorldPoint player) {
-            constexpr float margin = 1.5f;
-            std::uniform_real_distribution<float> x(-arenaHalfWidth_ + margin, arenaHalfWidth_ - margin);
-            std::uniform_real_distribution<float> y(-arenaHalfHeight_ + margin, arenaHalfHeight_ - margin);
+            if (!world_ || world_->Layout().rooms.empty()) return player;
 
             WorldPoint best{};
             float bestScore = -1.0f;
             for (int attempt = 0; attempt < 32; ++attempt) {
-                const WorldPoint candidate{ x(rng_), y(rng_) };
+                const auto candidate = world_->RandomPointInRoom(0, 1.5f, rng_);
                 float nearestEnemy = std::numeric_limits<float>::max();
                 for (const auto& enemy : enemies_) {
                     if (!enemy.IsDead()) nearestEnemy = std::min(nearestEnemy, Distance(candidate, enemy.position));
@@ -544,8 +583,8 @@ export namespace LB::Engine {
         std::mt19937 rng_;
         const Content::EnemyDefinition* light_{nullptr};
         const Content::EnemyDefinition* heavy_{nullptr};
-        float arenaHalfWidth_{10.0f};
-        float arenaHalfHeight_{7.0f};
+        const WorldMap* world_{nullptr};
+        bool flowFieldReady_{false};
         EnemyClips clips_{};
         std::vector<Enemy> enemies_;
         std::uint32_t nextId_{1};

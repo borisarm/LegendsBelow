@@ -23,6 +23,10 @@ export namespace LB::Services::Dungeon {
     using LB::Dungeon::Encounter;
     using LB::Dungeon::LootDrop;
     using LB::Dungeon::DungeonGenerationParams;
+    using LB::Dungeon::FloorLayout;
+    using LB::Dungeon::FloorGenerationParams;
+    using LB::Dungeon::LayoutRoom;
+    using LB::Dungeon::CellRect;
 
     /// <summary>
     /// Core dungeon service
@@ -30,6 +34,129 @@ export namespace LB::Services::Dungeon {
     /// </summary>
     class DungeonService {
     public:
+        /// <summary>
+        /// Generate a floor layout (design-dungeon-and-world.md 3.2-3.3), reproducible for a seed:
+        /// a critical path of rooms from the entrance to the exit laid out by a random walk on a
+        /// grid of room slots, side branches off the rooms between them, rooms of random size in
+        /// their slots, and one-cell corridors between connected rooms. Critical rooms between the
+        /// entrance and exit are combat rooms; branch rooms are treasure, elite, or safe rooms by
+        /// weight.
+        /// </summary>
+        [[nodiscard]] FloorLayout GenerateFloor(const FloorGenerationParams& params, std::uint32_t seed) const {
+            std::mt19937 rng(seed);
+            const int32_t pathLength = std::max(2, params.criticalPathRooms);
+            const int32_t slotSize = std::max(params.maxRoomSize + 2, params.slotSize);
+            constexpr std::array<std::pair<int32_t, int32_t>, 4> steps{ { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } } };
+
+            // Room slots: the critical path as a self-avoiding walk, restarted when it boxes itself in
+            std::vector<std::pair<int32_t, int32_t>> slots;
+            std::vector<std::pair<int32_t, int32_t>> edges;   // room index pairs
+            const auto taken = [&](std::pair<int32_t, int32_t> slot) { return std::ranges::find(slots, slot) != slots.end(); };
+            const auto freeNeighbors = [&](std::pair<int32_t, int32_t> slot) {
+                std::vector<std::pair<int32_t, int32_t>> options;
+                for (const auto& [dx, dy] : steps) {
+                    const std::pair<int32_t, int32_t> next{ slot.first + dx, slot.second + dy };
+                    if (!taken(next)) options.push_back(next);
+                }
+                return options;
+            };
+            const auto pick = [&](const std::vector<std::pair<int32_t, int32_t>>& options) {
+                return options[std::uniform_int_distribution<std::size_t>(0, options.size() - 1)(rng)];
+            };
+            for (int attempt = 0; attempt < 100 && static_cast<int32_t>(slots.size()) < pathLength; ++attempt) {
+                slots = { { 0, 0 } };
+                edges.clear();
+                while (static_cast<int32_t>(slots.size()) < pathLength) {
+                    const auto options = freeNeighbors(slots.back());
+                    if (options.empty()) break;
+                    slots.push_back(pick(options));
+                    edges.emplace_back(static_cast<int32_t>(slots.size()) - 2, static_cast<int32_t>(slots.size()) - 1);
+                }
+            }
+            const auto criticalCount = static_cast<int32_t>(slots.size());
+
+            // Side branches off the rooms between the entrance and the exit
+            std::vector<bool> critical(slots.size(), true);
+            std::uniform_real_distribution<float> chance(0.0f, 1.0f);
+            for (int32_t i = 1; i + 1 < criticalCount; ++i) {
+                if (chance(rng) >= params.branchChance) continue;
+                const int32_t length = std::uniform_int_distribution<int32_t>(1, std::max(1, params.maxBranchLength))(rng);
+                int32_t from = i;
+                for (int32_t k = 0; k < length; ++k) {
+                    const auto options = freeNeighbors(slots[static_cast<std::size_t>(from)]);
+                    if (options.empty()) break;
+                    slots.push_back(pick(options));
+                    critical.push_back(false);
+                    edges.emplace_back(from, static_cast<int32_t>(slots.size()) - 1);
+                    from = static_cast<int32_t>(slots.size()) - 1;
+                }
+            }
+
+            // Slots to cells, with a solid border cell all around
+            int32_t minX = 0, minY = 0, maxX = 0, maxY = 0;
+            for (const auto& [x, y] : slots) {
+                minX = std::min(minX, x); minY = std::min(minY, y);
+                maxX = std::max(maxX, x); maxY = std::max(maxY, y);
+            }
+            FloorLayout layout;
+            layout.width = (maxX - minX + 1) * slotSize + 2;
+            layout.height = (maxY - minY + 1) * slotSize + 2;
+            layout.cells.assign(static_cast<std::size_t>(layout.width * layout.height), 0);
+
+            // Rooms: a random size, placed at random inside the slot with at least a cell of margin
+            const int32_t largest = std::max(params.minRoomSize, std::min(params.maxRoomSize, slotSize - 2));
+            std::uniform_int_distribution<int32_t> size(std::max(1, std::min(params.minRoomSize, largest)), largest);
+            const int32_t totalWeight = std::max(1, params.treasureWeight + params.eliteWeight + params.safeWeight);
+            for (std::size_t i = 0; i < slots.size(); ++i) {
+                const int32_t width = size(rng);
+                const int32_t height = size(rng);
+                const int32_t slotLeft = (slots[i].first - minX) * slotSize + 1;
+                const int32_t slotTop = (slots[i].second - minY) * slotSize + 1;
+                const int32_t left = slotLeft + std::uniform_int_distribution<int32_t>(1, slotSize - 1 - width)(rng);
+                const int32_t top = slotTop + std::uniform_int_distribution<int32_t>(1, slotSize - 1 - height)(rng);
+
+                LayoutRoom room;
+                room.area = CellRect{ left, top, width, height };
+                room.onCriticalPath = critical[i];
+                if (i == 0) room.type = RoomType::Entrance;
+                else if (static_cast<int32_t>(i) == criticalCount - 1) room.type = RoomType::Exit;
+                else if (critical[i]) room.type = RoomType::Combat;
+                else {
+                    const int32_t roll = std::uniform_int_distribution<int32_t>(1, totalWeight)(rng);
+                    room.type = roll <= params.treasureWeight ? RoomType::Treasure
+                              : roll <= params.treasureWeight + params.eliteWeight ? RoomType::Elite : RoomType::Safe;
+                }
+                for (int32_t y = top; y < top + height; ++y) {
+                    for (int32_t x = left; x < left + width; ++x) layout.SetFloor(x, y);
+                }
+                layout.rooms.push_back(std::move(room));
+            }
+            layout.entranceRoom = 0;
+            layout.exitRoom = criticalCount - 1;
+
+            // Corridors: from the first room's center along the slots' shared row (or column) to the
+            // second room's center line, then across to it; neighboring slots share a row or a
+            // column, so the corridor stays inside the two slots
+            for (const auto& [a, b] : edges) {
+                auto& from = layout.rooms[static_cast<std::size_t>(a)];
+                auto& to = layout.rooms[static_cast<std::size_t>(b)];
+                from.connections.push_back(b);
+                to.connections.push_back(a);
+                const int32_t x0 = from.area.CenterX(), y0 = from.area.CenterY();
+                const int32_t x1 = to.area.CenterX(), y1 = to.area.CenterY();
+                const bool horizontal = slots[static_cast<std::size_t>(a)].second == slots[static_cast<std::size_t>(b)].second;
+                if (horizontal) {
+                    for (int32_t x = std::min(x0, x1); x <= std::max(x0, x1); ++x) layout.SetFloor(x, y0);
+                    for (int32_t y = std::min(y0, y1); y <= std::max(y0, y1); ++y) layout.SetFloor(x1, y);
+                }
+                else {
+                    for (int32_t y = std::min(y0, y1); y <= std::max(y0, y1); ++y) layout.SetFloor(x0, y);
+                    for (int32_t x = std::min(x0, x1); x <= std::max(x0, x1); ++x) layout.SetFloor(x, y1);
+                }
+            }
+            return layout;
+        }
+
         /// <summary>
         /// Generate a new dungeon
         /// </summary>
