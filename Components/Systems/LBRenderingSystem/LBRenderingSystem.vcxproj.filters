@@ -7,6 +7,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Camera.ixx" />
     <ClCompile Include="LB.RenderingSystem.ixx" />
     <ClCompile Include="DeviceResources.cpp" />
     <ClCompile Include="RenderingSystem.cpp" />

@@ -143,7 +143,15 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <Lib>
+      <!-- Fold the DirectXTK12 import library into this library so consumers link without vcpkg
+           (vcpkg supplies the library directory). Executables need DirectXTK12.dll at run time. -->
+      <AdditionalDependencies>DirectXTK12.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
+  </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Camera.ixx" />
     <ClCompile Include="DeviceResources.cpp">
       <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
     </ClCompile>

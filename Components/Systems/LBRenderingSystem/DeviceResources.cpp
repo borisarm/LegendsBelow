@@ -1,7 +1,8 @@
 // DeviceResources.cpp - Direct3D 12 device, swap chain, and frame presentation
 //
 // Internal partition of LB.RenderingSystem: nothing here is visible to consumers of
-// the module. Ported from the Microsoft GDK DirectX 12 template (DeviceResources.h/.cpp).
+// the module. Ported from the Microsoft GDK DirectX 12 template (DeviceResources.h/.cpp); the
+// 3D world pass draws DirectXTK12 primitives with a lit BasicEffect.
 module;
 
 #include <winsdkver.h>
@@ -29,6 +30,18 @@ module;
 #include <dxguids/dxguids.h>
 
 #include <dxgi1_6.h>
+
+// DirectX Tool Kit for DX12 (vcpkg builds it as DirectXTK12.dll): use the same DirectX-Headers
+// d3d12.h as above and import its API
+#define USING_DIRECTX_HEADERS
+#define DIRECTX_TOOLKIT_IMPORT
+#include <DirectXMath.h>
+#include <directxtk12/CommonStates.h>
+#include <directxtk12/Effects.h>
+#include <directxtk12/EffectPipelineStateDescription.h>
+#include <directxtk12/GeometricPrimitive.h>
+#include <directxtk12/GraphicsMemory.h>
+#include <directxtk12/RenderTargetState.h>
 
 #ifdef _DEBUG
 #include <dxgidebug.h>
@@ -269,6 +282,44 @@ namespace LB::Systems::Rendering::Detail
             commandList->RSSetScissorRects(1, &scissorRect);
         }
 
+        // Camera for the world pass: right-handed look-at and perspective projection, matching
+        // IsometricCamera::WorldToScreen. Call after BeginFrame.
+        void SetCamera(float eyeX, float eyeY, float eyeZ, float targetX, float targetY, float targetZ,
+                       float verticalFov, float nearPlane, float farPlane)
+        {
+            if (!m_effect) return;
+
+            const auto size = m_deviceResources->GetOutputSize();
+            const float width = static_cast<float>(std::max(1l, size.right - size.left));
+            const float height = static_cast<float>(std::max(1l, size.bottom - size.top));
+
+            using namespace DirectX;
+            const XMVECTOR eye = XMVectorSet(eyeX, eyeY, eyeZ, 1.0f);
+            const XMVECTOR target = XMVectorSet(targetX, targetY, targetZ, 1.0f);
+            if (XMVector3Equal(eye, target)) return;
+
+            m_effect->SetView(XMMatrixLookAtRH(eye, target, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)));
+            m_effect->SetProjection(XMMatrixPerspectiveFovRH(verticalFov, width / height, nearPlane, farPlane));
+        }
+
+        // Draw a unit primitive (0 box, 1 cylinder, 2 sphere, 3 cone) scaled, turned around Y,
+        // and moved to a world position, lit with the given diffuse color. Call after SetCamera.
+        void DrawMesh(int shape, float x, float y, float z, float sizeX, float sizeY, float sizeZ, float yaw,
+                      float r, float g, float b, float a)
+        {
+            if (!m_effect || shape < 0 || shape >= static_cast<int>(std::size(m_shapes)) || !m_shapes[shape]) return;
+
+            using namespace DirectX;
+            const XMMATRIX world = XMMatrixScaling(sizeX, sizeY, sizeZ) * XMMatrixRotationY(yaw) * XMMatrixTranslation(x, y, z);
+
+            auto commandList = m_deviceResources->GetCommandList();
+            m_effect->SetWorld(world);
+            m_effect->SetDiffuseColor(XMVectorSet(r, g, b, 1.0f));
+            m_effect->SetAlpha(a);
+            m_effect->Apply(commandList);
+            m_shapes[shape]->Draw(commandList);
+        }
+
         // Fill a screen-space rectangle with a solid color. Uses a render-target clear limited to
         // the rectangle, so no pipeline state or shaders are needed. Call between BeginFrame and
         // EndFrame with a rectangle inside the back buffer.
@@ -285,6 +336,10 @@ namespace LB::Systems::Rendering::Detail
         void EndFrame()
         {
             m_deviceResources->Present();
+
+            // Recycle per-frame constant buffer memory once the GPU is done with it
+            if (m_graphicsMemory)
+                m_graphicsMemory->Commit(m_deviceResources->GetCommandQueue());
         }
 
         // Returns true if the swap chain was resized.
@@ -318,6 +373,11 @@ namespace LB::Systems::Rendering::Detail
         // IDeviceNotify
         void OnDeviceLost() override
         {
+            for (auto& shape : m_shapes)
+                shape.reset();
+            m_effect.reset();
+            m_graphicsMemory.reset();
+
             if (m_onDeviceLost)
                 m_onDeviceLost();
         }
@@ -346,9 +406,35 @@ namespace LB::Systems::Rendering::Detail
 #endif
                 throw std::runtime_error("Shader Model 6.0 is not supported!");
             }
+
+            using namespace DirectX;
+            m_graphicsMemory = std::make_unique<GraphicsMemory>(device);
+
+            const RenderTargetState renderTargetState(m_deviceResources->GetBackBufferFormat(), m_deviceResources->GetDepthBufferFormat());
+            const EffectPipelineStateDescription pipeline(
+                &GeometricPrimitive::VertexType::InputLayout,
+                CommonStates::Opaque,
+                CommonStates::DepthDefault,
+                CommonStates::CullCounterClockwise,
+                renderTargetState);
+
+            m_effect = std::make_unique<BasicEffect>(device, EffectFlags::Lighting | EffectFlags::PerPixelLighting, pipeline);
+            m_effect->EnableDefaultLighting();
+
+            // Unit shapes centered on the origin; scaled per draw
+            m_shapes[0] = GeometricPrimitive::CreateBox(XMFLOAT3(1.0f, 1.0f, 1.0f));
+            m_shapes[1] = GeometricPrimitive::CreateCylinder(1.0f, 1.0f);
+            m_shapes[2] = GeometricPrimitive::CreateSphere(1.0f);
+            m_shapes[3] = GeometricPrimitive::CreateCone(1.0f, 1.0f);
         }
 
         std::unique_ptr<DeviceResources> m_deviceResources;
+
+        // Device-dependent DirectXTK12 objects. GraphicsMemory owns the memory the others
+        // allocate from, so it is declared first (destroyed last).
+        std::unique_ptr<DirectX::GraphicsMemory> m_graphicsMemory;
+        std::unique_ptr<DirectX::BasicEffect> m_effect;
+        std::unique_ptr<DirectX::GeometricPrimitive> m_shapes[4];
         DeviceCallback m_onDeviceLost;
         DeviceCallback m_onDeviceRestored;
     };
