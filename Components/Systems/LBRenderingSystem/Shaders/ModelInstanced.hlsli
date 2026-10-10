@@ -3,7 +3,9 @@
 // One draw per model part covers every instance of it: the instance stream carries each copy's
 // world transform, tint, and (skinned parts) where its joint matrices start in the skin palette.
 // Lighting mirrors the DirectXTK BasicEffect setup used for primitives (three directional lights
-// plus ambient, no specular), so both look alike.
+// plus ambient, no specular), so both look alike, plus up to MaxPointLights point lights (torches).
+
+#define MaxPointLights 16
 
 cbuffer Frame : register(b0)
 {
@@ -11,6 +13,9 @@ cbuffer Frame : register(b0)
     float4 LightDirection[3];           // xyz: direction the light travels
     float4 LightColor[3];
     float4 AmbientColor;
+    float4 PointLightPosition[MaxPointLights];   // xyz: world position, w: radius (tiles)
+    float4 PointLightColor[MaxPointLights];      // linear color times intensity
+    float4 PointLightCount;                       // x
 };
 
 // Per part: the material's base color factor (multiplies the texture) and emissive color
@@ -58,4 +63,5 @@ struct PixelInput
     float3 normal   : NORMAL;
     float2 texcoord : TEXCOORD0;
     float4 tint     : COLOR0;
+    float3 world    : TEXCOORD1;   // world position, for point lights
 };

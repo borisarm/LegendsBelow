@@ -83,6 +83,7 @@ export namespace LB::Engine {
         static constexpr std::string_view MenuDownAction = "MenuDown";
         static constexpr std::string_view MenuConfirmAction = "MenuConfirm";
         static constexpr std::string_view MenuBackAction = "MenuBack";
+        static constexpr std::string_view MapAction = "Map";
 
         // Right stick flicks past this deflection rotate (X) or zoom (Y) the camera
         static constexpr float CameraStickThreshold = 0.6f;
@@ -138,6 +139,16 @@ export namespace LB::Engine {
         static constexpr std::string_view TrapdoorModel = "trapdoor.glb";
         static constexpr std::string_view ChestLootTable = "loot_chest";
         static constexpr float InteractRadius = 1.0f;
+
+        // Torches on room walls: the prop, how far their light reaches (tiles), and how dark the
+        // dungeon is without them (the directional lights' share and the ambient light)
+        static constexpr std::string_view TorchModel = "torchWall.glb";
+        static constexpr float TorchLightRadius = 6.0f;
+        static constexpr float TorchLightIntensity = 1.6f;
+        static constexpr float DungeonDirectionalLight = 0.3f;
+
+        // The minimap reveals floor cells this far (cells) around the player, in sight
+        static constexpr std::int32_t MapRevealCells = 4;
 
         // Damage numbers rise this far (tiles) over their lifetime, fading out at the end
         static constexpr float FloatingTextSeconds = 1.0f;
@@ -439,6 +450,32 @@ export namespace LB::Engine {
         [[nodiscard]] const std::vector<RoomState>& GetRoomStates() const noexcept { return rooms_; }
 
         /// <summary>
+        /// A torch on a room wall: where its flame burns, which way it faces, and the wall piece it
+        /// hangs on (it fades with that wall; none without models)
+        /// </summary>
+        struct Torch {
+            WorldPoint position{};       // under the flame, on the floor plane
+            float yaw{0.0f};             // faces into the room
+            std::optional<std::size_t> wall;
+            float phase{0.0f};           // flicker offset
+        };
+
+        [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return torches_; }
+
+        /// <summary>
+        /// Has the player seen this floor cell? (what the minimap shows)
+        /// </summary>
+        [[nodiscard]] bool IsCellExplored(std::int32_t x, std::int32_t y) const noexcept {
+            const auto& layout = world_.Layout();
+            return layout.InBounds(x, y) && explored_.size() == layout.cells.size() && explored_[static_cast<std::size_t>(y * layout.width + x)] != 0;
+        }
+
+        /// <summary>
+        /// The minimap shown large (M or the right stick click toggles it)
+        /// </summary>
+        [[nodiscard]] bool IsMapExpanded() const noexcept { return mapExpanded_; }
+
+        /// <summary>
         /// Go down to the next floor (normally by stepping on the trapdoor of a cleared exit room)
         /// </summary>
         void Descend();
@@ -699,6 +736,9 @@ export namespace LB::Engine {
 
             // The camera can be turned and zoomed during the tactical pause
             UpdateCameraControls();
+            if (inputSystem_.IsActionTriggered(std::string(MapAction))) {
+                mapExpanded_ = !mapExpanded_;
+            }
 
             combatEvents_.clear();
             if (!paused_ && !screenWasOpen && !characterScreen_.IsOpen()) {
@@ -708,6 +748,7 @@ export namespace LB::Engine {
                 MovePlayer(static_cast<float>(elapsedSeconds));
                 UpdateEncounter(static_cast<float>(elapsedSeconds));
                 UpdateQuickUse();
+                if (dungeonMode_) RevealAround();
                 UpdateGroundItems(static_cast<float>(elapsedSeconds));
                 UpdateFloatingTexts(static_cast<float>(elapsedSeconds));
             }
@@ -743,13 +784,25 @@ export namespace LB::Engine {
 
             // Dim ambient background (design-technical-directx12.md 2.2), then the 3D world
             renderingSystem_.Clear(shade(0.05f, 0.05f, 0.07f));
+            // Dungeon floors are dark: the torches light them
+            Systems::Rendering::SceneLighting lighting{};
+            if (dungeonMode_) {
+                lighting.directional = DungeonDirectionalLight * dim;
+                lighting.ambient = { 0.02f * dim, 0.018f * dim, 0.025f * dim, 1.0f };
+            }
+            else if (dim < 1.0f) {
+                lighting.directional = dim;
+            }
+            renderingSystem_.SetLighting(lighting);
             renderingSystem_.SetCamera(camera_.GetView());
             DrawArena(shade);
             DrawPlayer(shade);
             DrawEnemies(shade);
             DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
             DrawFloorProps(shade(1.0f, 1.0f, 1.0f));
+            DrawTorches(shade(1.0f, 1.0f, 1.0f));
             DrawHud();
+            DrawMinimap();
             DrawCharacterScreen();
 
             renderingSystem_.EndFrame();
@@ -781,7 +834,7 @@ export namespace LB::Engine {
             characterModels_.clear();
 
             // Loot on the floor, weapons in the knight's hand, and dungeon props (KayKit Dungeon Pack)
-            for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel }) {
+            for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel, TorchModel }) {
                 characterModels_[std::string(file)] = load(file);
             }
             for (const auto file : PropModels) {
@@ -1087,6 +1140,10 @@ export namespace LB::Engine {
         void UpdateRooms();
         void UpdateFloorInteractions();
         void DrawFloorProps(const Systems::Rendering::Color& tint);
+        void BuildTorches();
+        void RevealAround();
+        void DrawTorches(const Systems::Rendering::Color& tint);
+        void DrawMinimap();
         void WriteFloor(Systems::Persistence::SaveData& data) const;
         void ReadFloor(const Systems::Persistence::SaveData& data);
 
@@ -1749,6 +1806,8 @@ export namespace LB::Engine {
             RegisterKeyBinding(MenuConfirmAction, Systems::Input::Keys::Space);
             RegisterGamepadBinding(MenuConfirmAction, Systems::Input::GamepadButton::A);
             RegisterKeyBinding(MenuBackAction, Systems::Input::Keys::Escape);
+            RegisterKeyBinding(MapAction, Systems::Input::Keys::FromChar('M'));
+            RegisterGamepadBinding(MapAction, Systems::Input::GamepadButton::RightThumb);
             RegisterGamepadBinding(MenuBackAction, Systems::Input::GamepadButton::B);
 
             // Primary action (design-ui-ux-and-audio.md 4): left click, gamepad A; Space as well
@@ -1822,6 +1881,9 @@ export namespace LB::Engine {
         std::uint32_t baseSeed_{0};
         std::int32_t depth_{0};
         std::vector<RoomState> rooms_;
+        std::vector<Torch> torches_;
+        std::vector<std::uint8_t> explored_;
+        bool mapExpanded_{false};
         std::uint32_t nextGroundItemId_{1};
         LootRoller lootRoller_;
         CharacterScreen characterScreen_;

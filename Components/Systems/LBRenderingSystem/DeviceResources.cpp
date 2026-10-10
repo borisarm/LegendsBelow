@@ -346,7 +346,7 @@ namespace LB::Systems::Rendering::Detail
         // Draw a unit primitive (0 box, 1 cylinder, 2 sphere, 3 cone) scaled, turned around Y,
         // and moved to a world position, lit with the given diffuse color. Call after SetCamera.
         void DrawMesh(int shape, float x, float y, float z, float sizeX, float sizeY, float sizeZ, float yaw,
-                      float r, float g, float b, float a)
+                      float r, float g, float b, float a, float emissiveR = 0.0f, float emissiveG = 0.0f, float emissiveB = 0.0f)
         {
             if (!m_effect || shape < 0 || shape >= static_cast<int>(std::size(m_shapes)) || !m_shapes[shape]) return;
 
@@ -356,6 +356,7 @@ namespace LB::Systems::Rendering::Detail
             auto commandList = m_deviceResources->GetCommandList();
             m_effect->SetWorld(world);
             m_effect->SetDiffuseColor(XMVectorSet(r, g, b, 1.0f));
+            m_effect->SetEmissiveColor(XMVectorSet(emissiveR, emissiveG, emissiveB, 1.0f));
             m_effect->SetAlpha(a);
             m_effect->Apply(commandList);
             m_shapes[shape]->Draw(commandList);
@@ -661,13 +662,8 @@ namespace LB::Systems::Rendering::Detail
             // the flat-colored KayKit materials read as stone and cloth rather than plastic.
             // The model shader uses the same lights (no specular there; almost none here)
             m_effect->EnableDefaultLighting();
-            m_effect->SetAmbientLightColor(XMLoadFloat4(&m_frameConstants.ambientColor));
             m_effect->SetSpecularColor(XMVectorSet(0.04f, 0.04f, 0.04f, 1.0f));
-            for (int i = 0; i < 3; ++i)
-            {
-                m_effect->SetLightDirection(i, XMLoadFloat4(&m_frameConstants.lightDirection[i]));
-                m_effect->SetLightDiffuseColor(i, XMLoadFloat4(&m_frameConstants.lightColor[i]));
-            }
+            ApplyEffectLighting();
 
             CreateModelPipelines(renderTargetState);
             CreateOverlayPipeline(renderTargetState);
@@ -691,6 +687,50 @@ namespace LB::Systems::Rendering::Detail
                 UploadModel(model);
         }
 
+    public:
+        // Point lights the model shader takes per frame (ModelInstanced.hlsli: MaxPointLights)
+        static constexpr std::size_t MaxPointLights = 16;
+
+        // Scale the directional lights and set the ambient light, for the primitives' effect and
+        // the model shader alike (e.g. a dark dungeon lit mostly by torches)
+        void SetLighting(float directional, float ambientR, float ambientG, float ambientB)
+        {
+            const FrameConstants defaults{};
+            for (int i = 0; i < 3; ++i)
+            {
+                const auto& base = defaults.lightColor[i];
+                m_frameConstants.lightColor[i] = DirectX::XMFLOAT4(base.x * directional, base.y * directional, base.z * directional, 1.0f);
+            }
+            m_frameConstants.ambientColor = DirectX::XMFLOAT4(ambientR, ambientG, ambientB, 1.0f);
+            ApplyEffectLighting();
+        }
+
+        // This frame's point lights: x, y, z, radius, r, g, b (color times intensity) each
+        void SetPointLights(const float* lights, std::size_t count)
+        {
+            count = std::min(count, MaxPointLights);
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                const float* light = lights + i * 7;
+                m_frameConstants.pointLightPosition[i] = DirectX::XMFLOAT4(light[0], light[1], light[2], light[3]);
+                m_frameConstants.pointLightColor[i] = DirectX::XMFLOAT4(light[4], light[5], light[6], 1.0f);
+            }
+            m_frameConstants.pointLightCount = DirectX::XMFLOAT4(static_cast<float>(count), 0.0f, 0.0f, 0.0f);
+        }
+
+    private:
+        void ApplyEffectLighting()
+        {
+            if (!m_effect) return;
+            using namespace DirectX;
+            m_effect->SetAmbientLightColor(XMLoadFloat4(&m_frameConstants.ambientColor));
+            for (int i = 0; i < 3; ++i)
+            {
+                m_effect->SetLightDirection(i, XMLoadFloat4(&m_frameConstants.lightDirection[i]));
+                m_effect->SetLightDiffuseColor(i, XMLoadFloat4(&m_frameConstants.lightColor[i]));
+            }
+        }
+
         // Per-frame constants of the model shader (ModelInstanced.hlsli: cbuffer Frame)
         struct FrameConstants
         {
@@ -706,6 +746,9 @@ namespace LB::Systems::Rendering::Detail
                 { 0.12f, 0.13f, 0.18f, 1.0f },     // fill: cool
                 { 0.10f, 0.10f, 0.12f, 1.0f } };   // back
             DirectX::XMFLOAT4 ambientColor{ 0.03f, 0.03f, 0.04f, 1.0f };
+            DirectX::XMFLOAT4 pointLightPosition[MaxPointLights]{};
+            DirectX::XMFLOAT4 pointLightColor[MaxPointLights]{};
+            DirectX::XMFLOAT4 pointLightCount{};
         };
 
         // Per-part root constants (cbuffer Material)

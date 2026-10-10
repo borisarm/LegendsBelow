@@ -100,6 +100,26 @@ export namespace LB::Systems::Rendering {
         Vector3 size{1.0f, 1.0f, 1.0f};        // full extents along X, Y, Z
         float yawRadians{0.0f};                // rotation around the vertical axis
         Color color{Color::White()};
+        Color emissive{Color::Black()};        // light the shape gives off itself (flames)
+    };
+
+    /// <summary>
+    /// A point light in the world (a torch): lights models within its radius, fading smoothly to
+    /// nothing at the edge
+    /// </summary>
+    struct PointLight {
+        Vector3 position{};
+        Color color{1.0f, 0.6f, 0.3f, 1.0f};   // linear
+        float radius{5.0f};                    // tiles
+        float intensity{1.0f};
+    };
+
+    /// <summary>
+    /// The light everything shares: directional lights scaled (1: the default rig), and ambient
+    /// </summary>
+    struct SceneLighting {
+        float directional{1.0f};
+        Color ambient{0.03f, 0.03f, 0.04f, 1.0f};   // linear
     };
 
     /// <summary>
@@ -253,6 +273,7 @@ export namespace LB::Systems::Rendering {
             rectangleQueue_.clear();
             meshQueue_.clear();
             modelQueue_.clear();
+            lightQueue_.clear();
 
             stats_.drawCalls = 0;
             stats_.meshesRendered = 0;
@@ -292,6 +313,30 @@ export namespace LB::Systems::Rendering {
             if (!initialized_) return;
             meshQueue_.push_back(mesh);
         }
+
+        /// <summary>
+        /// Queue a point light for this frame. Models are lit by the MaxPointLights lights nearest
+        /// to the camera's target.
+        /// </summary>
+        void DrawLight(const PointLight& light) {
+            if (!initialized_) return;
+            lightQueue_.push_back(light);
+        }
+
+        const std::vector<PointLight>& GetQueuedLights() const {
+            return lightQueue_;
+        }
+
+        static constexpr std::size_t MaxPointLights = 16;
+
+        /// <summary>
+        /// Set the scene's directional and ambient light (kept until changed)
+        /// </summary>
+        void SetLighting(const SceneLighting& lighting) {
+            lighting_ = lighting;
+        }
+
+        [[nodiscard]] const SceneLighting& GetLighting() const noexcept { return lighting_; }
 
         /// <summary>
         /// Meshes queued this frame (in submission order)
@@ -517,6 +562,8 @@ export namespace LB::Systems::Rendering {
         std::vector<RectangleRenderData> rectangleQueue_;
         std::vector<MeshRenderData> meshQueue_;
         std::vector<ModelRenderData> modelQueue_;
+        std::vector<PointLight> lightQueue_;
+        SceneLighting lighting_{};
         std::vector<std::vector<ModelInstance>> opaqueInstances_;   // per model, rebuilt each frame
         std::vector<std::vector<ModelInstance>> fadedInstances_;
         std::vector<std::shared_ptr<const ModelData>> models_;   // ModelId - 1

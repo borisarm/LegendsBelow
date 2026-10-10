@@ -16,8 +16,11 @@ PixelInput main(VertexInput input)
     world.c1 = input.instance.world1;
     world.c2 = input.instance.world2;
 
+    const float3 position = TransformPoint(world, input.position);
+
     PixelInput output;
-    output.position = mul(float4(TransformPoint(world, input.position), 1.0f), ViewProjection);
+    output.position = mul(float4(position, 1.0f), ViewProjection);
+    output.world = position;
     output.normal = TransformNormal(world, input.normal);
     output.texcoord = input.texcoord;
     output.tint = input.instance.tint;

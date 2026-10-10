@@ -182,11 +182,29 @@ namespace LB::Systems::Rendering {
                 const auto& view = cameraView_;
                 gpu_->renderer.SetCamera(view.eye.x, view.eye.y, view.eye.z, view.target.x, view.target.y, view.target.z,
                                          view.verticalFovRadians, view.nearPlane, view.farPlane);
+                gpu_->renderer.SetLighting(lighting_.directional, lighting_.ambient.r, lighting_.ambient.g, lighting_.ambient.b);
+
+                // The point lights nearest to what the camera looks at
+                auto lights = lightQueue_;
+                const auto away = [&](const PointLight& light) {
+                    const float dx = light.position.x - view.target.x;
+                    const float dz = light.position.z - view.target.z;
+                    return dx * dx + dz * dz;
+                };
+                std::ranges::sort(lights, {}, away);
+                std::vector<float> packed;
+                for (std::size_t i = 0; i < lights.size() && i < MaxPointLights; ++i) {
+                    const auto& light = lights[i];
+                    packed.insert(packed.end(), { light.position.x, light.position.y, light.position.z, light.radius,
+                                                  light.color.r * light.intensity, light.color.g * light.intensity, light.color.b * light.intensity });
+                }
+                gpu_->renderer.SetPointLights(packed.data(), packed.size() / 7);
                 for (const auto& mesh : meshQueue_) {
                     gpu_->renderer.DrawMesh(static_cast<int>(mesh.shape),
                         mesh.position.x, mesh.position.y, mesh.position.z,
                         mesh.size.x, mesh.size.y, mesh.size.z, mesh.yawRadians,
-                        mesh.color.r, mesh.color.g, mesh.color.b, mesh.color.a);
+                        mesh.color.r, mesh.color.g, mesh.color.b, mesh.color.a,
+                        mesh.emissive.r, mesh.emissive.g, mesh.emissive.b);
                 }
 
                 using Pass = Detail::GpuRenderer::ModelPass;

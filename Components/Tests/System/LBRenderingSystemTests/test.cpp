@@ -1412,3 +1412,41 @@ TEST(FontTests, DecodeUtf8_AccentsAndInvalidBytes) {
     EXPECT_TRUE(DecodeUtf8("\xFF") == std::u32string(U"?"));
     EXPECT_TRUE(DecodeUtf8("\xC3") == std::u32string(U"?"));                                      // cut short
 }
+
+// ============================================================================
+// Lighting Tests
+// ============================================================================
+
+TEST(LightingTests, DrawLight_QueuedForOneFrame) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+
+    system.DrawLight(PointLight{ { 1.0f, 1.5f, 2.0f }, Color{ 1.0f, 0.5f, 0.2f }, 6.0f, 1.5f });
+
+    ASSERT_EQ(system.GetQueuedLights().size(), 1u);
+    EXPECT_FLOAT_EQ(system.GetQueuedLights()[0].radius, 6.0f);
+    system.EndFrame();
+    system.BeginFrame();
+    EXPECT_TRUE(system.GetQueuedLights().empty());
+}
+
+TEST(LightingTests, SetLighting_KeptUntilChanged) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    EXPECT_FLOAT_EQ(system.GetLighting().directional, 1.0f);
+
+    system.SetLighting(SceneLighting{ 0.3f, Color{ 0.01f, 0.01f, 0.02f } });
+    system.BeginFrame();
+    system.EndFrame();
+
+    EXPECT_FLOAT_EQ(system.GetLighting().directional, 0.3f);
+    EXPECT_FLOAT_EQ(system.GetLighting().ambient.b, 0.02f);
+}
+
+TEST(LightingTests, DrawLight_BeforeInitialize_Ignored) {
+    RenderingSystem system;
+    system.DrawLight(PointLight{});
+
+    EXPECT_TRUE(system.GetQueuedLights().empty());
+}

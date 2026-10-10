@@ -30,6 +30,7 @@ PixelInput main(VertexInput input)
 
     PixelInput output;
     output.position = mul(float4(position, 1.0f), ViewProjection);
+    output.world = position;
     output.normal = normal;
     output.texcoord = input.texcoord;
     output.tint = input.instance.tint;

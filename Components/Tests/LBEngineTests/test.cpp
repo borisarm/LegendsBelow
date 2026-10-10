@@ -1495,9 +1495,9 @@ TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
 
     EXPECT_FALSE(ok);
     const auto& error = engine.GetInitializationError();
-    // Arena (4), knight and sword (2), dungeon props (3), loot and held-weapon props (10), the potion (1),
+    // Arena (4), knight and sword (2), dungeon props (4), loot and held-weapon props (10), the potion (1),
     // enemy bodies and weapons (5), animation sets (3)
-    EXPECT_NE(error.find("28 problems"), std::string::npos) << error;
+    EXPECT_NE(error.find("29 problems"), std::string::npos) << error;
     EXPECT_NE(error.find("wall.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("character_knight.gltf"), std::string::npos) << error;
     EXPECT_NE(error.find("Skeleton_Minion.glb"), std::string::npos) << error;
@@ -3101,4 +3101,117 @@ TEST(GameEngineDungeonTests, Playthrough_FightThroughToTheSecondFloor) {
     }
 
     EXPECT_EQ(engine.GetDepth(), 2) << trace;
+}
+
+// ============================================================================
+// GameEngine Torch and Minimap Tests
+// ============================================================================
+
+TEST(GameEngineTorchTests, Torches_HangOnRoomWallsFacingIn) {
+    GameEngine engine;
+    InitializeDungeon(engine);
+    const auto& world = engine.GetWorld();
+
+    ASSERT_GE(engine.GetTorches().size(), engine.GetWorld().Layout().rooms.size());
+    for (const auto& torch : engine.GetTorches()) {
+        const WorldPoint ahead{ torch.position.x + std::sin(torch.yaw) * 0.5f, torch.position.y + std::cos(torch.yaw) * 0.5f };
+        const WorldPoint behind{ torch.position.x - std::sin(torch.yaw) * 0.3f, torch.position.y - std::cos(torch.yaw) * 0.3f };
+        EXPECT_TRUE(world.IsOpen(ahead));      // the room in front
+        EXPECT_FALSE(world.IsOpen(behind));    // the wall behind
+        EXPECT_GE(world.RoomAt(ahead), 0);     // in rooms, not corridors
+    }
+}
+
+TEST(GameEngineTorchTests, EachTorch_LightsTheFrameAndFlickers) {
+    GameEngine engine;
+    InitializeDungeon(engine);
+
+    engine.Tick(OneSixtieth);
+    const auto first = engine.GetRendering().GetQueuedLights();
+    RunSteps(engine, 7);
+    const auto later = engine.GetRendering().GetQueuedLights();
+
+    ASSERT_EQ(first.size(), engine.GetTorches().size());
+    EXPECT_FLOAT_EQ(first[0].radius, GameEngine::TorchLightRadius);
+    EXPECT_GT(first[0].position.y, 1.0f);   // up at the flame
+    EXPECT_NE(first[0].intensity, later[0].intensity);
+}
+
+TEST(GameEngineTorchTests, Dungeon_DarkWithoutTorches_ArenaKeepsDefaultLight) {
+    GameEngine dungeon;
+    InitializeDungeon(dungeon);
+    GameEngine arena;
+    InitializeForCombat(arena);
+
+    dungeon.Tick(OneSixtieth);
+    arena.Tick(OneSixtieth);
+
+    EXPECT_FLOAT_EQ(dungeon.GetRendering().GetLighting().directional, GameEngine::DungeonDirectionalLight);
+    EXPECT_FLOAT_EQ(arena.GetRendering().GetLighting().directional, 1.0f);
+    EXPECT_TRUE(arena.GetTorches().empty());
+    EXPECT_TRUE(arena.GetRendering().GetQueuedLights().empty());
+}
+
+TEST(GameEngineTorchTests, Torches_DrawnWithModelsOnTheirWalls) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory(), .randomSeed = CombatSeed, .dungeon = true }))
+        << engine.GetInitializationError();
+
+    engine.Tick(OneSixtieth);
+
+    EXPECT_EQ(DrawsOf(engine, "torchWall").size(), engine.GetTorches().size());
+    for (const auto& torch : engine.GetTorches()) EXPECT_TRUE(torch.wall.has_value());
+}
+
+TEST(GameEngineMinimapTests, Start_EntranceExploredFarRoomsNot) {
+    GameEngine engine;
+    InitializeDungeon(engine);
+    const auto& layout = engine.GetWorld().Layout();
+    const auto& entrance = layout.rooms[static_cast<std::size_t>(layout.entranceRoom)].area;
+    const auto& exit = layout.rooms[static_cast<std::size_t>(layout.exitRoom)].area;
+
+    for (std::int32_t y = entrance.y; y < entrance.y + entrance.height; ++y) {
+        for (std::int32_t x = entrance.x; x < entrance.x + entrance.width; ++x) EXPECT_TRUE(engine.IsCellExplored(x, y));
+    }
+    EXPECT_FALSE(engine.IsCellExplored(exit.CenterX(), exit.CenterY()));
+    EXPECT_FALSE(engine.IsCellExplored(0, 0));        // solid
+    EXPECT_FALSE(engine.IsCellExplored(-1, 3));       // outside
+}
+
+TEST(GameEngineMinimapTests, Walking_RevealsTheWay) {
+    GameEngine engine;
+    InitializeDungeon(engine);
+    const auto room = FindRoom(engine, LB::Dungeon::RoomType::Combat);
+    const auto& area = engine.GetWorld().Layout().rooms[static_cast<std::size_t>(room)].area;
+    ASSERT_FALSE(engine.IsCellExplored(area.CenterX(), area.CenterY()));
+
+    WalkTo(engine, engine.GetWorld().RoomCenter(room), 60 * 60);
+
+    EXPECT_TRUE(engine.IsCellExplored(area.CenterX(), area.CenterY()));
+    EXPECT_TRUE(engine.IsCellExplored(area.x, area.y));   // the whole room on entering
+}
+
+TEST(GameEngineMinimapTests, KeyM_TogglesTheLargeMap) {
+    GameEngine engine;
+    InitializeDungeon(engine);
+    engine.Tick(OneSixtieth);
+    const auto small = engine.GetRendering().GetQueuedRectangles().size();
+
+    TapKey(engine, Keys::FromChar('M'));
+    engine.Tick(OneSixtieth);
+    EXPECT_TRUE(engine.IsMapExpanded());
+
+    TapKey(engine, Keys::FromChar('M'));
+    engine.Tick(OneSixtieth);
+    EXPECT_FALSE(engine.IsMapExpanded());
+    EXPECT_GT(small, 0u);
+}
+
+TEST(GameEngineMinimapTests, Arena_NoMinimap) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.Tick(OneSixtieth);
+
+    for (const auto& rect : engine.GetRendering().GetQueuedRectangles()) EXPECT_LT(rect.layerDepth, 14);
 }
