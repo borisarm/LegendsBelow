@@ -1499,3 +1499,147 @@ TEST(GameEngineModelTests, NoModelDirectory_FallsBackToPrimitives) {
     EXPECT_TRUE(engine.GetRendering().GetQueuedModels().empty());
     EXPECT_FALSE(engine.GetRendering().GetQueuedMeshes().empty());
 }
+
+// ============================================================================
+// GameEngine Wall Fade and Batching Tests
+// ============================================================================
+
+namespace {
+    std::size_t CountFaded(const GameEngine& engine) {
+        std::size_t faded = 0;
+        for (float opacity : engine.GetWallOpacities()) {
+            if (opacity < 1.0f) ++faded;
+        }
+        return faded;
+    }
+
+    // Walk toward the camera (screen-down) until the player is at the arena edge nearest to it
+    void WalkToNearEdge(GameEngine& engine) {
+        HoldKeysFor(engine, { Keys::FromChar('S') }, 60 * 6);
+    }
+}
+
+TEST(GameEngineWallFadeTests, PlayerInTheMiddle_NoWallFades) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+
+    RunSteps(engine, 30);
+
+    const auto opacities = engine.GetWallOpacities();
+    EXPECT_EQ(opacities.size(), static_cast<std::size_t>(2 * (GameEngine::ArenaHalfWidth + GameEngine::ArenaHalfHeight)) + 4);
+    EXPECT_EQ(CountFaded(engine), 0u);
+}
+
+TEST(GameEngineWallFadeTests, PlayerBehindNearWall_ThatWallFades) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+
+    WalkToNearEdge(engine);
+    RunSteps(engine, 30);   // longer than WallFadeSeconds
+
+    // At the default yaw the camera is south-east: the faded pieces are on those sides only
+    std::size_t faded = 0;
+    const auto& draws = engine.GetRendering().GetQueuedModels();
+    for (const auto& draw : draws) {
+        const auto& name = engine.GetRendering().GetModel(draw.model)->name;
+        if ((name == "wall" || name == "pillar") && draw.tint.a < 1.0f) {
+            ++faded;
+            EXPECT_NEAR(draw.tint.a, GameEngine::FadedWallAlpha, 1e-5);
+            EXPECT_TRUE(draw.position.z > GameEngine::ArenaHalfHeight || draw.position.x > GameEngine::ArenaHalfWidth)
+                << draw.position.x << ", " << draw.position.z;
+        }
+    }
+    EXPECT_GE(faded, 1u);
+    EXPECT_LE(faded, 4u);   // only the pieces in the sight lines, not the whole side
+}
+
+TEST(GameEngineWallFadeTests, Fade_EasesInAndBackOut) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    WalkToNearEdge(engine);
+    RunSteps(engine, 30);
+    ASSERT_GE(CountFaded(engine), 1u);
+
+    // Walk back to the middle: the walls come back
+    HoldKeysFor(engine, { Keys::FromChar('W') }, 60 * 3);
+    RunSteps(engine, 30);
+    EXPECT_EQ(CountFaded(engine), 0u);
+}
+
+TEST(GameEngineWallFadeTests, Fade_TakesWallFadeSeconds) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    ASSERT_TRUE(engine.SaveGame(1));           // player in the middle
+    WalkToNearEdge(engine);
+    RunSteps(engine, 30);
+    const auto faded = engine.GetWallOpacities();
+    const auto wall = std::ranges::find_if(faded, [](float opacity) { return opacity < 1.0f; }) - faded.begin();
+    ASSERT_LT(static_cast<std::size_t>(wall), faded.size());
+    EXPECT_FLOAT_EQ(faded[wall], GameEngine::FadedWallAlpha);
+
+    ASSERT_TRUE(engine.LoadGame(1));           // back in the middle at once: nothing hides the player
+    RunSteps(engine, 1);
+    const float step = static_cast<float>(StepSeconds(engine)) / GameEngine::WallFadeSeconds * (1.0f - GameEngine::FadedWallAlpha);
+    EXPECT_NEAR(engine.GetWallOpacities()[wall], GameEngine::FadedWallAlpha + step, 1e-5);
+
+    RunSteps(engine, 12);                      // 0.2 s in all
+    EXPECT_FLOAT_EQ(engine.GetWallOpacities()[wall], 1.0f);
+}
+
+TEST(GameEngineWallFadeTests, CameraRotationWhilePaused_ChangesWhichWallsFade) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    WalkToNearEdge(engine);
+    RunSteps(engine, 30);
+    const auto before = engine.GetWallOpacities();
+
+    TapKey(engine, Keys::Escape);
+    RunSteps(engine, 1);
+    TapKey(engine, Keys::FromChar('E'));
+    RunSteps(engine, 1);
+    TapKey(engine, Keys::FromChar('E'));
+    RunSteps(engine, 60);                  // half a turn: the camera is now on the opposite side
+
+    EXPECT_TRUE(engine.IsPaused());
+    EXPECT_NE(engine.GetWallOpacities(), before);
+    EXPECT_EQ(CountFaded(engine), 0u);     // the player stands with their back to the far wall
+}
+
+TEST(GameEngineBatchingTests, Arena_FewDrawCalls) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+
+    engine.Tick(OneSixtieth);
+
+    // One instanced draw per part of each model: floor tiles (2 models), wall, pillar, knight
+    std::size_t expected = 0;
+    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight" }) {
+        expected += ModelNamed(engine, name).parts.size();
+    }
+    const auto& stats = engine.GetRendering().GetStats();
+    EXPECT_EQ(stats.drawCalls, expected);
+    EXPECT_LT(stats.drawCalls, 30u);       // was one draw per part per copy: several hundred
+    EXPECT_GT(stats.modelsRendered, 300u);  // every tile and wall piece still drawn
+}
+
+TEST(GameEngineBatchingTests, FadedWalls_TwoExtraPassesPerPart) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    WalkToNearEdge(engine);
+    RunSteps(engine, 30);
+    ASSERT_GE(CountFaded(engine), 1u);
+
+    const auto& rendering = engine.GetRendering();
+    const auto wallParts = ModelNamed(engine, "wall").parts.size();
+    std::size_t expected = 0;
+    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight" }) {
+        expected += ModelNamed(engine, name).parts.size();
+    }
+    bool pillarFaded = false;
+    for (const auto& draw : rendering.GetQueuedModels()) {
+        if (rendering.GetModel(draw.model)->name == "pillar" && draw.tint.a < 1.0f) pillarFaded = true;
+    }
+    expected += 2 * wallParts;
+    if (pillarFaded) expected += 2 * ModelNamed(engine, "pillar").parts.size();
+    EXPECT_EQ(rendering.GetStats().drawCalls, expected);
+}
