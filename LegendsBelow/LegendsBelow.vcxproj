@@ -433,9 +433,20 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Data\classes.json">
       <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
     </CopyFileToFolders>
-    <!-- 3D models (KayKit Dungeon Pack, CC0), loaded at startup from <exe dir>\Assets\Models -->
-    <CopyFileToFolders Include="..\Assets\Models\*.glb;..\Assets\Models\*.gltf;..\Assets\Models\LICENSE-KayKit.txt">
+    <CopyFileToFolders Include="..\Assets\Data\enemies.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
+    <!-- 3D models (KayKit Dungeon Pack and Skeletons, CC0) with their buffers, textures, and
+         animation sets, loaded at startup from <exe dir>\Assets\Models -->
+    <CopyFileToFolders Include="..\Assets\Models\*.glb;..\Assets\Models\*.gltf;..\Assets\Models\*.bin;..\Assets\Models\*.png;..\Assets\Models\LICENSE-KayKit*.txt">
       <DestinationFolders>$(OutDir)Assets\Models</DestinationFolders>
+    </CopyFileToFolders>
+    <!-- Fonts (SIL Open Font License), loaded at startup from <exe dir>\Assets\Fonts -->
+    <CopyFileToFolders Include="..\Assets\Fonts\*.ttf;..\Assets\Fonts\OFL-*.txt">
+      <DestinationFolders>$(OutDir)Assets\Fonts</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Models\Animations\*.glb">
+      <DestinationFolders>$(OutDir)Assets\Models\Animations</DestinationFolders>
     </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>

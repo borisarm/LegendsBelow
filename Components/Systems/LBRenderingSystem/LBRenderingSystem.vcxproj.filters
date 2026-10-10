@@ -7,6 +7,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Animation.ixx" />
+    <ClCompile Include="BitmapFont.ixx" />
+    <ClCompile Include="Font.ixx" />
+    <ClCompile Include="FontLoader.cpp" />
     <ClCompile Include="GltfLoader.cpp" />
     <ClCompile Include="Model.ixx" />
     <ClCompile Include="Camera.ixx" />

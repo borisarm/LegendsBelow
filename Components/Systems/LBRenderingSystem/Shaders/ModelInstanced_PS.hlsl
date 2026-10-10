@@ -12,7 +12,11 @@ float4 main(PixelInput input) : SV_Target
         light += saturate(dot(normal, -LightDirection[i].xyz)) * LightColor[i].rgb;
     }
 
+    // Untextured materials sample a white texel. Emissive light (glowing eyes) ignores the
+    // scene lights but follows the instance tint, so it dims with the rest during the pause.
+    const float4 albedo = BaseColorTexture.Sample(LinearWrap, input.texcoord) * MaterialColor * input.tint;
+    const float3 color = albedo.rgb * light + MaterialEmissive.rgb * input.tint.rgb;
+
     // Premultiplied alpha, as the transparent pass blends with ONE / INV_SRC_ALPHA
-    const float3 color = input.color.rgb * light;
-    return float4(color * input.color.a, input.color.a);
+    return float4(color * albedo.a, albedo.a);
 }

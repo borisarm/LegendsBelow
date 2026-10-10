@@ -5,22 +5,17 @@ import std;
 import LB.Core;
 import LB.Character;
 import LB.CharacterService;
+import LB.Combat;
+import LB.CombatService;
 import LB.Content;
 import LB.AudioSystem;
 import LB.InputSystem;
 import LB.PersistenceSystem;
 import LB.RenderingSystem;
 import :StepTimer;
+import :Encounter;
 
 export namespace LB::Engine {
-
-    /// <summary>
-    /// Continuous position in world tiles (tile (0, 0) covers [0, 1) x [0, 1))
-    /// </summary>
-    struct WorldPoint {
-        float x{0.0f};
-        float y{0.0f};
-    };
 
     /// <summary>
     /// Startup configuration supplied by the host. Paths are UTF-8; empty means "not used".
@@ -32,6 +27,24 @@ export namespace LB::Engine {
         std::string contentDirectory;
         // 3D models (KayKit glTF files); empty draws the world with placeholder primitives
         std::string modelDirectory;
+        // TrueType fonts for text (UiFont); empty draws text in the built-in pixel font
+        std::string fontDirectory;
+        // Waves of enemies from enemies.json fight the player (needs content with a player)
+        bool spawnEnemies{true};
+        // Fixed seed for dice and spawn points (tests, replays); empty: random
+        std::optional<std::uint32_t> randomSeed;
+    };
+
+    /// <summary>
+    /// Combat feedback floating up from a character: damage dealt or taken, or a miss
+    /// (game-design.md, UI feedback). Rises and fades over GameEngine::FloatingTextSeconds.
+    /// </summary>
+    struct FloatingText {
+        std::string text;                       // "7", "12!" (critical), "MISS"
+        Systems::Rendering::Vector3 position{}; // world point it starts from (over the character's head)
+        Systems::Rendering::Color color{};      // display (sRGB) color
+        float scale{3.0f};                      // pixel font scale
+        float ageSeconds{0.0f};
     };
 
     /// <summary>
@@ -53,6 +66,7 @@ export namespace LB::Engine {
         static constexpr std::string_view QuickLoadAction = "QuickLoad";
         static constexpr std::string_view RotateCameraLeftAction = "RotateCameraLeft";
         static constexpr std::string_view RotateCameraRightAction = "RotateCameraRight";
+        static constexpr std::string_view AttackAction = "Attack";
 
         // Right stick flicks past this deflection rotate (X) or zoom (Y) the camera
         static constexpr float CameraStickThreshold = 0.6f;
@@ -74,6 +88,25 @@ export namespace LB::Engine {
         static constexpr std::string_view WallModel = "wall.glb";
         static constexpr std::string_view CornerModel = "pillar.glb";
         static constexpr std::string_view PlayerModel = "character_knight.gltf";
+        static constexpr std::string_view PlayerWeaponModel = "sword_common.glb";
+        // Font of the HUD and the damage numbers (Assets/Fonts, SIL Open Font License)
+        static constexpr std::string_view UiFont = "MedievalSharp-Regular.ttf";
+        static constexpr std::string_view PlayerSwordArmPart = "character_knightArmRight";
+        // Animation sets of the skinned characters (KayKit Rig_Medium), in the model directory
+        static constexpr std::array<std::string_view, 3> AnimationFiles = {
+            "Animations/Rig_Medium_General.glb", "Animations/Rig_Medium_MovementBasic.glb", "Animations/Rig_Medium_CombatMelee.glb" };
+
+        // Combat in the test arena: the player's starting weapon (weapons.json) and the enemies of
+        // the waves (enemies.json)
+        static constexpr std::string_view StartingWeapon = "weapon_sword_rusted_shortsword_t1";
+        static constexpr std::string_view LightEnemy = "enemy_skeleton_minion";
+        static constexpr std::string_view HeavyEnemy = "enemy_skeleton_warrior";
+        static constexpr float PlayerReach = 1.4f;              // tiles between centers
+        static constexpr float PlayerRespawnSeconds = 3.0f;     // after going down
+
+        // Damage numbers rise this far (tiles) over their lifetime, fading out at the end
+        static constexpr float FloatingTextSeconds = 1.0f;
+        static constexpr float FloatingTextRise = 0.8f;
 
         // Walls between the camera and the player fade (game-design.md, occlusion handling)
         static constexpr float FadedWallAlpha = 0.3f;
@@ -108,7 +141,7 @@ export namespace LB::Engine {
                 return false;
             }
 
-            if (!LoadModels(options.modelDirectory)) {
+            if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory)) {
                 renderingSystem_.Shutdown();
                 return false;
             }
@@ -127,6 +160,10 @@ export namespace LB::Engine {
             if (!SpawnPlayer()) {
                 return false;
             }
+
+            encounter_ = options.randomSeed ? Encounter(*options.randomSeed) : Encounter();
+            spawnEnemies_ = options.spawnEnemies;
+            StartEncounter();
 
             inputSystem_.Initialize();
             RegisterDefaultBindings();
@@ -161,7 +198,14 @@ export namespace LB::Engine {
             persistenceSystem_.Shutdown();
             characterService_.ClearAll();
             playerId_.reset();
+            playerWeapon_ = nullptr;
+            playerCombat_ = {};
+            encounter_.Reset();
+            combatEvents_.clear();
+            floatingTexts_.clear();
             models_ = {};
+            characterModels_.clear();
+            enemyClips_ = {};
             walls_.clear();
             renderingSystem_.Shutdown();
             paused_ = false;
@@ -301,6 +345,11 @@ export namespace LB::Engine {
         [[nodiscard]] WorldPoint GetPlayerPosition() const noexcept { return playerPosition_; }
 
         /// <summary>
+        /// Where the player faces: radians around the vertical axis, 0 faces +Z (south)
+        /// </summary>
+        [[nodiscard]] float GetPlayerFacingYaw() const noexcept { return playerFacingYaw_; }
+
+        /// <summary>
         /// True when gamepads are read from the platform (GameInput runtime available)
         /// </summary>
         [[nodiscard]] bool HasGamepadSupport() const noexcept { return inputSystem_.HasDeviceInput(); }
@@ -315,6 +364,87 @@ export namespace LB::Engine {
         /// Simulated time, excluding time spent paused
         /// </summary>
         [[nodiscard]] double GetGameTimeSeconds() const noexcept { return gameTimeSeconds_; }
+
+        /// <summary>
+        /// The enemies and waves of the arena
+        /// </summary>
+        [[nodiscard]] const Encounter& GetEncounter() const noexcept { return encounter_; }
+
+        /// <summary>
+        /// Attacks resolved during the last simulation step (the player's and the enemies')
+        /// </summary>
+        [[nodiscard]] const std::vector<CombatEvent>& GetCombatEvents() const noexcept { return combatEvents_; }
+
+        /// <summary>
+        /// Damage numbers and misses currently floating over characters
+        /// </summary>
+        [[nodiscard]] const std::vector<FloatingText>& GetFloatingTexts() const noexcept { return floatingTexts_; }
+
+        /// <summary>
+        /// True while there is a player with hit points left
+        /// </summary>
+        [[nodiscard]] bool IsPlayerAlive() const {
+            if (!playerId_) return false;
+            const auto character = characterService_.GetCharacter(*playerId_);
+            return character && character->get().IsAlive();
+        }
+
+        /// <summary>
+        /// True while the player's weapon swing plays (attacks repeat while Attack is held)
+        /// </summary>
+        [[nodiscard]] bool IsPlayerAttacking() const noexcept { return playerCombat_.swinging; }
+
+        /// <summary>
+        /// The player's weapon attack (design-combat-system.md 4.1, 4.3): class attack bonus with the
+        /// weapon's category, the weapon's dice, and its scaling attribute's modifier
+        /// </summary>
+        [[nodiscard]] Services::Combat::WeaponAttackProfile GetPlayerAttackProfile() const {
+            Services::Combat::WeaponAttackProfile attack{};
+            if (!playerId_ || !playerWeapon_) return attack;
+            const auto character = characterService_.GetCharacter(*playerId_);
+            if (!character) return attack;
+
+            const auto& weapon = *playerWeapon_;
+            const auto& attributes = character->get().GetAttributes();
+            const std::int32_t modifier = weapon.attributeScale == "DEX" ? attributes.GetDexterityModifier()
+                                        : weapon.attributeScale == "STR" ? attributes.GetStrengthModifier() : 0;
+            attack.attackBonus = characterService_.GetAttackBonus(*playerId_, weapon.category).value_or(0);
+            attack.damageDice = weapon.damageDice;
+            attack.damageBonus = weapon.damageBonus + static_cast<std::int32_t>(std::lround(static_cast<float>(modifier) * weapon.scaleFactor));
+            attack.damageType = weapon.damageTypes.empty() ? LB::Combat::DamageType::Slashing : weapon.damageTypes.front();
+            attack.critRangeMin = weapon.critRangeMin;
+            attack.critMultiplier = weapon.critMultiplier;
+            return attack;
+        }
+
+        /// <summary>
+        /// How the player defends: AC 10 + DEX modifier (unarmoured), and the physical armour
+        /// rating of the equipped pieces plus shields' armour bonus (design-armour-system.md 3.1)
+        /// </summary>
+        [[nodiscard]] Services::Combat::DefenseProfile GetPlayerDefense() const {
+            Services::Combat::DefenseProfile defense{};
+            if (!playerId_) return defense;
+            const auto character = characterService_.GetCharacter(*playerId_);
+            if (!character) return defense;
+
+            defense.armorClass = character->get().GetArmorClass() + character->get().GetAttributes().GetDexterityModifier();
+            for (const auto& piece : characterService_.GetEquippedArmor(*playerId_)) {
+                if (const auto* armor = content_->FindArmor(piece.armorId)) {
+                    defense.physicalArmor += armor->physicalAR + armor->armorBonus;
+                }
+            }
+            return defense;
+        }
+
+        /// <summary>
+        /// Place an enemy from enemies.json, ready to act (no spawn animation). Returns its id, or
+        /// nothing for an unknown key or before Initialize.
+        /// </summary>
+        std::optional<std::uint32_t> SpawnEnemy(std::string_view key, WorldPoint at) {
+            const auto* type = content_->FindEnemy(key);
+            if (!initialized_ || !type) return std::nullopt;
+            return encounter_.Spawn(*type, at, std::atan2(playerPosition_.x - at.x, playerPosition_.y - at.y), false);
+        }
 
         /// <summary>
         /// Put an armour piece from armour.json on the player (replacing the piece in its slot).
@@ -422,10 +552,14 @@ export namespace LB::Engine {
             // The camera can be turned and zoomed during the tactical pause
             UpdateCameraControls();
 
+            combatEvents_.clear();
             if (!paused_) {
                 gameTimeSeconds_ += elapsedSeconds;
+                // Attacks first: a swing that starts this step roots the player at once
+                UpdatePlayerCombat(static_cast<float>(elapsedSeconds));
                 MovePlayer(static_cast<float>(elapsedSeconds));
-                // TODO: Add game logic here (combat, AI).
+                UpdateEncounter(static_cast<float>(elapsedSeconds));
+                UpdateFloatingTexts(static_cast<float>(elapsedSeconds));
             }
 
             if (playerId_) {
@@ -462,6 +596,8 @@ export namespace LB::Engine {
             renderingSystem_.SetCamera(camera_.GetView());
             DrawArena(shade);
             DrawPlayer(shade);
+            DrawEnemies(shade);
+            DrawHud();
 
             renderingSystem_.EndFrame();
         }
@@ -488,6 +624,23 @@ export namespace LB::Engine {
             models_.wall = load(WallModel);
             models_.corner = load(CornerModel);
             models_.player = load(PlayerModel);
+            models_.playerWeapon = load(PlayerWeaponModel);
+
+            // Enemy bodies and the weapons they hold, by file name
+            characterModels_.clear();
+            for (const auto& enemy : content_->GetEnemies()) {
+                for (const auto& file : { enemy.model, enemy.mainHandModel, enemy.offHandModel }) {
+                    if (!file.empty() && !characterModels_.contains(file)) characterModels_[file] = load(file);
+                }
+            }
+
+            for (const auto file : AnimationFiles) {
+                const auto result = renderingSystem_.LoadAnimations(directory / file);
+                if (!result.Succeeded()) errors.push_back(result.error);
+            }
+            if (errors.empty()) {
+                ResolveEnemyClips(errors);
+            }
 
             if (!errors.empty()) {
                 initializationError_ = std::format("3D models in '{}' could not be loaded ({} problems):", modelDirectory, errors.size());
@@ -495,6 +648,8 @@ export namespace LB::Engine {
                     initializationError_ += "\n" + error;
                 }
                 models_ = {};
+                characterModels_.clear();
+                enemyClips_ = {};
                 return false;
             }
             models_.loaded = true;
@@ -610,6 +765,205 @@ export namespace LB::Engine {
             }
         }
 
+        /// <summary>
+        /// Load the UI font. Without a font directory text uses the pixel font; a missing or
+        /// invalid font stops startup.
+        /// </summary>
+        bool LoadFonts(const std::string& fontDirectory) {
+            if (fontDirectory.empty()) return true;
+
+            const auto directory = std::filesystem::path(std::u8string(fontDirectory.begin(), fontDirectory.end()));
+            const auto result = renderingSystem_.LoadFont(directory / UiFont);
+            if (!result.Succeeded()) {
+                initializationError_ = std::format("The font in '{}' could not be loaded:\n{}", fontDirectory, result.error);
+                return false;
+            }
+            return true;
+        }
+
+        // Enemy animation clips by name (KayKit Rig_Medium). Each enemy type names its attack clip
+        // (CombatMelee set); the overhand Throw is the fallback for types that do not.
+        void ResolveEnemyClips(std::vector<std::string>& errors) {
+            const auto clip = [&](std::string_view name, float* seconds = nullptr) {
+                const auto id = renderingSystem_.FindAnimation(name);
+                if (!id) {
+                    errors.push_back(std::format("animation '{}' not found in the Rig_Medium animation sets", name));
+                    return Systems::Rendering::InvalidAnimationId;
+                }
+                if (seconds) *seconds = std::max(0.01f, renderingSystem_.GetAnimation(*id)->durationSeconds);
+                return *id;
+            };
+
+            enemyClips_.idle = clip("Idle_A");
+            enemyClips_.walk = clip("Walking_A", &enemyClips_.walkSeconds);
+            enemyClips_.attack = clip("Throw", &enemyClips_.attackSeconds);
+            enemyClips_.hit = clip("Hit_A", &enemyClips_.hitSeconds);
+            enemyClips_.death = clip("Death_A");
+            enemyClips_.spawn = clip("Spawn_Ground", &enemyClips_.spawnSeconds);
+
+            enemyClips_.attacks.clear();
+            for (const auto& enemy : content_->GetEnemies()) {
+                if (enemy.attackAnimation.empty()) continue;
+                ClipInfo attack{};
+                attack.id = clip(enemy.attackAnimation, &attack.seconds);
+                enemyClips_.attacks.emplace(enemy.key, attack);
+            }
+        }
+
+        // Waves start once there is a player to fight (and enemies are enabled)
+        void StartEncounter() {
+            playerWeapon_ = content_->FindWeapon(StartingWeapon);
+            encounter_.Configure(content_->FindEnemy(LightEnemy), content_->FindEnemy(HeavyEnemy), ArenaHalfWidth, ArenaHalfHeight);
+            encounter_.SetClips(enemyClips_);
+            encounter_.Reset();
+            if (spawnEnemies_ && playerId_) {
+                encounter_.StartWave(1, playerPosition_);
+            }
+        }
+
+        [[nodiscard]] float PlayerAttackSeconds() const noexcept {
+            return playerWeapon_ ? playerWeapon_->attackTimeSeconds : 1.0f;
+        }
+
+        /// <summary>
+        /// The player's melee attack: Attack (left mouse, Space, gamepad A) swings the weapon,
+        /// again and again while held. A swing turns toward the nearest enemy in reach and strikes
+        /// it part way through (Encounter::AttackImpactFraction); the player stands still until
+        /// then. A downed player gets back up after PlayerRespawnSeconds and the waves restart.
+        /// </summary>
+        void UpdatePlayerCombat(float elapsedSeconds) {
+            if (!playerId_) return;
+            playerCombat_.hitFlashSeconds = std::max(0.0f, playerCombat_.hitFlashSeconds - elapsedSeconds);
+
+            if (!IsPlayerAlive()) {
+                playerCombat_.swinging = false;
+                playerCombat_.deadSeconds += elapsedSeconds;
+                if (playerCombat_.deadSeconds >= PlayerRespawnSeconds) {
+                    RespawnPlayer();
+                }
+                return;
+            }
+
+            const float attackSeconds = PlayerAttackSeconds();
+            if (playerCombat_.swinging) {
+                playerCombat_.swingSeconds += elapsedSeconds;
+                if (!playerCombat_.impactDone && playerCombat_.swingSeconds >= attackSeconds * Encounter::AttackImpactFraction) {
+                    playerCombat_.impactDone = true;
+                    if (playerCombat_.target) {
+                        if (auto event = encounter_.StrikeEnemy(*playerCombat_.target, GetPlayerAttackProfile(), playerPosition_, PlayerReach)) {
+                            combatEvents_.push_back(*event);
+                        }
+                    }
+                }
+                if (playerCombat_.swingSeconds >= attackSeconds) {
+                    playerCombat_.swinging = false;
+                }
+            }
+
+            const std::string attack(AttackAction);
+            if (!playerCombat_.swinging && (inputSystem_.IsActionTriggered(attack) || inputSystem_.IsActionDown(attack))) {
+                playerCombat_.swinging = true;
+                playerCombat_.swingSeconds = 0.0f;
+                playerCombat_.impactDone = false;
+                playerCombat_.target = encounter_.FindTarget(playerPosition_, PlayerReach);
+                if (const auto* target = playerCombat_.target ? encounter_.FindEnemy(*playerCombat_.target) : nullptr) {
+                    playerFacingYaw_ = std::atan2(target->position.x - playerPosition_.x, target->position.y - playerPosition_.y);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enemies act; their hits are applied to the player. A new wave restores the player's health.
+        /// </summary>
+        void UpdateEncounter(float elapsedSeconds) {
+            if (!playerId_) return;
+
+            const PlayerTarget target{ playerPosition_, IsPlayerAlive(), GetPlayerDefense() };
+            const auto wave = encounter_.GetWave();
+            for (const auto& event : encounter_.Update(elapsedSeconds, target)) {
+                combatEvents_.push_back(event);
+                if (!event.result.hit || event.result.finalDamage <= 0 || !IsPlayerAlive()) continue;
+
+                characterService_.DamageCharacter(*playerId_, event.result.finalDamage);
+                playerCombat_.hitFlashSeconds = Encounter::HitFlashSeconds;
+                if (!IsPlayerAlive()) {
+                    playerCombat_.swinging = false;
+                    playerCombat_.deadSeconds = 0.0f;
+                }
+            }
+
+            if (encounter_.GetWave() != wave) {
+                characterService_.RestCharacter(*playerId_);
+            }
+        }
+
+        // World height just over a character's head
+        float EnemyTop(const Enemy& enemy) const {
+            if (models_.loaded) {
+                const auto it = characterModels_.find(enemy.definition->model);
+                if (it != characterModels_.end()) return renderingSystem_.GetModel(it->second)->boundsMax.y * enemy.definition->modelScale + 0.1f;
+            }
+            return 1.4f;
+        }
+
+        float PlayerTop() const {
+            if (models_.loaded) {
+                const auto* knight = renderingSystem_.GetModel(models_.player);
+                return (knight->boundsMax.y - knight->boundsMin.y) * ModelScale + 0.1f;
+            }
+            return 1.6f;
+        }
+
+        /// <summary>
+        /// Age the floating combat texts and start new ones for this step's attacks: damage in
+        /// white over enemies (gold and larger for criticals, marked "!"), red over the player,
+        /// and a grey "MISS" for attacks that did not connect
+        /// </summary>
+        void UpdateFloatingTexts(float elapsedSeconds) {
+            for (auto& text : floatingTexts_) text.ageSeconds += elapsedSeconds;
+            std::erase_if(floatingTexts_, [](const FloatingText& text) { return text.ageSeconds >= FloatingTextSeconds; });
+
+            for (const auto& event : combatEvents_) {
+                Systems::Rendering::Vector3 at{ playerPosition_.x, PlayerTop(), playerPosition_.y };
+                if (event.kind == CombatEventKind::PlayerAttack) {
+                    const auto* enemy = encounter_.FindEnemy(event.enemyId);
+                    if (!enemy) continue;
+                    at = { enemy->position.x, EnemyTop(*enemy), enemy->position.y };
+                }
+                // Alternate sides a little so quick hits do not stack on top of each other
+                at.x += (floatingTextCount_++ % 2 == 0 ? -0.15f : 0.15f);
+
+                FloatingText text{};
+                text.position = at;
+                if (!event.result.hit) {
+                    text.text = "MISS";
+                    text.color = { 0.75f, 0.75f, 0.75f, 1.0f };
+                    text.scale = 2.0f;
+                }
+                else if (event.kind == CombatEventKind::PlayerAttack) {
+                    text.text = std::format("{}{}", event.result.finalDamage, event.result.critical ? "!" : "");
+                    text.color = event.result.critical ? Systems::Rendering::Color{ 1.0f, 0.82f, 0.25f, 1.0f } : Systems::Rendering::Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+                    text.scale = event.result.critical ? 4.0f : 3.0f;
+                }
+                else {
+                    text.text = std::format("{}{}", event.result.finalDamage, event.result.critical ? "!" : "");
+                    text.color = { 1.0f, 0.32f, 0.25f, 1.0f };
+                    text.scale = event.result.critical ? 4.0f : 3.0f;
+                }
+                floatingTexts_.push_back(std::move(text));
+            }
+        }
+
+        // Back on the feet at the arena's center with full health; the waves start over
+        void RespawnPlayer() {
+            characterService_.ReviveCharacter(*playerId_, 1.0f);
+            playerPosition_ = WorldPoint{};
+            characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
+            camera_.SnapTo({ playerPosition_.x, playerPosition_.y });
+            playerCombat_ = {};
+            StartEncounter();
+        }
+
         bool LoadContent(const std::string& contentDirectory) {
             auto content = std::make_shared<Content::ContentDatabase>();
             if (!contentDirectory.empty()) {
@@ -696,7 +1050,8 @@ export namespace LB::Engine {
         /// camera so "up" always walks away from it. Speed comes from CharacterService.
         /// </summary>
         void MovePlayer(float elapsedSeconds) {
-            if (!playerId_) return;
+            if (!IsPlayerAlive()) return;
+            if (playerCombat_.swinging && !playerCombat_.impactDone) return;   // committed to the swing
 
             namespace Keys = Systems::Input::Keys;
             const auto held = [this](std::int32_t a, std::int32_t b) {
@@ -827,6 +1182,52 @@ export namespace LB::Engine {
             }
         }
 
+        // Smooth 0 -> 1 between edge0 and edge1
+        static float SmoothStep(float edge0, float edge1, float x) noexcept {
+            const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        }
+
+        // The sword arm's pose at the shoulder during a swing: a horizontal slash that reads from
+        // above. The arm lifts forward (around X, negative raises it) while winding back to the
+        // knight's right (around Y), sweeps across the front through the impact, then settles.
+        Systems::Rendering::Matrix4 SwordArmPose() const noexcept {
+            using Systems::Rendering::Matrix4;
+            if (!playerCombat_.swinging) return {};
+
+            constexpr float lifted = -1.0f;
+            constexpr float windUp = -1.1f;     // toward the knight's right
+            constexpr float followThrough = 1.0f;
+            const float phase = playerCombat_.swingSeconds / PlayerAttackSeconds();
+            const float impact = Encounter::AttackImpactFraction;
+            const float windUpEnd = impact * 0.65f;
+
+            float pitch = 0.0f;
+            float sweep = 0.0f;
+            if (phase < windUpEnd) {
+                const float t = SmoothStep(0.0f, windUpEnd, phase);
+                pitch = lifted * t;
+                sweep = windUp * t;
+            }
+            else if (phase < impact) {
+                pitch = lifted;
+                sweep = windUp + (followThrough - windUp) * SmoothStep(windUpEnd, impact, phase);
+            }
+            else {
+                const float t = 1.0f - SmoothStep(impact, 1.0f, phase);
+                pitch = lifted * t;
+                sweep = followThrough * t;
+            }
+            return Matrix4::RotationX(pitch) * Matrix4::RotationY(sweep);
+        }
+
+        // Red flash on characters that were just hit (tints multiply, so green and blue drop)
+        template<typename Shade>
+        static Systems::Rendering::Color HitTint(const Shade& shade, float flashSeconds) {
+            const float flash = std::clamp(flashSeconds / Encounter::HitFlashSeconds, 0.0f, 1.0f);
+            return shade(1.0f, 1.0f - 0.65f * flash, 1.0f - 0.65f * flash);
+        }
+
         // Placeholder hero: a body, a head, and a visor showing where they face (or the knight model)
         template<typename Shade>
         void DrawPlayer(const Shade& shade) {
@@ -834,9 +1235,31 @@ export namespace LB::Engine {
 
             if (models_.loaded) {
                 // Feet on the floor, facing the walk direction (glTF characters face +Z)
-                const float feet = -renderingSystem_.GetModel(models_.player)->boundsMin.y * ModelScale;
-                renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{
-                    models_.player, { playerPosition_.x, feet, playerPosition_.y }, playerFacingYaw_, ModelScale, shade(1.0f, 1.0f, 1.0f) });
+                using Systems::Rendering::Matrix4;
+                const auto* knight = renderingSystem_.GetModel(models_.player);
+                const float feet = -knight->boundsMin.y * ModelScale;
+                Systems::Rendering::ModelRenderData body{
+                    models_.player, { playerPosition_.x, feet, playerPosition_.y }, playerFacingYaw_, ModelScale, HitTint(shade, playerCombat_.hitFlashSeconds) };
+
+                // Down: tip over backwards around the feet, lifted so the back rests on the floor
+                if (!IsPlayerAlive()) {
+                    const float fall = SmoothStep(0.0f, 0.6f, playerCombat_.deadSeconds);
+                    body.transform = Matrix4::RotationX(-1.5f * fall) * Matrix4::Translation({ 0.0f, 0.35f * fall, 0.0f });
+                }
+
+                // The sword arm swings at the shoulder; the sword sits in its fist, blade forward
+                const auto arm = knight->FindPartIndex(PlayerSwordArmPart);
+                const auto armPose = SwordArmPose();
+                if (arm) {
+                    body.partPoses.push_back({ *arm, armPose });
+                    constexpr Systems::Rendering::Vector3 fist{ -0.195f, -0.43f, 0.0f };   // in the arm's space
+                    Systems::Rendering::ModelRenderData sword{ models_.playerWeapon, body.position, body.yawRadians, ModelScale, body.tint };
+                    sword.transform = Matrix4::RotationX(std::numbers::pi_v<float> * 0.5f) * Matrix4::Translation(fist)
+                                    * armPose * knight->parts[*arm].transform;
+                    if (body.transform) *sword.transform = *sword.transform * *body.transform;
+                    renderingSystem_.DrawModel(sword);
+                }
+                renderingSystem_.DrawModel(body);
                 return;
             }
 
@@ -871,6 +1294,128 @@ export namespace LB::Engine {
             visor.yawRadians = playerFacingYaw_;
             visor.color = shade(0.15f, 0.15f, 0.20f);
             renderingSystem_.DrawMesh(visor);
+        }
+
+        /// <summary>
+        /// Enemies: skinned models posed by their animation, with their weapons in the hand slots
+        /// (or placeholder primitives without models). Corpses fade out before they disappear.
+        /// </summary>
+        template<typename Shade>
+        void DrawEnemies(const Shade& shade) {
+            const auto modelOf = [this](const std::string& file) {
+                const auto it = characterModels_.find(file);
+                return it != characterModels_.end() ? it->second : Systems::Rendering::InvalidModelId;
+            };
+
+            for (const auto& enemy : encounter_.GetEnemies()) {
+                const auto& type = *enemy.definition;
+                auto tint = HitTint(shade, enemy.hitFlashSeconds);
+                tint.a = Encounter::Opacity(enemy);
+                const Systems::Rendering::Vector3 position{ enemy.position.x, 0.0f, enemy.position.y };
+
+                if (models_.loaded) {
+                    Systems::Rendering::ModelRenderData body{ modelOf(type.model), position, enemy.facingYaw, type.modelScale, tint };
+                    body.animation = enemy.animator.GetState();
+                    renderingSystem_.DrawModel(body);
+
+                    for (const auto& [file, slot] : { std::pair{ &type.mainHandModel, "handslot.r" }, std::pair{ &type.offHandModel, "handslot.l" } }) {
+                        if (file->empty()) continue;
+                        Systems::Rendering::ModelRenderData held{ modelOf(*file), position, enemy.facingYaw, type.modelScale, tint };
+                        held.transform = renderingSystem_.GetJointTransform(body.model, slot, body.animation);
+                        if (held.transform) renderingSystem_.DrawModel(held);
+                    }
+                    continue;
+                }
+
+                // Placeholder: a bone-colored body and skull, lying flat once dead
+                using Systems::Rendering::MeshRenderData;
+                using Systems::Rendering::MeshShape;
+                const bool dead = enemy.IsDead();
+                const float height = dead ? 0.2f : 0.9f;
+                const float flash = 1.0f - 0.65f * std::clamp(enemy.hitFlashSeconds / Encounter::HitFlashSeconds, 0.0f, 1.0f);
+                auto bone = shade(0.82f, 0.78f * flash, 0.66f * flash);
+                bone.a = tint.a;
+
+                MeshRenderData body{};
+                body.shape = MeshShape::Cylinder;
+                body.position = { position.x, height * 0.5f, position.z };
+                body.size = { Encounter::CharacterRadius * 1.6f, height, Encounter::CharacterRadius * 1.6f };
+                body.color = bone;
+                renderingSystem_.DrawMesh(body);
+                if (dead) continue;
+
+                MeshRenderData skull{};
+                skull.shape = MeshShape::Sphere;
+                skull.position = { position.x, height + 0.18f, position.z };
+                skull.size = { 0.4f, 0.4f, 0.4f };
+                skull.color = bone;
+                renderingSystem_.DrawMesh(skull);
+            }
+        }
+
+        /// <summary>
+        /// HUD: the player's health bar and hit points (bottom left), health bars over hurt enemies,
+        /// the wave (top center), and the floating combat texts
+        /// </summary>
+        void DrawHud() {
+            using Systems::Rendering::Color;
+            using Systems::Rendering::Rectangle;
+            const auto display = [](float r, float g, float b) {
+                return Color{ std::pow(r, 2.2f), std::pow(g, 2.2f), std::pow(b, 2.2f), 1.0f };
+            };
+            const auto bar = [&](std::int32_t x, std::int32_t y, std::int32_t width, std::int32_t height, float fraction, Color fill) {
+                renderingSystem_.DrawRectangle(Rectangle{ x - 2, y - 2, width + 4, height + 4 }, display(0.05f, 0.04f, 0.04f), 10);
+                renderingSystem_.DrawRectangle(Rectangle{ x, y, width, height }, display(0.22f, 0.06f, 0.06f), 11);
+                const auto filled = static_cast<std::int32_t>(std::lround(static_cast<float>(width) * std::clamp(fraction, 0.0f, 1.0f)));
+                if (filled > 0) renderingSystem_.DrawRectangle(Rectangle{ x, y, filled, height }, fill, 12);
+            };
+
+            std::int32_t screenWidth = 0;
+            std::int32_t screenHeight = 0;
+            renderingSystem_.GetScreenSize(screenWidth, screenHeight);
+
+            const auto label = [&](std::string text, std::int32_t x, std::int32_t y, float scale, Color color, std::int32_t layer) {
+                renderingSystem_.DrawText(Systems::Rendering::TextRenderData{ std::move(text), LB::Position{ x, y }, {}, color, scale, layer, true });
+            };
+
+            if (playerId_) {
+                if (const auto status = characterService_.GetCharacterStatus(*playerId_)) {
+                    bar(24, screenHeight - 44, 240, 18, static_cast<float>(status->healthPercentage()), display(0.80f, 0.14f, 0.12f));
+                    label(std::format("HP {}/{}", status->currentHitPoints, status->maxHitPoints), 30, screenHeight - 42, 2.0f, display(1.0f, 1.0f, 1.0f), 13);
+                }
+            }
+
+            for (const auto& enemy : encounter_.GetEnemies()) {
+                if (!enemy.IsTargetable() || enemy.hitPoints >= enemy.definition->hitPoints) continue;
+                float top = 1.4f;
+                if (models_.loaded) {
+                    const auto it = characterModels_.find(enemy.definition->model);
+                    if (it != characterModels_.end()) top = renderingSystem_.GetModel(it->second)->boundsMax.y * enemy.definition->modelScale + 0.1f;
+                }
+                const auto point = renderingSystem_.WorldToScreen({ enemy.position.x, top, enemy.position.y });
+                if (!point.inFront) continue;
+                const float fraction = static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.definition->hitPoints);
+                bar(static_cast<std::int32_t>(point.x) - 22, static_cast<std::int32_t>(point.y) - 8, 44, 5, fraction, display(0.85f, 0.20f, 0.15f));
+            }
+
+            if (encounter_.GetWave() > 0) {
+                const auto wave = std::format("WAVE {}", encounter_.GetWave());
+                const auto size = renderingSystem_.MeasureText(wave, 3.0f);
+                label(wave, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), 14, 3.0f, display(0.95f, 0.75f, 0.30f), 13);
+            }
+
+            // Combat texts: rise with an ease-out and fade over the last 40% of their life
+            for (const auto& floating : floatingTexts_) {
+                const float t = std::clamp(floating.ageSeconds / FloatingTextSeconds, 0.0f, 1.0f);
+                const float rise = FloatingTextRise * (1.0f - (1.0f - t) * (1.0f - t));
+                const auto point = renderingSystem_.WorldToScreen({ floating.position.x, floating.position.y + rise, floating.position.z });
+                if (!point.inFront) continue;
+                auto color = display(floating.color.r, floating.color.g, floating.color.b);
+                color.a = 1.0f - SmoothStep(0.6f, 1.0f, t);
+                const auto size = renderingSystem_.MeasureText(floating.text, floating.scale);
+                label(floating.text, static_cast<std::int32_t>(point.x - size.width / 2.0f), static_cast<std::int32_t>(point.y - size.height),
+                      floating.scale, color, 20);
+            }
         }
 
         void SetPaused(bool paused) {
@@ -934,6 +1479,19 @@ export namespace LB::Engine {
             RegisterKeyBinding(QuickLoadAction, Systems::Input::Keys::F9);
             RegisterKeyBinding(RotateCameraLeftAction, Systems::Input::Keys::FromChar('Q'));
             RegisterKeyBinding(RotateCameraRightAction, Systems::Input::Keys::FromChar('E'));
+
+            // Primary action (design-ui-ux-and-audio.md 4): left click, gamepad A; Space as well
+            RegisterKeyBinding(AttackAction, Systems::Input::Keys::Space);
+            Systems::Input::InputAction attackMouse{};
+            attackMouse.name = std::string(AttackAction);
+            attackMouse.deviceType = Systems::Input::InputDevice::Mouse;
+            attackMouse.mouseButton = Systems::Input::MouseButton::Left;
+            inputSystem_.RegisterAction(attackMouse);
+            Systems::Input::InputAction attackGamepad{};
+            attackGamepad.name = std::string(AttackAction);
+            attackGamepad.deviceType = Systems::Input::InputDevice::Gamepad;
+            attackGamepad.gamepadButton = Systems::Input::GamepadButton::A;
+            inputSystem_.RegisterAction(attackGamepad);
         }
 
         void OnDeviceLost() {
@@ -964,8 +1522,28 @@ export namespace LB::Engine {
             Systems::Rendering::ModelId wall{};
             Systems::Rendering::ModelId corner{};
             Systems::Rendering::ModelId player{};
+            Systems::Rendering::ModelId playerWeapon{};
         };
         WorldModels models_;
+        std::unordered_map<std::string, Systems::Rendering::ModelId> characterModels_;   // enemy bodies and weapons by file
+        EnemyClips enemyClips_{};
+
+        // The player's side of combat
+        struct PlayerCombat {
+            bool swinging{false};
+            float swingSeconds{0.0f};
+            bool impactDone{false};                // this swing's strike has been resolved
+            std::optional<std::uint32_t> target;   // enemy picked when the swing started
+            float hitFlashSeconds{0.0f};
+            float deadSeconds{0.0f};               // time spent down
+        };
+        PlayerCombat playerCombat_;
+        const Content::WeaponDefinition* playerWeapon_{nullptr};
+        Encounter encounter_;
+        std::vector<CombatEvent> combatEvents_;
+        std::vector<FloatingText> floatingTexts_;
+        std::uint32_t floatingTextCount_{0};
+        bool spawnEnemies_{true};
         std::vector<WallPiece> walls_;
         WorldPoint previousRightStick_{};         // for right stick flick detection
         StepTimer timer_;

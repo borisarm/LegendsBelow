@@ -23,6 +23,7 @@
     "ms-gdk",
     "nlohmann-json",
     "proxy",
+    "stb",
     "winpixevent"
   ]
 }

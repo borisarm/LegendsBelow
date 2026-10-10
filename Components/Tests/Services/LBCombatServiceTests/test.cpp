@@ -1,7 +1,9 @@
 #include "gtest/gtest.h"
 
 
+import LB.Core;
 import LB.CombatService;
+import std;
 
 
 using namespace LB::Services::Combat;
@@ -477,4 +479,141 @@ TEST(CombatServiceTests, GetCriticalHitThreshold_StandardClass_NormalThreshold) 
     int32_t threshold = service.GetCriticalHitThreshold(CharacterClass::Mage);
 
     EXPECT_EQ(threshold, 20); // Standard classes crit only on natural 20
+}
+// ============================================================================
+// Weapon Attack Tests (design-combat-system.md 4.1-4.3, 5.2)
+// ============================================================================
+
+namespace {
+    WeaponAttackProfile Sword(int32_t attackBonus = 5) {
+        return WeaponAttackProfile{ attackBonus, LB::Dice{1, 6, 0}, 3, DamageType::Slashing, 20, 1.5f };
+    }
+}
+
+TEST(WeaponAttackTests, RollDice_StaysInRange) {
+    CombatService service{TestSeed};
+    const LB::Dice dice{3, 6, 2};
+
+    std::set<int32_t> seen;
+    for (int i = 0; i < 2000; ++i) {
+        const int32_t roll = service.RollDice(dice);
+        ASSERT_GE(roll, dice.GetMinRoll());
+        ASSERT_LE(roll, dice.GetMaxRoll());
+        seen.insert(roll);
+    }
+    EXPECT_EQ(seen.size(), 16u);   // every total from 5 to 20 comes up
+}
+
+TEST(WeaponAttackTests, ApplyDefenses_ArmourThenResistance) {
+    DefenseProfile target{ 10, 2, { { DamageType::Slashing, 0.5f } } };
+
+    EXPECT_EQ(CombatService::ApplyDefenses(10, DamageType::Slashing, target), 4);   // (10 - 2) x 0.5
+}
+
+TEST(WeaponAttackTests, ApplyDefenses_ArmourOnlyStopsPhysicalDamage) {
+    DefenseProfile target{ 10, 5, {} };
+
+    EXPECT_EQ(CombatService::ApplyDefenses(4, DamageType::Bludgeoning, target), 0);
+    EXPECT_EQ(CombatService::ApplyDefenses(4, DamageType::Fire, target), 4);
+}
+
+TEST(WeaponAttackTests, ApplyDefenses_VulnerabilityAddsDamage) {
+    DefenseProfile target{ 10, 0, { { DamageType::Bludgeoning, -0.5f } } };
+
+    EXPECT_EQ(CombatService::ApplyDefenses(6, DamageType::Bludgeoning, target), 9);
+}
+
+TEST(WeaponAttackTests, ApplyDefenses_AtLeastOneUnlessImmune) {
+    DefenseProfile resistant{ 10, 0, { { DamageType::Piercing, 0.9f } } };
+    DefenseProfile immune{ 10, 0, { { DamageType::Piercing, 1.0f } } };
+
+    EXPECT_EQ(CombatService::ApplyDefenses(2, DamageType::Piercing, resistant), 1);
+    EXPECT_EQ(CombatService::ApplyDefenses(20, DamageType::Piercing, immune), 0);
+    EXPECT_EQ(CombatService::ApplyDefenses(0, DamageType::Piercing, resistant), 0);
+}
+
+TEST(WeaponAttackTests, NaturalOne_AlwaysMisses) {
+    CombatService service{TestSeed};
+    const DefenseProfile target{ 1, 0, {} };
+
+    int misses = 0;
+    for (int i = 0; i < 2000; ++i) {
+        const auto result = service.ResolveWeaponAttack(Sword(100), target);
+        if (!result.hit) {
+            ++misses;
+            EXPECT_EQ(result.naturalRoll, 1);
+            EXPECT_EQ(result.finalDamage, 0);
+        }
+    }
+    EXPECT_GT(misses, 50);    // about 5%
+    EXPECT_LT(misses, 160);
+}
+
+TEST(WeaponAttackTests, NaturalTwenty_AlwaysHitsAndCrits) {
+    CombatService service{TestSeed};
+    const DefenseProfile target{ 100, 0, {} };
+
+    int hits = 0;
+    for (int i = 0; i < 2000; ++i) {
+        const auto result = service.ResolveWeaponAttack(Sword(0), target);
+        if (result.hit) {
+            ++hits;
+            EXPECT_EQ(result.naturalRoll, 20);
+            EXPECT_TRUE(result.critical);
+        }
+    }
+    EXPECT_GT(hits, 50);
+    EXPECT_LT(hits, 160);
+}
+
+TEST(WeaponAttackTests, Hit_DamageIsDicePlusBonusAfterDefenses) {
+    CombatService service{TestSeed};
+    const DefenseProfile target{ 10, 1, {} };
+    auto attack = Sword(10);
+    attack.critRangeMin = 21;   // no crits for this test (clamped to 20: natural 20 still crits)
+
+    for (int i = 0; i < 500; ++i) {
+        const auto result = service.ResolveWeaponAttack(attack, target);
+        if (!result.hit) continue;
+        EXPECT_EQ(result.totalRoll, result.naturalRoll + 10);
+        if (result.critical) {
+            EXPECT_EQ(result.naturalRoll, 20);
+            continue;
+        }
+        EXPECT_GE(result.rawDamage, 4);    // 1d6 + 3
+        EXPECT_LE(result.rawDamage, 9);
+        EXPECT_EQ(result.finalDamage, result.rawDamage - 1);
+    }
+}
+
+TEST(WeaponAttackTests, CritRange_ExpandsCriticals) {
+    CombatService service{TestSeed};
+    const DefenseProfile target{ 2, 0, {} };
+    auto attack = Sword(10);
+    attack.critRangeMin = 15;   // 15-20: 30% of rolls
+
+    int criticals = 0;
+    for (int i = 0; i < 2000; ++i) {
+        const auto result = service.ResolveWeaponAttack(attack, target);
+        if (result.critical) {
+            ++criticals;
+            EXPECT_GE(result.naturalRoll, 15);
+            EXPECT_GE(result.rawDamage, 6);   // (1d6 + 3) x 1.5, rounded
+        }
+    }
+    EXPECT_GT(criticals, 500);
+    EXPECT_LT(criticals, 700);
+}
+
+TEST(WeaponAttackTests, SameSeed_SameResults) {
+    CombatService a{TestSeed};
+    CombatService b{TestSeed};
+    const DefenseProfile target{ 12, 0, {} };
+
+    for (int i = 0; i < 50; ++i) {
+        const auto ra = a.ResolveWeaponAttack(Sword(), target);
+        const auto rb = b.ResolveWeaponAttack(Sword(), target);
+        EXPECT_EQ(ra.naturalRoll, rb.naturalRoll);
+        EXPECT_EQ(ra.finalDamage, rb.finalDamage);
+    }
 }

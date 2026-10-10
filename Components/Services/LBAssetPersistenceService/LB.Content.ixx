@@ -174,6 +174,50 @@ export namespace LB::Content {
     };
 
     /// <summary>
+    /// Enemy stat block (Assets/Data/enemies.json, design-combat-system.md): how tough it is, its
+    /// basic attack, how it moves, and the models it is drawn with
+    /// </summary>
+    struct EnemyDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "enemy_skeleton_minion"
+        String name;
+        int32_t level{1};
+        int32_t hitPoints{1};
+        int32_t armorClass{10};                       // d20 attack rolls must reach this to hit
+        int32_t physicalArmor{0};                     // flat reduction of physical damage (5.2)
+        std::map<DamageType, float> resistances;      // fraction removed (0.25), negative: vulnerable
+        int32_t experience{0};
+
+        // Basic attack (a melee weapon profile)
+        int32_t attackBonus{0};
+        LB::Dice damageDice{};
+        int32_t damageBonus{0};
+        DamageType damageType{DamageType::Slashing};
+        int32_t critRangeMin{20};
+        float critMultiplier{1.5f};
+        float attackTimeSeconds{1.0f};                // wind-up and swing
+        float attackRecoverySeconds{0.0f};            // pause before the next attack
+        float attackRange{1.0f};                      // tiles between centers
+        String attackAnimation;                       // clip played for the attack (empty: a generic one)
+        float attackImpactFraction{0.45f};            // when the hit lands, as a fraction of attackTimeSeconds
+
+        // Movement and awareness
+        float movementSpeed{3.0f};                    // tiles per second
+        float aggroRange{8.0f};                       // tiles; notices the player within this distance
+
+        // Presentation: model files (in the model directory) and scale
+        String model;                                 // skinned glTF on the KayKit Rig_Medium
+        String mainHandModel;                         // optional, held at the right hand slot
+        String offHandModel;                          // optional, held at the left hand slot
+        float modelScale{0.5f};
+
+        [[nodiscard]] float GetResistance(DamageType type) const {
+            auto it = resistances.find(type);
+            return it != resistances.end() ? it->second : 0.0f;
+        }
+    };
+
+    /// <summary>
     /// Outcome of loading content: every problem found, so data authors can fix them in one pass
     /// </summary>
     struct ContentLoadResult {
@@ -188,8 +232,8 @@ export namespace LB::Content {
     class ContentDatabase {
     public:
         /// <summary>
-        /// Load spells.json, weapons.json, armour.json and classes.json from a directory
-        /// (UTF-8 path). On any error the database is left empty and every error is reported.
+        /// Load spells.json, weapons.json, armour.json, classes.json and enemies.json from a
+        /// directory (UTF-8 path). On any error the database is left empty and every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
 
@@ -199,23 +243,25 @@ export namespace LB::Content {
         /// otherwise every character class must be defined and items/spells must agree with them.
         /// </summary>
         ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
-                                       const String& classesJson = "[]");
+                                       const String& classesJson = "[]", const String& enemiesJson = "[]");
 
         void Clear() {
             spells_.clear();
             weapons_.clear();
             armour_.clear();
             classes_.clear();
+            enemies_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
-            return spells_.empty() && weapons_.empty() && armour_.empty() && classes_.empty();
+            return spells_.empty() && weapons_.empty() && armour_.empty() && classes_.empty() && enemies_.empty();
         }
 
         [[nodiscard]] const std::vector<SpellDefinition>& GetSpells() const noexcept { return spells_; }
         [[nodiscard]] const std::vector<WeaponDefinition>& GetWeapons() const noexcept { return weapons_; }
         [[nodiscard]] const std::vector<ArmorDefinition>& GetArmour() const noexcept { return armour_; }
         [[nodiscard]] const std::vector<ClassDefinition>& GetClasses() const noexcept { return classes_; }
+        [[nodiscard]] const std::vector<EnemyDefinition>& GetEnemies() const noexcept { return enemies_; }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
         [[nodiscard]] const SpellDefinition* FindSpell(std::string_view key) const { return FindByKey(spells_, key); }
@@ -224,6 +270,8 @@ export namespace LB::Content {
         [[nodiscard]] const ArmorDefinition* FindArmor(ContentId id) const { return FindById(armour_, id); }
         [[nodiscard]] const ArmorDefinition* FindArmor(std::string_view key) const { return FindByKey(armour_, key); }
         [[nodiscard]] const ClassDefinition* FindClass(std::string_view key) const { return FindByKey(classes_, key); }
+        [[nodiscard]] const EnemyDefinition* FindEnemy(ContentId id) const { return FindById(enemies_, id); }
+        [[nodiscard]] const EnemyDefinition* FindEnemy(std::string_view key) const { return FindByKey(enemies_, key); }
         [[nodiscard]] const ClassDefinition* FindClass(CharacterClass characterClass) const {
             auto it = std::ranges::find(classes_, characterClass, &ClassDefinition::characterClass);
             return it != classes_.end() ? &*it : nullptr;
@@ -269,6 +317,7 @@ export namespace LB::Content {
         std::vector<WeaponDefinition> weapons_;
         std::vector<ArmorDefinition> armour_;
         std::vector<ClassDefinition> classes_;
+        std::vector<EnemyDefinition> enemies_;
     };
 
 } // namespace LB::Content

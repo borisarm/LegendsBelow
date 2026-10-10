@@ -310,6 +310,27 @@ export namespace LB::Systems::Input {
         }
 
         /// <summary>
+        /// Check if any key or button bound to a registered action is held down
+        /// </summary>
+        bool IsActionDown(const String& actionName) const {
+            auto it = actions_.find(actionName);
+            if (it == actions_.end()) return false;
+
+            return std::ranges::any_of(it->second, [this](const InputAction& action) {
+                switch (action.deviceType) {
+                    case InputDevice::Keyboard:
+                        return IsKeyDown(action.keyCode);
+                    case InputDevice::Mouse:
+                        return IsMouseButtonDown(action.mouseButton);
+                    case InputDevice::Gamepad:
+                        return IsGamepadButtonDown(action.gamepadButton);
+                    default:
+                        return false;
+                }
+            });
+        }
+
+        /// <summary>
         /// Set key state (host input events, tests, or external input injection)
         /// </summary>
         void SetKeyState(int32_t keyCode, KeyState state) {

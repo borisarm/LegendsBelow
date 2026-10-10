@@ -310,7 +310,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 4u) << ErrorsOf(result);  // spells, weapons, armour, classes
+    EXPECT_EQ(result.errors.size(), 5u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -588,4 +588,135 @@ TEST(ClassValidationTests, BadStartingAttributes_Rejected) {
     auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses(warrior));
 
     EXPECT_TRUE(AnyErrorContains(result, "'startingAttributes' values must be in [1, 30]")) << ErrorsOf(result);
+}
+
+// ============================================================================
+// Enemy Tests (enemies.json)
+// ============================================================================
+
+namespace {
+    constexpr const char* ValidEnemy = R"({"id":"enemy_a","name":"E","hitPoints":5,"armorClass":11,"attackBonus":2,"damageDice":"1d4","damageType":"Slashing","attackTimeSeconds":1.0,"attackRange":1.0,"movementSpeed":2.0,"model":"E.glb"})";
+
+    // ValidEnemy with one field replaced or added ("field":value)
+    std::string EnemyWith(std::string_view field, std::string_view value) {
+        std::string enemy = ValidEnemy;
+        const auto key = std::format("\"{}\":", field);
+        const auto at = enemy.find(key);
+        if (at == std::string::npos) {
+            enemy.insert(enemy.size() - 1, std::format(",{}{}", key, value));
+            return enemy;
+        }
+        const auto start = at + key.size();
+        auto end = start;
+        int depth = 0;
+        for (; end < enemy.size(); ++end) {
+            const char c = enemy[end];
+            if (c == '{' || c == '[') ++depth;
+            if (c == '}' || c == ']') { if (depth == 0) break; --depth; }
+            if (c == ',' && depth == 0) break;
+        }
+        enemy.replace(start, end - start, value);
+        return enemy;
+    }
+
+    ContentLoadResult LoadEnemies(ContentDatabase& content, const std::string& enemies) {
+        return content.LoadFromJson("[]", "[]", "[]", "[]", enemies);
+    }
+}
+
+TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
+    ASSERT_EQ(content_.GetEnemies().size(), 2u);
+
+    const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
+    ASSERT_NE(minion, nullptr);
+    EXPECT_EQ(minion->model, "Skeleton_Minion.glb");
+    EXPECT_EQ(minion->mainHandModel, "Skeleton_Blade.gltf");
+    EXPECT_EQ(minion->damageDice.sides, 4);
+    EXPECT_FLOAT_EQ(minion->GetResistance(DamageType::Piercing), 0.5f);
+    EXPECT_LT(minion->GetResistance(DamageType::Bludgeoning), 0.0f);   // bones break
+
+    const auto* warrior = content_.FindEnemy("enemy_skeleton_warrior");
+    ASSERT_NE(warrior, nullptr);
+    EXPECT_GT(warrior->hitPoints, minion->hitPoints);
+    EXPECT_GT(warrior->armorClass, minion->armorClass);
+    EXPECT_EQ(warrior->offHandModel, "Skeleton_Shield_Large_A.gltf");
+
+    // Attack clips from the KayKit CombatMelee set, with their strike moments
+    EXPECT_EQ(minion->attackAnimation, "Melee_1H_Attack_Slice_Diagonal");
+    EXPECT_EQ(warrior->attackAnimation, "Melee_1H_Attack_Chop");
+    EXPECT_GT(warrior->attackImpactFraction, minion->attackImpactFraction);
+}
+
+TEST(EnemyValidationTests, ValidEnemy_LoadsWithDefaults) {
+    ContentDatabase content;
+
+    auto result = LoadEnemies(content, Array(ValidEnemy));
+
+    ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
+    const auto* enemy = content.FindEnemy("enemy_a");
+    ASSERT_NE(enemy, nullptr);
+    EXPECT_EQ(content.FindEnemy(enemy->id), enemy);
+    EXPECT_EQ(enemy->hitPoints, 5);
+    EXPECT_EQ(enemy->damageType, DamageType::Slashing);
+    EXPECT_EQ(enemy->level, 1);
+    EXPECT_EQ(enemy->critRangeMin, 20);
+    EXPECT_FLOAT_EQ(enemy->critMultiplier, 1.5f);
+    EXPECT_FLOAT_EQ(enemy->modelScale, 0.5f);
+    EXPECT_FLOAT_EQ(enemy->GetResistance(DamageType::Fire), 0.0f);
+    EXPECT_TRUE(enemy->mainHandModel.empty());
+    EXPECT_TRUE(enemy->attackAnimation.empty());
+    EXPECT_FLOAT_EQ(enemy->attackImpactFraction, 0.45f);
+}
+
+TEST(EnemyValidationTests, Resistances_ReadAsFractions) {
+    ContentDatabase content;
+
+    auto result = LoadEnemies(content, Array(EnemyWith("resistances", R"({"Piercing":0.5,"Radiant":-0.5})")));
+
+    ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
+    const auto* enemy = content.FindEnemy("enemy_a");
+    EXPECT_FLOAT_EQ(enemy->GetResistance(DamageType::Piercing), 0.5f);
+    EXPECT_FLOAT_EQ(enemy->GetResistance(DamageType::Holy), -0.5f);
+}
+
+TEST(EnemyValidationTests, BadValues_AllReported) {
+    ContentDatabase content;
+
+    auto bad = LoadEnemies(content, Array(EnemyWith("attackTimeSeconds", "0")));
+    EXPECT_TRUE(AnyErrorContains(bad, "'attackTimeSeconds' must be positive")) << ErrorsOf(bad);
+
+    bad = LoadEnemies(content, Array(EnemyWith("movementSpeed", "-1")));
+    EXPECT_TRUE(AnyErrorContains(bad, "'movementSpeed' must be positive")) << ErrorsOf(bad);
+
+    bad = LoadEnemies(content, Array(EnemyWith("resistances", R"({"Fire":1.5,"Mud":0.1})")));
+    EXPECT_TRUE(AnyErrorContains(bad, "'resistances' value for 'Fire' must be in [-1, 1]")) << ErrorsOf(bad);
+    EXPECT_TRUE(AnyErrorContains(bad, "'resistances' has unknown value 'Mud'")) << ErrorsOf(bad);
+
+    bad = LoadEnemies(content, Array(EnemyWith("attackImpactFraction", "1.0")));
+    EXPECT_TRUE(AnyErrorContains(bad, "'attackImpactFraction' must be between 0 and 1")) << ErrorsOf(bad);
+
+    bad = LoadEnemies(content, Array(EnemyWith("damageDice", R"("lots")")));
+    EXPECT_TRUE(AnyErrorContains(bad, "'damageDice' has invalid dice 'lots'")) << ErrorsOf(bad);
+
+    bad = LoadEnemies(content, Array(EnemyWith("hitPoints", "0")));
+    EXPECT_TRUE(AnyErrorContains(bad, "enemies.json: entry 1 (enemy_a): 'hitPoints' must be at least 1")) << ErrorsOf(bad);
+    EXPECT_TRUE(content.IsEmpty());
+}
+
+TEST(EnemyValidationTests, MissingModel_Rejected) {
+    ContentDatabase content;
+    std::string enemy = ValidEnemy;
+    enemy.erase(enemy.find(R"(,"model":"E.glb")"), std::string_view(R"(,"model":"E.glb")").size());
+
+    auto result = LoadEnemies(content, Array(enemy));
+
+    EXPECT_TRUE(AnyErrorContains(result, "missing required field 'model'")) << ErrorsOf(result);
+}
+
+TEST(EnemyValidationTests, DuplicateIds_Rejected) {
+    ContentDatabase content;
+
+    auto result = LoadEnemies(content, "[" + std::string(ValidEnemy) + "," + ValidEnemy + "]");
+
+    EXPECT_TRUE(AnyErrorContains(result, "duplicate id 'enemy_a'")) << ErrorsOf(result);
 }

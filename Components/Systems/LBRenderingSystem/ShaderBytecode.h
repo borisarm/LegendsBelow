@@ -6,5 +6,8 @@
 namespace LBShaders
 {
     const unsigned char* ModelInstancedVS(std::size_t& size) noexcept;
+    const unsigned char* ModelSkinnedVS(std::size_t& size) noexcept;
     const unsigned char* ModelInstancedPS(std::size_t& size) noexcept;
+    const unsigned char* OverlayVS(std::size_t& size) noexcept;
+    const unsigned char* OverlayPS(std::size_t& size) noexcept;
 }

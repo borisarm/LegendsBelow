@@ -3,6 +3,9 @@ export module LB.RenderingSystem;
 
 export import :Camera;
 export import :Model;
+export import :Animation;
+export import :BitmapFont;
+export import :Font;
 import LB.Core;
 import std;
 
@@ -100,7 +103,7 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
-    /// A loaded model placed in the world
+    /// A loaded model placed in the world: transform (if any), then scale, a turn around Y, and a move
     /// </summary>
     struct ModelRenderData {
         ModelId model{InvalidModelId};
@@ -108,6 +111,9 @@ export namespace LB::Systems::Rendering {
         float yawRadians{0.0f};                // rotation around the vertical axis (0: model +Z faces +Z)
         float scale{1.0f};                     // uniform
         Color tint{Color::White()};            // multiplies the material colors
+        std::optional<Matrix4> transform;      // model space, before the placement (e.g. a sword in a hand)
+        AnimationState animation;              // skinned models: the pose (no clip: rest pose)
+        std::vector<PartPose> partPoses;       // rigid models: parts posed around their origin
     };
 
     /// <summary>
@@ -121,15 +127,38 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
-    /// Text render data
+    /// Outcome of RenderingSystem::LoadAnimations: the file's clips, in file order
+    /// </summary>
+    struct AnimationLoadResult {
+        std::vector<AnimationId> clips;
+        String error;                          // why loading failed (empty on success)
+
+        [[nodiscard]] bool Succeeded() const noexcept { return error.empty() && !clips.empty(); }
+    };
+
+    /// <summary>
+    /// A line of overlay text (UTF-8), drawn after the world. Capital letters are 7 x `scale` pixels
+    /// tall in every font, so the built-in pixel font (each font pixel `scale` screen pixels) and
+    /// loaded TrueType fonts line up.
     /// </summary>
     struct TextRenderData {
         String text;
-        Position position{0, 0};
-        String fontId;
-        Color color{Color::White()};
+        Position position{0, 0};               // top-left corner (top of the capitals), pixels
+        String fontId;                         // a loaded font's name; empty: the default font; "pixel": the pixel font
+        Color color{Color::White()};           // linear, straight alpha
         float scale{1.0f};
-        int32_t layerDepth{0};
+        int32_t layerDepth{0};                 // overlay order, shared with rectangles
+        bool outline{false};                   // a dark outline, for text over the world
+    };
+
+    /// <summary>
+    /// Outcome of RenderingSystem::LoadFont
+    /// </summary>
+    struct FontLoadResult {
+        FontId id{PixelFontId};
+        String error;                          // why loading failed (empty on success)
+
+        [[nodiscard]] bool Succeeded() const noexcept { return id != PixelFontId; }
     };
 
     /// <summary>
@@ -296,9 +325,40 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
+        /// Load every animation clip of a glTF file (e.g. a KayKit Rig_Medium animation set). Clips
+        /// drive joints by name, so they play on any skinned model with the same joint names.
+        /// Loading the same file twice returns the same clips.
+        /// </summary>
+        AnimationLoadResult LoadAnimations(const std::filesystem::path& path);
+
+        /// <summary>
+        /// A loaded clip by handle, or null
+        /// </summary>
+        [[nodiscard]] const AnimationClip* GetAnimation(AnimationId id) const noexcept {
+            return id != InvalidAnimationId && id <= animations_.size() ? animations_[id - 1].get() : nullptr;
+        }
+
+        /// <summary>
+        /// A loaded clip by name (the first one loaded with that name)
+        /// </summary>
+        [[nodiscard]] std::optional<AnimationId> FindAnimation(std::string_view name) const noexcept {
+            for (std::size_t i = 0; i < animations_.size(); ++i) {
+                if (animations_[i]->name == name) return static_cast<AnimationId>(i + 1);
+            }
+            return std::nullopt;
+        }
+
+        /// <summary>
+        /// Model-space transform of a skinned model's joint in a pose (e.g. "handslot.r", to put a
+        /// weapon in the hand). Null for unknown models or joints.
+        /// </summary>
+        [[nodiscard]] std::optional<Matrix4> GetJointTransform(ModelId model, std::string_view joint, const AnimationState& animation) const;
+
+        /// <summary>
         /// Queue a loaded model for the world pass (unknown handles are ignored). Copies of the
         /// same model are drawn together, one instanced draw per part; a tint alpha below 1 draws
         /// the copy see-through (after the opaque world, showing only its nearest surface).
+        /// Skinned models are posed by their animation state.
         /// </summary>
         void DrawModel(const ModelRenderData& model) {
             if (!initialized_ || !GetModel(model.model)) return;
@@ -320,7 +380,7 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
-        /// Queue text for rendering
+        /// Queue overlay text (drawn with the rectangles, back to front by layer)
         /// </summary>
         void DrawText(const TextRenderData& text) {
             if (!initialized_) return;
@@ -328,7 +388,46 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
-        /// Draw a filled screen-space rectangle on the 2D overlay (above the 3D world)
+        /// Text queued this frame (in submission order)
+        /// </summary>
+        const std::vector<TextRenderData>& GetQueuedText() const {
+            return textQueue_;
+        }
+
+        /// <summary>
+        /// Size of a line of text in pixels at a scale, in a font (empty: the default font)
+        /// </summary>
+        [[nodiscard]] TextSize MeasureText(std::string_view text, float scale, std::string_view font = {}) const;
+
+        /// <summary>
+        /// Load a TrueType font (.ttf), baked to a distance field atlas at FontBakeSize. The first
+        /// font loaded becomes the default for text. Works headless too (layout and measuring);
+        /// loading the same file twice returns the same font.
+        /// </summary>
+        FontLoadResult LoadFont(const std::filesystem::path& path);
+
+        /// <summary>
+        /// A loaded font by handle, or null (the pixel font has no FontData)
+        /// </summary>
+        [[nodiscard]] const FontData* GetFont(FontId id) const noexcept {
+            return id != PixelFontId && id <= fonts_.size() ? fonts_[id - 1].get() : nullptr;
+        }
+
+        /// <summary>
+        /// A loaded font by name (file name without extension)
+        /// </summary>
+        [[nodiscard]] std::optional<FontId> FindFont(std::string_view name) const noexcept {
+            for (std::size_t i = 0; i < fonts_.size(); ++i) {
+                if (fonts_[i]->name == name) return static_cast<FontId>(i + 1);
+            }
+            return std::nullopt;
+        }
+
+        // Glyphs are baked at this pixel height; larger text stays sharp through the distance field
+        static constexpr float FontBakeSize = 48.0f;
+
+        /// <summary>
+        /// Draw a filled screen-space rectangle on the 2D overlay (above the 3D world; alpha blends)
         /// </summary>
         void DrawRectangle(const Rectangle& rect, const Color& color, int32_t layerDepth = 0) {
             if (!initialized_) return;
@@ -422,6 +521,24 @@ export namespace LB::Systems::Rendering {
         std::vector<std::vector<ModelInstance>> fadedInstances_;
         std::vector<std::shared_ptr<const ModelData>> models_;   // ModelId - 1
         std::vector<std::filesystem::path> modelPaths_;          // canonical source of each model
+        std::vector<std::shared_ptr<const AnimationClip>> animations_;   // AnimationId - 1
+        std::vector<std::pair<std::filesystem::path, std::vector<AnimationId>>> animationFiles_;
+        std::unordered_map<std::uint64_t, std::shared_ptr<const ModelTexture>> textureCache_;   // by image content
+        std::vector<Matrix4> skinPalette_;                       // this frame's joint matrices, world space
+        std::vector<std::shared_ptr<const FontData>> fonts_;     // FontId - 1
+        std::vector<std::filesystem::path> fontPaths_;
+
+        // The font a text item names: null for the pixel font (also when no font is loaded)
+        [[nodiscard]] const FontData* ResolveFont(std::string_view name) const noexcept {
+            if (name == "pixel") return nullptr;
+            if (!name.empty()) {
+                if (const auto id = FindFont(name)) return GetFont(*id);
+            }
+            return fonts_.empty() ? nullptr : fonts_.front().get();
+        }
+
+        // Pose of a skinned model in world space: one matrix per joint appended to skinPalette_
+        std::uint32_t AppendSkinPalette(const ModelData& model, const AnimationState& animation, const Matrix4& world);
         CameraView cameraView_{};
         RenderStats stats_{};
 
@@ -432,9 +549,8 @@ export namespace LB::Systems::Rendering {
                     return a.layerDepth < b.layerDepth;
                 });
 
-            // TODO: Batch and render sprites
+            // Textured sprites are not drawn yet; rectangles queue a sprite each and are drawn by the overlay
             stats_.spritesRendered = static_cast<uint32_t>(spriteQueue_.size());
-            stats_.drawCalls += stats_.spritesRendered > 0 ? 1 : 0;
         }
 
         void RenderText() {
@@ -444,9 +560,10 @@ export namespace LB::Systems::Rendering {
                     return a.layerDepth < b.layerDepth;
                 });
 
-            // TODO: Render text
             stats_.textRendered = static_cast<uint32_t>(textQueue_.size());
-            stats_.drawCalls += stats_.textRendered > 0 ? 1 : 0;
+
+            // The overlay (rectangles, text, and sprites) is one draw
+            stats_.drawCalls += !spriteQueue_.empty() || !textQueue_.empty() ? 1 : 0;
         }
     };
 
@@ -463,7 +580,38 @@ namespace LB::Systems::Rendering::Detail {
     };
 
     /// <summary>
+    /// Result of reading the animations of a glTF file
+    /// </summary>
+    struct GltfAnimationsResult {
+        std::vector<AnimationClip> clips;
+        std::string error;   // empty on success
+    };
+
+    /// <summary>
+    /// Decoded images by a hash of their encoded bytes, so models using the same image file share it
+    /// </summary>
+    using TextureCache = std::unordered_map<std::uint64_t, std::shared_ptr<const ModelTexture>>;
+
+    /// <summary>
+    /// Result of baking a TrueType font
+    /// </summary>
+    struct TrueTypeLoadResult {
+        FontData font;
+        std::string error;   // empty on success
+    };
+
+    /// <summary>
+    /// Bake a .ttf file to a distance field atlas (FontLoader.cpp, stb_truetype)
+    /// </summary>
+    TrueTypeLoadResult LoadTrueTypeFont(const std::filesystem::path& path, float bakeSize);
+
+    /// <summary>
     /// Read a .gltf or .glb file (GltfLoader.cpp, fastgltf)
     /// </summary>
-    GltfLoadResult LoadGltfModel(const std::filesystem::path& path);
+    GltfLoadResult LoadGltfModel(const std::filesystem::path& path, TextureCache& textureCache);
+
+    /// <summary>
+    /// Read the animations of a .gltf or .glb file (GltfLoader.cpp, fastgltf)
+    /// </summary>
+    GltfAnimationsResult LoadGltfAnimations(const std::filesystem::path& path);
 }

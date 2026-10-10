@@ -1,6 +1,10 @@
 #include "pch.h"
 
 import LB.Engine;
+import LB.Core;
+import LB.Combat;
+import LB.Content;
+import LB.CombatService;
 import std;
 
 using namespace LB::Engine;
@@ -754,9 +758,10 @@ namespace {
         }
     }
 
-    // The player is created from class data, so movement tests load the shipped content
+    // The player is created from class data, so movement tests load the shipped content. They
+    // test the player and the arena, so no enemies come.
     void InitializeWithContent(GameEngine& engine) {
-        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory() }))
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false }))
             << engine.GetInitializationError();
     }
 
@@ -1086,6 +1091,7 @@ TEST(GameEngineContentTests, InvalidContent_FailsWithAllErrors) {
     std::ofstream(dir.path / "weapons.json") << "[{";
     std::ofstream(dir.path / "armour.json") << "[]";
     std::ofstream(dir.path / "classes.json") << "[]";
+    std::ofstream(dir.path / "enemies.json") << "[]";
     GameEngine engine;
 
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() }));
@@ -1130,7 +1136,7 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
     TempSaveDir dir;
     std::filesystem::create_directories(dir.path);
     const std::filesystem::path source(std::u8string(shipped->begin(), shipped->end()));
-    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json" }) {
+    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json" }) {
         std::filesystem::copy_file(source / file, dir.path / file);
     }
 
@@ -1146,7 +1152,7 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
     std::ofstream(dir.path / "classes.json", std::ios::binary | std::ios::trunc) << classes;
 
     GameEngine engine;
-    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() })) << engine.GetInitializationError();
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8(), .spawnEnemies = false })) << engine.GetInitializationError();
     HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
 
     const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
@@ -1373,9 +1379,10 @@ namespace {
         return std::string(text.begin(), text.end());
     }
 
+    // Arena and player only (no enemies)
     void InitializeWithModels(GameEngine& engine) {
         ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
-            .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory() }))
+            .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory(), .spawnEnemies = false }))
             << engine.GetInitializationError();
     }
 
@@ -1485,9 +1492,12 @@ TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
 
     EXPECT_FALSE(ok);
     const auto& error = engine.GetInitializationError();
-    EXPECT_NE(error.find("5 problems"), std::string::npos) << error;
+    // Arena (4), knight and sword (2), enemy bodies and weapons (5), animation sets (3)
+    EXPECT_NE(error.find("14 problems"), std::string::npos) << error;
     EXPECT_NE(error.find("wall.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("character_knight.gltf"), std::string::npos) << error;
+    EXPECT_NE(error.find("Skeleton_Minion.glb"), std::string::npos) << error;
+    EXPECT_NE(error.find("Rig_Medium_General.glb"), std::string::npos) << error;
     std::filesystem::remove_all(empty);
 }
 
@@ -1611,14 +1621,15 @@ TEST(GameEngineBatchingTests, Arena_FewDrawCalls) {
 
     engine.Tick(OneSixtieth);
 
-    // One instanced draw per part of each model: floor tiles (2 models), wall, pillar, knight
+    // One instanced draw per part of each model: floor tiles (2 models), wall, pillar, knight, sword
     std::size_t expected = 0;
-    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight" }) {
+    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight", "sword_common" }) {
         expected += ModelNamed(engine, name).parts.size();
     }
+    expected += 1;                         // the HUD's overlay batch
     const auto& stats = engine.GetRendering().GetStats();
     EXPECT_EQ(stats.drawCalls, expected);
-    EXPECT_LT(stats.drawCalls, 30u);       // was one draw per part per copy: several hundred
+    EXPECT_LT(stats.drawCalls, 35u);       // was one draw per part per copy: several hundred
     EXPECT_GT(stats.modelsRendered, 300u);  // every tile and wall piece still drawn
 }
 
@@ -1632,14 +1643,818 @@ TEST(GameEngineBatchingTests, FadedWalls_TwoExtraPassesPerPart) {
     const auto& rendering = engine.GetRendering();
     const auto wallParts = ModelNamed(engine, "wall").parts.size();
     std::size_t expected = 0;
-    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight" }) {
+    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight", "sword_common" }) {
         expected += ModelNamed(engine, name).parts.size();
     }
     bool pillarFaded = false;
     for (const auto& draw : rendering.GetQueuedModels()) {
         if (rendering.GetModel(draw.model)->name == "pillar" && draw.tint.a < 1.0f) pillarFaded = true;
     }
+    expected += 1;                         // the HUD's overlay batch
     expected += 2 * wallParts;
     if (pillarFaded) expected += 2 * ModelNamed(engine, "pillar").parts.size();
     EXPECT_EQ(rendering.GetStats().drawCalls, expected);
+}
+
+// ============================================================================
+// Animator Tests
+// ============================================================================
+
+TEST(AnimatorTests, FirstClip_StartsWithoutFade) {
+    Animator animator;
+
+    animator.Play(5, true);
+
+    EXPECT_EQ(animator.GetState().current.clip, 5u);
+    EXPECT_FLOAT_EQ(animator.GetState().blend, 1.0f);
+    EXPECT_EQ(animator.GetState().previous.clip, LB::Systems::Rendering::InvalidAnimationId);
+}
+
+TEST(AnimatorTests, SwitchingClips_CrossFades) {
+    Animator animator;
+    animator.Play(5, true);
+    animator.Update(0.5f);
+
+    animator.Play(6, false);
+    EXPECT_EQ(animator.GetState().previous.clip, 5u);
+    EXPECT_FLOAT_EQ(animator.GetState().previous.timeSeconds, 0.5f);
+    EXPECT_FLOAT_EQ(animator.GetState().blend, 0.0f);
+    EXPECT_FALSE(animator.GetState().current.loop);
+
+    animator.Update(Animator::DefaultFadeSeconds * 0.5f);
+    EXPECT_NEAR(animator.GetState().blend, 0.5f, 1e-5f);
+
+    animator.Update(Animator::DefaultFadeSeconds);
+    EXPECT_FLOAT_EQ(animator.GetState().blend, 1.0f);
+    EXPECT_EQ(animator.GetState().previous.clip, LB::Systems::Rendering::InvalidAnimationId);
+}
+
+TEST(AnimatorTests, SameClip_KeepsTimeUnlessRestarted) {
+    Animator animator;
+    animator.Play(5, true);
+    animator.Update(0.4f);
+
+    animator.Play(5, true, 2.0f);
+    EXPECT_FLOAT_EQ(animator.CurrentTime(), 0.4f);
+    animator.Update(0.1f);
+    EXPECT_FLOAT_EQ(animator.CurrentTime(), 0.6f);   // twice as fast now
+
+    animator.Play(5, true, 1.0f, true);
+    EXPECT_FLOAT_EQ(animator.CurrentTime(), 0.0f);
+}
+
+TEST(AnimatorTests, NoClips_StaysInRestPose) {
+    Animator animator;
+
+    animator.Play(LB::Systems::Rendering::InvalidAnimationId, true);
+    animator.Play(LB::Systems::Rendering::InvalidAnimationId, false, 1.0f, true);
+    animator.Update(1.0f);
+
+    EXPECT_EQ(animator.CurrentClip(), LB::Systems::Rendering::InvalidAnimationId);
+    EXPECT_FLOAT_EQ(animator.GetState().blend, 1.0f);
+}
+
+// ============================================================================
+// Encounter Tests
+// ============================================================================
+
+namespace {
+    constexpr float Step = 1.0f / 60.0f;
+    constexpr std::uint32_t CombatSeed = 7;
+
+    // Shipped content (and its enemy definitions), kept alive by the engine
+    struct EncounterContent {
+        GameEngine engine;
+        const LB::Content::EnemyDefinition* minion{nullptr};
+        const LB::Content::EnemyDefinition* warrior{nullptr};
+
+        EncounterContent() {
+            engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false });
+            minion = engine.GetContent()->FindEnemy(GameEngine::LightEnemy);
+            warrior = engine.GetContent()->FindEnemy(GameEngine::HeavyEnemy);
+        }
+    };
+
+    Encounter MakeEncounter(const EncounterContent& content) {
+        Encounter encounter(CombatSeed);
+        encounter.Configure(content.minion, content.warrior, GameEngine::ArenaHalfWidth, GameEngine::ArenaHalfHeight);
+        return encounter;
+    }
+
+    PlayerTarget PlayerAt(float x, float y, bool alive = true) {
+        PlayerTarget player{};
+        player.position = { x, y };
+        player.alive = alive;
+        player.defense.armorClass = 10;
+        return player;
+    }
+
+    std::vector<CombatEvent> RunEncounter(Encounter& encounter, const PlayerTarget& player, float seconds) {
+        std::vector<CombatEvent> events;
+        for (int i = 0; i < static_cast<int>(std::lround(seconds / Step)); ++i) {
+            for (const auto& event : encounter.Update(Step, player)) events.push_back(event);
+        }
+        return events;
+    }
+
+    // Hits for exactly `damage` (natural 1s still miss)
+    LB::Services::Combat::WeaponAttackProfile FixedHit(std::int32_t damage) {
+        LB::Services::Combat::WeaponAttackProfile attack{};
+        attack.attackBonus = 100;
+        attack.damageDice = LB::Dice{ 1, 2, 0 };
+        attack.damageBonus = damage - 1;
+        attack.damageType = LB::Combat::DamageType::Fire;   // no physical armour, no skeleton resistance
+        attack.critRangeMin = 20;
+        attack.critMultiplier = 1.0f;
+        return attack;
+    }
+
+    // Strike until a hit lands (skipping natural 1s); the hit's event
+    CombatEvent StrikeUntilHit(Encounter& encounter, std::uint32_t id, std::int32_t damage) {
+        for (int i = 0; i < 20; ++i) {
+            const auto event = encounter.StrikeEnemy(id, FixedHit(damage), encounter.FindEnemy(id)->position, 1.0f);
+            if (event && event->result.hit) return *event;
+        }
+        ADD_FAILURE() << "no hit in 20 strikes";
+        return {};
+    }
+}
+
+TEST(EncounterTests, WaveComposition_GrowsAndCaps) {
+    EXPECT_EQ(Encounter::WaveComposition(1), std::make_pair(2, 0));
+    EXPECT_EQ(Encounter::WaveComposition(2), std::make_pair(2, 1));
+    EXPECT_EQ(Encounter::WaveComposition(3), std::make_pair(3, 1));
+    EXPECT_EQ(Encounter::WaveComposition(4), std::make_pair(3, 2));
+    EXPECT_EQ(Encounter::WaveComposition(40), std::make_pair(4, 2));
+}
+
+TEST(EncounterTests, StartWave_RisesAwayFromThePlayer) {
+    EncounterContent content;
+    ASSERT_NE(content.minion, nullptr);
+    ASSERT_NE(content.warrior, nullptr);
+    auto encounter = MakeEncounter(content);
+
+    encounter.StartWave(2, { 1.0f, 1.0f });
+
+    EXPECT_EQ(encounter.GetWave(), 2);
+    ASSERT_EQ(encounter.GetEnemies().size(), 3u);
+    EXPECT_EQ(std::ranges::count(encounter.GetEnemies(), content.warrior, &Enemy::definition), 1);
+    for (const auto& enemy : encounter.GetEnemies()) {
+        EXPECT_EQ(enemy.state, EnemyState::Spawning);
+        EXPECT_GE(Encounter::Distance(enemy.position, { 1.0f, 1.0f }), Encounter::MinimumSpawnDistance);
+        EXPECT_LE(std::abs(enemy.position.x), GameEngine::ArenaHalfWidth);
+        EXPECT_LE(std::abs(enemy.position.y), GameEngine::ArenaHalfHeight);
+        EXPECT_EQ(enemy.hitPoints, enemy.definition->hitPoints);
+    }
+}
+
+TEST(EncounterTests, Spawning_UntargetableUntilRisen) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.minion, { 1.0f, 0.0f }, 0.0f);
+
+    EXPECT_FALSE(encounter.FindTarget({ 0.0f, 0.0f }, 2.0f).has_value());
+    EXPECT_FALSE(encounter.StrikeEnemy(id, FixedHit(3), { 0.0f, 0.0f }, 2.0f).has_value());
+
+    RunEncounter(encounter, PlayerAt(0.0f, 0.0f), Encounter::SpawnSeconds + Step);
+    EXPECT_EQ(encounter.FindTarget({ 0.0f, 0.0f }, 2.0f), std::optional<std::uint32_t>(id));
+}
+
+TEST(EncounterTests, Idle_UntilThePlayerComesWithinAggroRange) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    encounter.Spawn(*content.minion, { 9.0f, 0.0f }, 0.0f, false);
+
+    RunEncounter(encounter, PlayerAt(-9.0f, 0.0f), 2.0f);   // 18 tiles away
+    EXPECT_EQ(encounter.GetEnemies()[0].state, EnemyState::Idle);
+    EXPECT_FLOAT_EQ(encounter.GetEnemies()[0].position.x, 9.0f);
+
+    RunEncounter(encounter, PlayerAt(4.0f, 0.0f), 0.5f);
+    EXPECT_EQ(encounter.GetEnemies()[0].state, EnemyState::Chasing);
+    EXPECT_LT(encounter.GetEnemies()[0].position.x, 9.0f);
+}
+
+TEST(EncounterTests, ClosesInAndAttacksThePlayer) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.minion, { 4.0f, 0.0f }, 0.0f, false);
+
+    const auto events = RunEncounter(encounter, PlayerAt(0.0f, 0.0f), 4.0f);
+
+    EXPECT_LE(encounter.FindEnemy(id)->position.x, content.minion->attackRange + 1e-3f);
+    EXPECT_GE(encounter.FindEnemy(id)->position.x, Encounter::CharacterRadius * 2.0f - 1e-3f);
+    ASSERT_FALSE(events.empty());
+    for (const auto& event : events) {
+        EXPECT_EQ(event.kind, CombatEventKind::EnemyAttack);
+        EXPECT_EQ(event.enemyId, id);
+    }
+}
+
+TEST(EncounterTests, Attack_LandsPartWayThroughItsTime) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    encounter.Spawn(*content.minion, { 1.0f, 0.0f }, -std::numbers::pi_v<float> * 0.5f, false);   // facing the player
+    const auto player = PlayerAt(0.0f, 0.0f);
+
+    int stepsToAttack = 0;
+    while (encounter.GetEnemies()[0].state != EnemyState::Attacking && stepsToAttack < 600) {
+        encounter.Update(Step, player);
+        ++stepsToAttack;
+    }
+    ASSERT_EQ(encounter.GetEnemies()[0].state, EnemyState::Attacking);
+
+    int steps = 0;
+    while (encounter.Update(Step, player).empty() && steps < 600) ++steps;
+    const float impact = content.minion->attackTimeSeconds * content.minion->attackImpactFraction;
+    EXPECT_NEAR((steps + 1) * Step, impact, Step * 1.5f);
+}
+
+TEST(EncounterTests, PlayerSteppingAway_AttackWhiffs) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    encounter.Spawn(*content.minion, { 1.0f, 0.0f }, -std::numbers::pi_v<float> * 0.5f, false);
+    for (int i = 0; i < 600 && encounter.GetEnemies()[0].state != EnemyState::Attacking; ++i) {
+        encounter.Update(Step, PlayerAt(0.0f, 0.0f));
+    }
+    ASSERT_EQ(encounter.GetEnemies()[0].state, EnemyState::Attacking);
+
+    const auto events = RunEncounter(encounter, PlayerAt(-4.0f, 0.0f), content.minion->attackTimeSeconds);
+
+    EXPECT_TRUE(events.empty());
+}
+
+TEST(EncounterTests, PlayerDown_EnemiesStandDown) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    encounter.Spawn(*content.minion, { 1.0f, 0.0f }, 0.0f, false);
+
+    const auto events = RunEncounter(encounter, PlayerAt(0.0f, 0.0f, false), 3.0f);
+
+    EXPECT_TRUE(events.empty());
+    EXPECT_EQ(encounter.GetEnemies()[0].state, EnemyState::Idle);
+}
+
+TEST(EncounterTests, StrikeEnemy_DamagesStaggersAndKills) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.minion, { 1.0f, 0.0f }, 0.0f, false);
+    const auto hp = content.minion->hitPoints;
+
+    const auto first = StrikeUntilHit(encounter, id, 3);
+    EXPECT_EQ(first.kind, CombatEventKind::PlayerAttack);
+    EXPECT_EQ(first.result.finalDamage, 3);
+    EXPECT_FALSE(first.killed);
+    EXPECT_EQ(encounter.FindEnemy(id)->hitPoints, hp - 3);
+    EXPECT_EQ(encounter.FindEnemy(id)->state, EnemyState::Staggered);
+    EXPECT_GT(encounter.FindEnemy(id)->hitFlashSeconds, 0.0f);
+
+    const auto last = StrikeUntilHit(encounter, id, hp);
+    EXPECT_TRUE(last.killed);
+    EXPECT_EQ(encounter.FindEnemy(id)->hitPoints, 0);
+    EXPECT_TRUE(encounter.FindEnemy(id)->IsDead());
+    EXPECT_EQ(encounter.LivingEnemyCount(), 0u);
+    EXPECT_FALSE(encounter.StrikeEnemy(id, FixedHit(1), { 1.0f, 0.0f }, 1.0f).has_value());
+}
+
+TEST(EncounterTests, StrikeEnemy_DefensesApply) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.warrior, { 1.0f, 0.0f }, 0.0f, false);
+    auto piercing = FixedHit(9);
+    piercing.damageType = LB::Combat::DamageType::Piercing;
+
+    std::optional<CombatEvent> hit;
+    for (int i = 0; i < 20 && !(hit && hit->result.hit); ++i) hit = encounter.StrikeEnemy(id, piercing, { 0.0f, 0.0f }, 1.5f);
+
+    ASSERT_TRUE(hit && hit->result.hit);
+    // Skeleton warrior: physical armour first, then half of piercing resisted
+    const auto expected = static_cast<std::int32_t>(std::lround((9 - content.warrior->physicalArmor) * 0.5f));
+    EXPECT_EQ(hit->result.finalDamage, expected);
+}
+
+TEST(EncounterTests, StrikeEnemy_OutOfReach_Whiffs) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.minion, { 5.0f, 0.0f }, 0.0f, false);
+
+    EXPECT_FALSE(encounter.StrikeEnemy(id, FixedHit(3), { 0.0f, 0.0f }, 1.4f).has_value());
+    EXPECT_FALSE(encounter.FindTarget({ 0.0f, 0.0f }, 1.4f).has_value());
+}
+
+TEST(EncounterTests, HitWhileAttacking_NoStagger) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.warrior, { 1.0f, 0.0f }, -std::numbers::pi_v<float> * 0.5f, false);
+    for (int i = 0; i < 600 && encounter.FindEnemy(id)->state != EnemyState::Attacking; ++i) {
+        encounter.Update(Step, PlayerAt(0.0f, 0.0f));
+    }
+    ASSERT_EQ(encounter.FindEnemy(id)->state, EnemyState::Attacking);
+
+    StrikeUntilHit(encounter, id, 1);
+
+    EXPECT_EQ(encounter.FindEnemy(id)->state, EnemyState::Attacking);
+}
+
+TEST(EncounterTests, Corpse_FadesThenDisappears) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.minion, { 1.0f, 0.0f }, 0.0f, false);
+    StrikeUntilHit(encounter, id, 100);
+    const auto player = PlayerAt(-5.0f, 0.0f);
+
+    RunEncounter(encounter, player, Encounter::CorpseSeconds - Encounter::CorpseFadeSeconds * 0.5f);
+    ASSERT_NE(encounter.FindEnemy(id), nullptr);
+    EXPECT_NEAR(Encounter::Opacity(*encounter.FindEnemy(id)), 0.5f, 0.05f);
+
+    RunEncounter(encounter, player, Encounter::CorpseFadeSeconds);
+    EXPECT_EQ(encounter.FindEnemy(id), nullptr);
+}
+
+TEST(EncounterTests, WaveCleared_NextWaveAfterDelay) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    encounter.StartWave(1, { 0.0f, 0.0f });
+    const auto player = PlayerAt(0.0f, 0.0f);
+    RunEncounter(encounter, player, Encounter::SpawnSeconds + Step);
+
+    for (const auto& enemy : std::vector<Enemy>(encounter.GetEnemies())) StrikeUntilHit(encounter, enemy.id, 100);
+    ASSERT_EQ(encounter.LivingEnemyCount(), 0u);
+
+    RunEncounter(encounter, player, Encounter::WaveDelaySeconds - 0.1f);
+    EXPECT_EQ(encounter.GetWave(), 1);
+
+    RunEncounter(encounter, player, 0.2f);
+    EXPECT_EQ(encounter.GetWave(), 2);
+    const auto [light, heavy] = Encounter::WaveComposition(2);
+    EXPECT_EQ(encounter.LivingEnemyCount(), static_cast<std::size_t>(light + heavy));
+}
+
+TEST(EncounterTests, Bodies_DoNotOverlap) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    for (int i = 0; i < 3; ++i) encounter.Spawn(*content.minion, { 5.0f, 0.0f }, 0.0f, false);
+
+    RunEncounter(encounter, PlayerAt(0.0f, 0.0f), 2.0f);
+
+    const auto& enemies = encounter.GetEnemies();
+    for (std::size_t i = 0; i < enemies.size(); ++i) {
+        EXPECT_GE(Encounter::Distance(enemies[i].position, { 0.0f, 0.0f }), Encounter::CharacterRadius * 2.0f - 1e-3f);
+        for (std::size_t j = i + 1; j < enemies.size(); ++j) {
+            EXPECT_GE(Encounter::Distance(enemies[i].position, enemies[j].position), Encounter::CharacterRadius * 2.0f - 0.05f);
+        }
+    }
+}
+
+TEST(EncounterTests, SameSeed_SameFight) {
+    EncounterContent content;
+    auto a = MakeEncounter(content);
+    auto b = MakeEncounter(content);
+    a.StartWave(3, { 0.0f, 0.0f });
+    b.StartWave(3, { 0.0f, 0.0f });
+
+    const auto ea = RunEncounter(a, PlayerAt(0.0f, 0.0f), 6.0f);
+    const auto eb = RunEncounter(b, PlayerAt(0.0f, 0.0f), 6.0f);
+
+    ASSERT_EQ(ea.size(), eb.size());
+    for (std::size_t i = 0; i < ea.size(); ++i) {
+        EXPECT_EQ(ea[i].enemyId, eb[i].enemyId);
+        EXPECT_EQ(ea[i].result.finalDamage, eb[i].result.finalDamage);
+    }
+}
+
+// ============================================================================
+// GameEngine Combat Tests
+// ============================================================================
+
+namespace {
+    void InitializeForCombat(GameEngine& engine, bool waves = false) {
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+            .contentDirectory = ShippedContentDirectory(), .spawnEnemies = waves, .randomSeed = CombatSeed }))
+            << engine.GetInitializationError();
+    }
+
+    std::int32_t PlayerHitPoints(const GameEngine& engine) {
+        return engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get().GetCurrentHitPoints();
+    }
+
+    std::int32_t PlayerMaxHitPoints(const GameEngine& engine) {
+        return engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get().GetMaxHitPoints();
+    }
+
+    // Step until a condition holds (at most `seconds`); the events seen on the way
+    template<typename Condition>
+    std::vector<CombatEvent> StepUntil(GameEngine& engine, Condition done, float seconds) {
+        std::vector<CombatEvent> events;
+        for (int i = 0; i < static_cast<int>(seconds * 60.0f) && !done(); ++i) {
+            engine.Tick(OneSixtieth);
+            events.insert(events.end(), engine.GetCombatEvents().begin(), engine.GetCombatEvents().end());
+        }
+        return events;
+    }
+
+    std::size_t CountKind(const std::vector<CombatEvent>& events, CombatEventKind kind) {
+        return static_cast<std::size_t>(std::ranges::count(events, kind, &CombatEvent::kind));
+    }
+}
+
+TEST(GameEngineCombatTests, Initialize_FirstWaveRises) {
+    GameEngine engine;
+    InitializeForCombat(engine, true);
+
+    EXPECT_EQ(engine.GetEncounter().GetWave(), 1);
+    ASSERT_EQ(engine.GetEncounter().GetEnemies().size(), 2u);
+    for (const auto& enemy : engine.GetEncounter().GetEnemies()) {
+        EXPECT_EQ(enemy.state, EnemyState::Spawning);
+        EXPECT_GE(Encounter::Distance(enemy.position, engine.GetPlayerPosition()), Encounter::MinimumSpawnDistance);
+    }
+}
+
+TEST(GameEngineCombatTests, SpawnEnemiesOff_EmptyArena) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    RunSteps(engine, 60);
+
+    EXPECT_EQ(engine.GetEncounter().GetWave(), 0);
+    EXPECT_TRUE(engine.GetEncounter().GetEnemies().empty());
+    EXPECT_FALSE(engine.SpawnEnemy("enemy_unknown", { 1.0f, 0.0f }).has_value());
+}
+
+TEST(GameEngineCombatTests, NoContent_NoCombat) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600));
+    TapKey(engine, Keys::Space);
+    RunSteps(engine, 30);
+
+    EXPECT_FALSE(engine.IsPlayerAlive());
+    EXPECT_FALSE(engine.IsPlayerAttacking());
+    EXPECT_TRUE(engine.GetEncounter().GetEnemies().empty());
+}
+
+TEST(GameEngineCombatTests, PlayerAttack_FromStartingWeaponAndClass) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto* sword = engine.GetContent()->FindWeapon(GameEngine::StartingWeapon);
+    ASSERT_NE(sword, nullptr);
+    const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    const auto strength = player.GetAttributes().GetStrengthModifier();
+
+    const auto attack = engine.GetPlayerAttackProfile();
+
+    EXPECT_EQ(attack.attackBonus, *engine.GetCharacters().GetAttackBonus(*engine.GetPlayerId(), sword->category));
+    EXPECT_EQ(attack.damageDice.sides, sword->damageDice.sides);
+    EXPECT_EQ(attack.damageBonus, sword->damageBonus + strength);
+    EXPECT_EQ(attack.damageType, LB::Combat::DamageType::Slashing);
+    EXPECT_EQ(attack.critRangeMin, sword->critRangeMin);
+    EXPECT_FLOAT_EQ(attack.critMultiplier, sword->critMultiplier);
+}
+
+TEST(GameEngineCombatTests, PlayerDefense_TenPlusDexterityAndArmour) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+
+    EXPECT_EQ(engine.GetPlayerDefense().armorClass, 10 + player.GetAttributes().GetDexterityModifier());
+    EXPECT_EQ(engine.GetPlayerDefense().physicalArmor, 0);
+
+    ASSERT_TRUE(engine.EquipPlayerArmor("armor_chest_rusted_breastplate_t1"));
+    EXPECT_EQ(engine.GetPlayerDefense().physicalArmor, engine.GetContent()->FindArmor("armor_chest_rusted_breastplate_t1")->physicalAR);
+}
+
+TEST(GameEngineCombatTests, Attack_TurnsTowardAndStrikesTheEnemyInReach) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto id = engine.SpawnEnemy(GameEngine::LightEnemy, { 1.0f, 0.0f });
+    ASSERT_TRUE(id.has_value());
+
+    TapKey(engine, Keys::Space);
+    engine.Tick(OneSixtieth);
+    EXPECT_TRUE(engine.IsPlayerAttacking());
+
+    const auto events = StepUntil(engine, [&] { return !engine.IsPlayerAttacking(); }, 2.0f);
+    ASSERT_EQ(CountKind(events, CombatEventKind::PlayerAttack), 1u);
+    const auto strike = *std::ranges::find(events, CombatEventKind::PlayerAttack, &CombatEvent::kind);
+    EXPECT_EQ(strike.enemyId, *id);
+
+    // Turned east (+X) toward the enemy: a quarter turn from facing +Z
+    EXPECT_NEAR(engine.GetPlayerFacingYaw(), std::numbers::pi_v<float> * 0.5f, 1e-4f);
+    if (strike.result.hit) {
+        EXPECT_LT(engine.GetEncounter().FindEnemy(*id)->hitPoints, engine.GetContent()->FindEnemy(GameEngine::LightEnemy)->hitPoints);
+    }
+}
+
+TEST(GameEngineCombatTests, Swing_RootsThePlayerUntilTheStrike) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto* sword = engine.GetContent()->FindWeapon(GameEngine::StartingWeapon);
+
+    engine.OnKeyDown(Keys::FromChar('D'));
+    TapKey(engine, Keys::Space);
+    const int windUpSteps = static_cast<int>(sword->attackTimeSeconds * Encounter::AttackImpactFraction * 60.0f) - 1;
+    RunSteps(engine, windUpSteps);
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().y, 0.0f);
+
+    RunSteps(engine, 10);   // past the strike: walking again
+    engine.OnKeyUp(Keys::FromChar('D'));
+    EXPECT_NE(engine.GetPlayerPosition().x, 0.0f);
+}
+
+TEST(GameEngineCombatTests, NoEnemyInReach_SwingWhiffs) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.SpawnEnemy(GameEngine::LightEnemy, { 6.0f, 0.0f });
+
+    TapKey(engine, Keys::Space);
+    const auto events = StepUntil(engine, [&] { return false; }, 0.8f);
+
+    EXPECT_EQ(CountKind(events, CombatEventKind::PlayerAttack), 0u);
+}
+
+TEST(GameEngineCombatTests, HoldingAttack_KillsAMinion) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto id = *engine.SpawnEnemy(GameEngine::LightEnemy, { 1.0f, 0.0f });
+
+    engine.OnKeyDown(Keys::Space);
+    const auto events = StepUntil(engine, [&] { return engine.GetEncounter().FindEnemy(id)->IsDead(); }, 15.0f);
+    engine.OnKeyUp(Keys::Space);
+
+    EXPECT_TRUE(engine.GetEncounter().FindEnemy(id)->IsDead());
+    EXPECT_GE(CountKind(events, CombatEventKind::PlayerAttack), 2u);
+    EXPECT_TRUE(std::ranges::any_of(events, &CombatEvent::killed));
+}
+
+TEST(GameEngineCombatTests, EnemyHits_ReducePlayerHealth) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.SpawnEnemy(GameEngine::HeavyEnemy, { 1.0f, 0.0f });
+    const auto before = PlayerHitPoints(engine);
+
+    const auto events = StepUntil(engine, [&] { return PlayerHitPoints(engine) < before; }, 20.0f);
+
+    std::int32_t dealt = 0;
+    for (const auto& event : events) {
+        if (event.kind == CombatEventKind::EnemyAttack && event.result.hit) dealt += event.result.finalDamage;
+    }
+    EXPECT_GT(dealt, 0);
+    EXPECT_EQ(PlayerHitPoints(engine), before - dealt);
+}
+
+TEST(GameEngineCombatTests, PlayerDown_GetsBackUpWithFullHealth) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    for (float y : { -1.0f, 1.0f }) {
+        for (float x : { -1.0f, 1.0f }) engine.SpawnEnemy(GameEngine::HeavyEnemy, { x, y });
+    }
+
+    StepUntil(engine, [&] { return !engine.IsPlayerAlive(); }, 60.0f);
+    ASSERT_FALSE(engine.IsPlayerAlive());
+
+    // Down: no moving, no swinging
+    engine.OnKeyDown(Keys::FromChar('D'));
+    TapKey(engine, Keys::Space);
+    RunSteps(engine, 30);
+    engine.OnKeyUp(Keys::FromChar('D'));
+    EXPECT_FALSE(engine.IsPlayerAttacking());
+
+    RunSteps(engine, static_cast<int>(GameEngine::PlayerRespawnSeconds * 60.0f));
+    EXPECT_TRUE(engine.IsPlayerAlive());
+    EXPECT_EQ(PlayerHitPoints(engine), PlayerMaxHitPoints(engine));
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().y, 0.0f);
+    EXPECT_TRUE(engine.GetEncounter().GetEnemies().empty());   // waves off: the arena is cleared
+}
+
+TEST(GameEngineCombatTests, PlayerDown_WavesStartOver) {
+    GameEngine engine;
+    InitializeForCombat(engine, true);
+    for (float y : { -1.0f, 1.0f }) {
+        for (float x : { -1.0f, 1.0f }) engine.SpawnEnemy(GameEngine::HeavyEnemy, { x, y });
+    }
+    StepUntil(engine, [&] { return !engine.IsPlayerAlive(); }, 60.0f);
+    ASSERT_FALSE(engine.IsPlayerAlive());
+
+    RunSteps(engine, static_cast<int>(GameEngine::PlayerRespawnSeconds * 60.0f) + 1);
+
+    EXPECT_EQ(engine.GetEncounter().GetWave(), 1);
+    EXPECT_EQ(engine.GetEncounter().LivingEnemyCount(), 2u);
+}
+
+TEST(GameEngineCombatTests, Pause_FreezesEnemies) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.SpawnEnemy(GameEngine::LightEnemy, { 5.0f, 0.0f });
+    RunSteps(engine, 10);
+    TapKey(engine, Keys::Escape);
+    RunSteps(engine, 1);
+    const auto frozen = engine.GetEncounter().GetEnemies()[0].position;
+
+    RunSteps(engine, 60);
+
+    EXPECT_FLOAT_EQ(engine.GetEncounter().GetEnemies()[0].position.x, frozen.x);
+    EXPECT_FLOAT_EQ(engine.GetEncounter().GetEnemies()[0].position.y, frozen.y);
+}
+
+TEST(GameEngineCombatTests, Hud_HealthBarsFollowHitPoints) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto id = *engine.SpawnEnemy(GameEngine::LightEnemy, { 1.0f, 0.0f });
+
+    const auto fills = [&] {
+        std::vector<LB::Systems::Rendering::RectangleRenderData> bars;
+        for (const auto& rect : engine.GetRendering().GetQueuedRectangles()) {
+            if (rect.layerDepth == 12) bars.push_back(rect);
+        }
+        return bars;
+    };
+
+    engine.Tick(OneSixtieth);
+    auto bars = fills();
+    ASSERT_EQ(bars.size(), 1u);   // the player's; unhurt enemies show no bar
+    EXPECT_EQ(bars[0].rect.width, 240);
+
+    engine.OnKeyDown(Keys::Space);
+    StepUntil(engine, [&] {
+        const auto* enemy = engine.GetEncounter().FindEnemy(id);
+        return enemy->hitPoints < enemy->definition->hitPoints;
+    }, 10.0f);
+    engine.OnKeyUp(Keys::Space);
+    engine.Tick(OneSixtieth);
+
+    bars = fills();
+    const auto* enemy = engine.GetEncounter().FindEnemy(id);
+    if (!enemy->IsDead()) {
+        ASSERT_EQ(bars.size(), 2u);
+        EXPECT_LT(bars[1].rect.width, 44);
+    }
+}
+
+TEST(GameEngineCombatTests, PrimitiveEnemies_WithoutModels) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.Tick(OneSixtieth);
+    const auto before = engine.GetRendering().GetQueuedMeshes().size();
+
+    engine.SpawnEnemy(GameEngine::LightEnemy, { 3.0f, 0.0f });
+    engine.Tick(OneSixtieth);
+
+    EXPECT_EQ(engine.GetRendering().GetQueuedMeshes().size(), before + 2);   // body and skull
+}
+
+TEST(GameEngineModelTests, Enemies_AnimatedAndHoldingTheirWeapons) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory(), .spawnEnemies = false }))
+        << engine.GetInitializationError();
+    engine.SpawnEnemy(GameEngine::LightEnemy, { 3.0f, 0.0f });
+    engine.SpawnEnemy(GameEngine::HeavyEnemy, { -3.0f, 0.0f });
+
+    RunSteps(engine, 30);
+
+    const auto minions = DrawsOf(engine, "Skeleton_Minion");
+    ASSERT_EQ(minions.size(), 1u);
+    const auto walk = engine.GetRendering().FindAnimation("Walking_A");
+    ASSERT_TRUE(walk.has_value());
+    EXPECT_EQ(minions[0].animation.current.clip, *walk);   // closing in on the player
+    EXPECT_FLOAT_EQ(minions[0].scale, engine.GetContent()->FindEnemy(GameEngine::LightEnemy)->modelScale);
+
+    for (std::string_view weapon : { "Skeleton_Blade", "Skeleton_Axe", "Skeleton_Shield_Large_A" }) {
+        const auto held = DrawsOf(engine, weapon);
+        ASSERT_EQ(held.size(), 1u) << weapon;
+        EXPECT_TRUE(held[0].transform.has_value()) << weapon;
+    }
+    EXPECT_EQ(DrawsOf(engine, "Skeleton_Warrior").size(), 1u);
+}
+
+TEST(GameEngineModelTests, Player_SwingsTheSword) {
+    GameEngine engine;
+    InitializeWithModels(engine);
+    engine.Tick(OneSixtieth);
+    const auto restingSword = DrawsOf(engine, "sword_common");
+    ASSERT_EQ(restingSword.size(), 1u);
+    ASSERT_TRUE(restingSword[0].transform.has_value());
+    EXPECT_TRUE(DrawsOf(engine, "character_knight")[0].partPoses.size() == 1u);
+
+    TapKey(engine, Keys::Space);
+    RunSteps(engine, 15);
+
+    const auto swinging = DrawsOf(engine, "sword_common");
+    ASSERT_EQ(swinging.size(), 1u);
+    const auto rest = restingSword[0].transform->Translation();
+    const auto now = swinging[0].transform->Translation();
+    EXPECT_GT(std::abs(rest.x - now.x) + std::abs(rest.y - now.y) + std::abs(rest.z - now.z), 0.05f);
+}
+
+TEST(GameEngineModelTests, Enemies_AttackWithTheirMeleeClips) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory(), .spawnEnemies = false }))
+        << engine.GetInitializationError();
+    const auto& rendering = engine.GetRendering();
+    for (const auto& type : engine.GetContent()->GetEnemies()) {
+        ASSERT_TRUE(rendering.FindAnimation(type.attackAnimation).has_value()) << type.attackAnimation;
+    }
+    const auto id = *engine.SpawnEnemy(GameEngine::LightEnemy, { 1.0f, 0.0f });
+
+    for (int i = 0; i < 300 && engine.GetEncounter().FindEnemy(id)->state != EnemyState::Attacking; ++i) engine.Tick(OneSixtieth);
+    ASSERT_EQ(engine.GetEncounter().FindEnemy(id)->state, EnemyState::Attacking);
+    engine.Tick(OneSixtieth);
+
+    const auto minions = DrawsOf(engine, "Skeleton_Minion");
+    ASSERT_EQ(minions.size(), 1u);
+    const auto* minion = engine.GetContent()->FindEnemy(GameEngine::LightEnemy);
+    EXPECT_EQ(minions[0].animation.current.clip, *rendering.FindAnimation(minion->attackAnimation));
+}
+
+// ============================================================================
+// GameEngine Combat Text Tests
+// ============================================================================
+
+TEST(GameEngineCombatTextTests, PlayerStrike_FloatsTheDamageOverTheEnemy) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto id = *engine.SpawnEnemy(GameEngine::LightEnemy, { 1.0f, 0.0f });
+
+    TapKey(engine, Keys::Space);
+    const auto events = StepUntil(engine, [&] { return !engine.GetFloatingTexts().empty(); }, 2.0f);
+
+    ASSERT_EQ(engine.GetFloatingTexts().size(), 1u);
+    const auto& text = engine.GetFloatingTexts()[0];
+    const auto strike = std::ranges::find(events, CombatEventKind::PlayerAttack, &CombatEvent::kind);
+    ASSERT_NE(strike, events.end());
+    if (!strike->result.hit) {
+        EXPECT_EQ(text.text, "MISS");
+    }
+    else {
+        EXPECT_EQ(text.text, std::format("{}{}", strike->result.finalDamage, strike->result.critical ? "!" : ""));
+    }
+    EXPECT_NEAR(text.position.z, engine.GetEncounter().FindEnemy(id)->position.y, 1e-4f);
+    EXPECT_GT(text.position.y, 1.0f);   // over the head
+}
+
+TEST(GameEngineCombatTextTests, EnemyHits_FloatRedOverThePlayer) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.SpawnEnemy(GameEngine::HeavyEnemy, { 1.0f, 0.0f });
+    const auto before = PlayerHitPoints(engine);
+
+    StepUntil(engine, [&] { return PlayerHitPoints(engine) < before; }, 20.0f);
+
+    const auto red = std::ranges::find_if(engine.GetFloatingTexts(), [](const FloatingText& t) { return t.text != "MISS" && t.color.g < 0.5f; });
+    ASSERT_NE(red, engine.GetFloatingTexts().end());
+    EXPECT_NEAR(red->position.z, engine.GetPlayerPosition().y, 1e-4f);
+}
+
+TEST(GameEngineCombatTextTests, Texts_FadeAwayAndFreezeWhilePaused) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.SpawnEnemy(GameEngine::LightEnemy, { 1.0f, 0.0f });
+    TapKey(engine, Keys::Space);
+    StepUntil(engine, [&] { return !engine.GetFloatingTexts().empty(); }, 2.0f);
+    ASSERT_FALSE(engine.GetFloatingTexts().empty());
+
+    TapKey(engine, Keys::Escape);
+    RunSteps(engine, 120);
+    EXPECT_FALSE(engine.GetFloatingTexts().empty());   // paused: still there
+
+    TapKey(engine, Keys::Escape);
+    RunSteps(engine, static_cast<int>(GameEngine::FloatingTextSeconds * 60.0f) + 2);
+    for (const auto& text : engine.GetFloatingTexts()) EXPECT_LT(text.ageSeconds, GameEngine::FloatingTextSeconds);
+}
+
+TEST(GameEngineCombatTextTests, Hud_LabelsHitPointsAndWave) {
+    GameEngine engine;
+    InitializeForCombat(engine, true);
+
+    engine.Tick(OneSixtieth);
+
+    const auto& texts = engine.GetRendering().GetQueuedText();
+    const auto has = [&](std::string_view label) {
+        return std::ranges::any_of(texts, [&](const auto& t) { return t.text == label; });
+    };
+    const auto max = PlayerMaxHitPoints(engine);
+    EXPECT_TRUE(has(std::format("HP {}/{}", max, max)));
+    EXPECT_TRUE(has("WAVE 1"));
+}
+
+TEST(GameEngineCombatTextTests, FontDirectory_LoadsTheUiFont) {
+    const auto models = ShippedModelDirectory();
+    const auto fonts = std::filesystem::path(std::u8string(models.begin(), models.end())).parent_path() / "Fonts";
+    const auto text = fonts.u8string();
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .fontDirectory = std::string(text.begin(), text.end()), .spawnEnemies = false }))
+        << engine.GetInitializationError();
+
+    EXPECT_TRUE(engine.GetRendering().FindFont("MedievalSharp-Regular").has_value());
+}
+
+TEST(GameEngineCombatTextTests, MissingFont_StopsStartup) {
+    GameEngine engine;
+    const auto empty = std::filesystem::temp_directory_path() / "lb_no_fonts_here";
+    std::filesystem::create_directories(empty);
+
+    EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .fontDirectory = empty.string() }));
+    EXPECT_NE(engine.GetInitializationError().find("MedievalSharp-Regular.ttf: file not found"), std::string::npos) << engine.GetInitializationError();
+    std::filesystem::remove_all(empty);
 }

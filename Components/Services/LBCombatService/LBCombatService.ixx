@@ -89,6 +89,40 @@ export namespace LB::Services::Combat {
     };
 
     /// <summary>
+    /// What an attacker brings to a weapon attack (design-combat-system.md 4.1-4.3): the attack
+    /// roll bonus and the weapon's damage profile
+    /// </summary>
+    struct WeaponAttackProfile {
+        int32_t attackBonus{0};
+        LB::Dice damageDice{1, 4, 0};
+        int32_t damageBonus{0};                    // attribute and flat bonuses added to the roll
+        DamageType damageType{DamageType::Slashing};
+        int32_t critRangeMin{20};                  // natural rolls from this up to 20 crit (when they hit)
+        float critMultiplier{1.5f};
+    };
+
+    /// <summary>
+    /// How a target defends (design-combat-system.md 4.1 and 5.2)
+    /// </summary>
+    struct DefenseProfile {
+        int32_t armorClass{10};
+        int32_t physicalArmor{0};                  // flat reduction of physical damage
+        std::map<DamageType, float> resistances;   // fraction removed; negative values are vulnerabilities
+    };
+
+    /// <summary>
+    /// Outcome of a weapon attack
+    /// </summary>
+    struct WeaponAttackResult {
+        bool hit{false};
+        bool critical{false};
+        int32_t naturalRoll{0};                    // the d20
+        int32_t totalRoll{0};                      // d20 + attack bonus
+        int32_t rawDamage{0};                      // dice + bonus (x crit multiplier), before defenses
+        int32_t finalDamage{0};                    // after armour and resistance; 0 on a miss
+    };
+
+    /// <summary>
     /// Core combat service
     /// Handles all combat-related calculations and resolutions
     /// </summary>
@@ -140,6 +174,61 @@ export namespace LB::Services::Combat {
             int32_t totalAttackRoll = roll + attackBonus;
             result.hit = totalAttackRoll >= targetArmorClass;
 
+            return result;
+        }
+
+        /// <summary>
+        /// Roll dice: count x d(sides) + bonus
+        /// </summary>
+        int32_t RollDice(const LB::Dice& dice) const {
+            std::uniform_int_distribution<int32_t> die(1, std::max(1, dice.sides));
+            int32_t total = dice.bonus;
+            for (int32_t i = 0; i < dice.count; ++i) {
+                total += die(rng_);
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// Apply a target's defenses to raw damage (design-combat-system.md 5.2): physical damage
+        /// loses the flat armour first, then the type's resistance takes its fraction (negative
+        /// resistance adds damage). Damage that gets through deals at least 1, unless the target
+        /// is immune (resistance 1) or the armour absorbs it all.
+        /// </summary>
+        static int32_t ApplyDefenses(int32_t rawDamage, DamageType type, const DefenseProfile& target) {
+            if (rawDamage <= 0) return 0;
+
+            const bool physical = type == DamageType::Slashing || type == DamageType::Piercing || type == DamageType::Bludgeoning;
+            const int32_t afterArmor = physical ? std::max(0, rawDamage - std::max(0, target.physicalArmor)) : rawDamage;
+            if (afterArmor == 0) return 0;
+
+            const auto it = target.resistances.find(type);
+            const float resist = std::clamp(it != target.resistances.end() ? it->second : 0.0f, -1.0f, 1.0f);
+            if (resist >= 1.0f) return 0;
+
+            const auto scaled = static_cast<int32_t>(std::lround(static_cast<float>(afterArmor) * (1.0f - resist)));
+            return std::max(1, scaled);
+        }
+
+        /// <summary>
+        /// Resolve one weapon attack (design-combat-system.md 4.1-4.3): d20 + bonus against AC
+        /// (natural 1 always misses, natural 20 always hits), crits on a hit within the crit
+        /// range multiply the damage roll, then the target's defenses apply.
+        /// </summary>
+        WeaponAttackResult ResolveWeaponAttack(const WeaponAttackProfile& attack, const DefenseProfile& target) const {
+            WeaponAttackResult result{};
+            result.naturalRoll = rollD20();
+            result.totalRoll = result.naturalRoll + attack.attackBonus;
+            result.hit = result.naturalRoll == 20 || (result.naturalRoll != 1 && result.totalRoll >= target.armorClass);
+            if (!result.hit) return result;
+
+            result.critical = result.naturalRoll >= std::clamp(attack.critRangeMin, 2, 20);
+            int32_t damage = std::max(0, RollDice(attack.damageDice) + attack.damageBonus);
+            if (result.critical) {
+                damage = static_cast<int32_t>(std::lround(static_cast<float>(damage) * std::max(1.0f, attack.critMultiplier)));
+            }
+            result.rawDamage = damage;
+            result.finalDamage = ApplyDefenses(damage, attack.damageType, target);
             return result;
         }
 

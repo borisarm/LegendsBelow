@@ -8,4 +8,6 @@ export import LB.InputSystem;
 export import LB.RenderingSystem;
 
 export import :StepTimer;
+export import :Animator;
+export import :Encounter;
 export import :GameEngine;

@@ -211,6 +211,24 @@ namespace LB::Content {
                 }
             }
 
+            // { "Piercing": 0.5, "Bludgeoning": -0.25 } -> fraction of damage removed per type
+            void ReadResistanceFractions(const char* field, std::map<DamageType, float>& out) {
+                if (!Present(field, false)) return;
+                const auto& value = object_.at(field);
+                if (!value.is_object()) { TypeError(field, "an object of damage type to fraction"); return; }
+                for (const auto& [name, fraction] : value.items()) {
+                    DamageType type{};
+                    if (!ParseEnum(field, name, type, DamageTypes)) continue;
+                    if (!fraction.is_number()) { TypeError(field, "numeric fractions"); continue; }
+                    const float resist = fraction.get<float>();
+                    if (resist < -1.0f || resist > 1.0f) {
+                        Error(std::format("'{}' value for '{}' must be in [-1, 1]", field, name));
+                        continue;
+                    }
+                    out[type] = resist;
+                }
+            }
+
             // "2d8" or "1d6+2"
             void ReadDice(const char* field, LB::Dice& out, bool required) {
                 if (!Present(field, required)) return;
@@ -501,6 +519,52 @@ namespace LB::Content {
             return definition;
         }
 
+        EnemyDefinition ReadEnemy(EntryReader& reader) {
+            EnemyDefinition enemy{};
+            reader.ReadString("id", enemy.key, true);
+            reader.ReadString("name", enemy.name, true);
+            reader.ReadInt("level", enemy.level, false);
+            reader.ReadInt("hitPoints", enemy.hitPoints, true);
+            reader.ReadInt("armorClass", enemy.armorClass, true);
+            reader.ReadInt("physicalArmor", enemy.physicalArmor, false);
+            reader.ReadResistanceFractions("resistances", enemy.resistances);
+            reader.ReadInt("experience", enemy.experience, false);
+
+            reader.ReadInt("attackBonus", enemy.attackBonus, true);
+            reader.ReadDice("damageDice", enemy.damageDice, true);
+            reader.ReadInt("damageBonus", enemy.damageBonus, false);
+            reader.ReadEnum("damageType", enemy.damageType, DamageTypes, true);
+            reader.ReadCritRange("critRange", enemy.critRangeMin);
+            reader.ReadFloat("critMultiplier", enemy.critMultiplier, false);
+            reader.ReadFloat("attackTimeSeconds", enemy.attackTimeSeconds, true);
+            reader.ReadFloat("attackRecoverySeconds", enemy.attackRecoverySeconds, false);
+            reader.ReadFloat("attackRange", enemy.attackRange, true);
+            reader.ReadString("attackAnimation", enemy.attackAnimation, false);
+            reader.ReadFloat("attackImpactFraction", enemy.attackImpactFraction, false);
+            reader.ReadFloat("movementSpeed", enemy.movementSpeed, true);
+            reader.ReadFloat("aggroRange", enemy.aggroRange, false);
+
+            reader.ReadString("model", enemy.model, true);
+            reader.ReadString("mainHandModel", enemy.mainHandModel, false);
+            reader.ReadString("offHandModel", enemy.offHandModel, false);
+            reader.ReadFloat("modelScale", enemy.modelScale, false);
+
+            if (enemy.level < 1) reader.Error("'level' must be at least 1");
+            if (enemy.hitPoints < 1) reader.Error("'hitPoints' must be at least 1");
+            if (enemy.armorClass < 0) reader.Error("'armorClass' must not be negative");
+            if (enemy.physicalArmor < 0) reader.Error("'physicalArmor' must not be negative");
+            if (enemy.experience < 0) reader.Error("'experience' must not be negative");
+            if (enemy.critMultiplier < 1.0f) reader.Error("'critMultiplier' must be at least 1");
+            if (enemy.attackTimeSeconds <= 0.0f) reader.Error("'attackTimeSeconds' must be positive");
+            if (enemy.attackRecoverySeconds < 0.0f) reader.Error("'attackRecoverySeconds' must not be negative");
+            if (enemy.attackRange <= 0.0f) reader.Error("'attackRange' must be positive");
+            if (enemy.attackImpactFraction <= 0.0f || enemy.attackImpactFraction >= 1.0f) reader.Error("'attackImpactFraction' must be between 0 and 1");
+            if (enemy.movementSpeed <= 0.0f) reader.Error("'movementSpeed' must be positive");
+            if (enemy.aggroRange < 0.0f) reader.Error("'aggroRange' must not be negative");
+            if (enemy.modelScale <= 0.0f) reader.Error("'modelScale' must be positive");
+            return enemy;
+        }
+
         // Rules spanning files: every class defined once, and class spells agree with class schools
         void CheckClassRules(const std::vector<ClassDefinition>& classes, const std::vector<SpellDefinition>& spells,
                              std::vector<String>& errors) {
@@ -578,9 +642,9 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[4];
-        constexpr const char* files[4] = { "spells.json", "weapons.json", "armour.json", "classes.json" };
-        for (int i = 0; i < 4; ++i) {
+        String texts[5];
+        constexpr const char* files[5] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json" };
+        for (int i = 0; i < 5; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -589,17 +653,18 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
-                                                    const String& classesJson) {
+                                                    const String& classesJson, const String& enemiesJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
         auto weapons = ReadArray<WeaponDefinition>(weaponsJson, "weapons.json", ReadWeapon, result.errors);
         auto armour = ReadArray<ArmorDefinition>(armourJson, "armour.json", ReadArmor, result.errors);
         auto classes = ReadArray<ClassDefinition>(classesJson, "classes.json", ReadClass, result.errors);
+        auto enemies = ReadArray<EnemyDefinition>(enemiesJson, "enemies.json", ReadEnemy, result.errors);
 
         CheckClassRules(classes, spells, result.errors);
 
@@ -612,6 +677,7 @@ namespace LB::Content {
         weapons_ = std::move(weapons);
         armour_ = std::move(armour);
         classes_ = std::move(classes);
+        enemies_ = std::move(enemies);
         return result;
     }
 

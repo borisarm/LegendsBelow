@@ -657,3 +657,54 @@ TEST(InputSystemTests, DisableDeviceInput_WithoutDevices_NoError) {
 
     EXPECT_FALSE(system.HasDeviceInput());
 }
+
+// ============================================================================
+// Held Action Tests
+// ============================================================================
+
+TEST(InputSystemActionTests, IsActionDown_WhileAnyBindingHeld) {
+    InputSystem system;
+    system.Initialize();
+    InputAction key{};
+    key.name = "Attack";
+    key.deviceType = InputDevice::Keyboard;
+    key.keyCode = Keys::Space;
+    system.RegisterAction(key);
+    InputAction mouse{};
+    mouse.name = "Attack";
+    mouse.deviceType = InputDevice::Mouse;
+    mouse.mouseButton = MouseButton::Left;
+    system.RegisterAction(mouse);
+
+    EXPECT_FALSE(system.IsActionDown("Attack"));
+
+    system.SetKeyState(Keys::Space, KeyState::Pressed);
+    system.Update();
+    EXPECT_TRUE(system.IsActionDown("Attack"));      // still held in the next frame
+    EXPECT_FALSE(system.IsActionTriggered("Attack"));
+
+    system.SetKeyState(Keys::Space, KeyState::Released);
+    system.SetMouseButton(MouseButton::Left, true);
+    EXPECT_TRUE(system.IsActionDown("Attack"));
+
+    system.SetMouseButton(MouseButton::Left, false);
+    EXPECT_FALSE(system.IsActionDown("Attack"));
+    EXPECT_FALSE(system.IsActionDown("Unknown"));
+}
+
+TEST(InputSystemActionTests, IsActionDown_GamepadButton) {
+    InputSystem system;
+    system.Initialize();
+    InputAction pad{};
+    pad.name = "Attack";
+    pad.deviceType = InputDevice::Gamepad;
+    pad.gamepadButton = GamepadButton::A;
+    system.RegisterAction(pad);
+
+    GamepadState state{};
+    state.connected = true;
+    state.buttons = ButtonMask(GamepadButton::A);
+    system.SetGamepadState(0, state);
+
+    EXPECT_TRUE(system.IsActionDown("Attack"));
+}

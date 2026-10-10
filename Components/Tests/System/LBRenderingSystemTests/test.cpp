@@ -1,6 +1,7 @@
 #include "pch.h"
 
 import LB.RenderingSystem;
+import std;
 
 using namespace LB::Systems::Rendering;
 
@@ -933,4 +934,481 @@ TEST(ModelLoadingTests, Shutdown_ForgetsModels) {
     system.Shutdown();
 
     EXPECT_EQ(system.GetModel(id), nullptr);
+}
+
+// ============================================================================
+// Matrix and Quaternion Tests
+// ============================================================================
+
+namespace {
+    void ExpectNear(Vector3 actual, Vector3 expected, float tolerance = 1e-4f) {
+        EXPECT_NEAR(actual.x, expected.x, tolerance);
+        EXPECT_NEAR(actual.y, expected.y, tolerance);
+        EXPECT_NEAR(actual.z, expected.z, tolerance);
+    }
+
+    void ExpectIdentity(const Matrix4& matrix, float tolerance = 1e-3f) {
+        const Matrix4 identity;
+        for (std::size_t i = 0; i < 16; ++i) EXPECT_NEAR(matrix.m[i], identity.m[i], tolerance) << "element " << i;
+    }
+}
+
+TEST(MatrixTests, Multiply_AppliesLeftThenRight) {
+    const auto moveThenTurn = Matrix4::Translation({ 1.0f, 0.0f, 0.0f }) * Matrix4::RotationY(std::numbers::pi_v<float> * 0.5f);
+
+    // (1, 0, 0) turned a quarter around Y lands on -Z (DirectXMath convention)
+    ExpectNear(moveThenTurn.TransformPoint({}), { 0.0f, 0.0f, -1.0f });
+}
+
+TEST(MatrixTests, RotationY_QuarterTurn_TurnsPlusZToPlusX) {
+    ExpectNear(Matrix4::RotationY(std::numbers::pi_v<float> * 0.5f).TransformDirection({ 0.0f, 0.0f, 1.0f }), { 1.0f, 0.0f, 0.0f });
+}
+
+TEST(MatrixTests, FromTranslationRotationScale_ScalesRotatesThenMoves) {
+    const auto q = Quaternion::FromAxisAngle({ 0.0f, 1.0f, 0.0f }, std::numbers::pi_v<float> * 0.5f);
+    const auto trs = Matrix4::FromTranslationRotationScale({ 5.0f, 0.0f, 0.0f }, q, { 2.0f, 2.0f, 2.0f });
+
+    ExpectNear(trs.TransformPoint({ 0.0f, 0.0f, 1.0f }), { 7.0f, 0.0f, 0.0f });
+}
+
+TEST(MatrixTests, Placement_MatchesScaleYawMove) {
+    const auto placement = Matrix4::Placement({ 1.0f, 2.0f, 3.0f }, std::numbers::pi_v<float>, 0.5f);
+
+    ExpectNear(placement.TransformPoint({ 0.0f, 0.0f, 2.0f }), { 1.0f, 2.0f, 2.0f });
+}
+
+TEST(QuaternionTests, Slerp_HalfwayBetweenTurns) {
+    const Vector3 up{ 0.0f, 1.0f, 0.0f };
+    const auto none = Quaternion::FromAxisAngle(up, 0.0f);
+    const auto quarter = Quaternion::FromAxisAngle(up, std::numbers::pi_v<float> * 0.5f);
+
+    const auto half = Quaternion::Slerp(none, quarter, 0.5f);
+    const auto eighth = Quaternion::FromAxisAngle(up, std::numbers::pi_v<float> * 0.25f);
+    EXPECT_NEAR(half.y, eighth.y, 1e-5f);
+    EXPECT_NEAR(half.w, eighth.w, 1e-5f);
+}
+
+TEST(QuaternionTests, Slerp_TakesShortestPath) {
+    const Vector3 up{ 0.0f, 1.0f, 0.0f };
+    const auto a = Quaternion::FromAxisAngle(up, 0.1f);
+    auto b = Quaternion::FromAxisAngle(up, 0.3f);
+    b = { -b.x, -b.y, -b.z, -b.w };   // same rotation, opposite sign
+
+    const auto mid = Quaternion::Slerp(a, b, 0.5f);
+    const auto expected = Quaternion::FromAxisAngle(up, 0.2f);
+    EXPECT_NEAR(std::abs(mid.y), expected.y, 1e-5f);
+    EXPECT_NEAR(std::abs(mid.w), expected.w, 1e-5f);
+}
+
+// ============================================================================
+// Animation Sampling Tests (synthetic two-joint skeleton)
+// ============================================================================
+
+namespace {
+    // A root joint and a child one unit above it
+    Skeleton TwoJointSkeleton() {
+        Skeleton skeleton;
+        Joint root;
+        root.name = "root";
+        Joint child;
+        child.name = "child";
+        child.parent = 0;
+        child.translation = { 0.0f, 1.0f, 0.0f };
+        child.inverseBind = Matrix4::Translation({ 0.0f, -1.0f, 0.0f });
+        skeleton.joints = { root, child };
+        skeleton.evaluationOrder = { 0, 1 };
+        return skeleton;
+    }
+
+    // The root slides from x = 0 to x = 2 over two seconds
+    AnimationClip SlideClip() {
+        AnimationClip clip;
+        clip.name = "Slide";
+        clip.durationSeconds = 2.0f;
+        clip.channels.push_back(AnimationChannel{ "root", AnimationPath::Translation, { 0.0f, 2.0f }, { 0.0f, 0.0f, 0.0f,  2.0f, 0.0f, 0.0f } });
+        clip.channels.push_back(AnimationChannel{ "not_in_skeleton", AnimationPath::Translation, { 0.0f }, { 9.0f, 9.0f, 9.0f } });
+        return clip;
+    }
+}
+
+TEST(AnimationSamplingTests, RestPose_SkinMatricesAreIdentity) {
+    const auto skeleton = TwoJointSkeleton();
+
+    const auto skin = ComputeSkinMatrices(skeleton, ComputeJointTransforms(skeleton, RestPose(skeleton)));
+
+    ASSERT_EQ(skin.size(), 2u);
+    ExpectIdentity(skin[0]);
+    ExpectIdentity(skin[1]);
+}
+
+TEST(AnimationSamplingTests, SampleClip_InterpolatesAndChildFollowsParent) {
+    const auto skeleton = TwoJointSkeleton();
+
+    const auto pose = SampleClip(skeleton, SlideClip(), 0.5f, true);
+    const auto joints = ComputeJointTransforms(skeleton, pose);
+
+    ExpectNear(joints[0].Translation(), { 0.5f, 0.0f, 0.0f });
+    ExpectNear(joints[1].Translation(), { 0.5f, 1.0f, 0.0f });   // child keeps its rest offset
+}
+
+TEST(AnimationSamplingTests, SampleClip_LoopingWrapsTime) {
+    const auto skeleton = TwoJointSkeleton();
+
+    const auto pose = SampleClip(skeleton, SlideClip(), 2.5f, true);
+
+    EXPECT_NEAR(pose[0].translation.x, 0.5f, 1e-5f);
+}
+
+TEST(AnimationSamplingTests, SampleClip_NotLoopingHoldsLastFrame) {
+    const auto skeleton = TwoJointSkeleton();
+
+    const auto pose = SampleClip(skeleton, SlideClip(), 5.0f, false);
+
+    EXPECT_NEAR(pose[0].translation.x, 2.0f, 1e-5f);
+}
+
+TEST(AnimationSamplingTests, BlendPoses_Midway) {
+    const auto skeleton = TwoJointSkeleton();
+    const auto start = SampleClip(skeleton, SlideClip(), 0.0f, false);
+    const auto end = SampleClip(skeleton, SlideClip(), 2.0f, false);
+
+    const auto mixed = BlendPoses(start, end, 0.25f);
+
+    EXPECT_NEAR(mixed[0].translation.x, 0.5f, 1e-5f);
+}
+
+TEST(AnimationSamplingTests, PoseFor_UnknownClip_RestPose) {
+    const auto skeleton = TwoJointSkeleton();
+    AnimationState state;
+    state.current.clip = 7;
+
+    const auto pose = PoseFor(skeleton, state, [](AnimationId) -> const AnimationClip* { return nullptr; });
+
+    EXPECT_FLOAT_EQ(pose[1].translation.y, 1.0f);
+}
+
+TEST(AnimationSamplingTests, PoseFor_CrossFadesFromPreviousClip) {
+    const auto skeleton = TwoJointSkeleton();
+    const auto slide = SlideClip();
+    AnimationState state;
+    state.previous = { 1, 2.0f, false };   // root at x = 2
+    state.current = { 2, 0.0f, false };    // a clip that is not found: rest pose, x = 0
+    state.blend = 0.75f;
+
+    const auto pose = PoseFor(skeleton, state, [&](AnimationId id) { return id == 1 ? &slide : nullptr; });
+
+    EXPECT_NEAR(pose[0].translation.x, 0.5f, 1e-5f);
+}
+
+// ============================================================================
+// Skinned Model and Animation Loading Tests (KayKit Skeletons)
+// ============================================================================
+
+TEST(SkinnedModelTests, SkeletonMinion_LoadsSkeletonTextureAndGlow) {
+    const auto dir = ModelsDirectory();
+    ASSERT_FALSE(dir.empty());
+    RenderingSystem system;
+
+    const auto result = system.LoadModel(dir / "Skeleton_Minion.glb");
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    const auto& minion = *system.GetModel(result.id);
+
+    EXPECT_TRUE(minion.IsSkinned());
+    EXPECT_EQ(minion.skeleton.joints.size(), 23u);   // KayKit Rig_Medium
+    EXPECT_TRUE(minion.skeleton.FindJoint("handslot.r").has_value());
+    EXPECT_TRUE(minion.skeleton.FindJoint("head").has_value());
+    for (const auto& part : minion.parts) {
+        EXPECT_TRUE(part.IsSkinned()) << part.name;
+        EXPECT_EQ(part.skin.size(), part.vertices.size()) << part.name;
+    }
+
+    // One 1024x1024 atlas with a full mip chain, used by the bone material
+    ASSERT_EQ(minion.textures.size(), 1u);
+    EXPECT_EQ(minion.textures[0]->Width(), 1024u);
+    EXPECT_EQ(minion.textures[0]->mips.size(), 11u);
+    EXPECT_EQ(minion.textures[0]->mips.back().width, 1u);
+    const auto& bone = minion.materials[minion.parts[0].materialIndex];
+    EXPECT_EQ(bone.baseColorTexture, std::optional<std::uint32_t>(0));
+
+    // The eyes glow
+    const auto glow = std::ranges::find(minion.materials, std::string("Glow"), &ModelMaterial::name);
+    ASSERT_NE(glow, minion.materials.end());
+    EXPECT_GT(glow->emissive[1], 0.5f);
+
+    // Bind pose stands on the origin, about 2.2 units tall
+    EXPECT_NEAR(minion.boundsMin.y, 0.0f, 0.01f);
+    EXPECT_NEAR(minion.boundsMax.y, 2.17f, 0.05f);
+}
+
+TEST(SkinnedModelTests, RestPose_SkinMatricesAreIdentity) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+    const auto& minion = *system.GetModel(system.LoadModel(dir / "Skeleton_Minion.glb").id);
+
+    const auto skin = ComputeSkinMatrices(minion.skeleton, ComputeJointTransforms(minion.skeleton, RestPose(minion.skeleton)));
+
+    for (const auto& matrix : skin) ExpectIdentity(matrix);
+}
+
+TEST(SkinnedModelTests, SkeletonWarrior_HelmetRidesOnTheHeadJoint) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+    const auto result = system.LoadModel(dir / "Skeleton_Warrior.glb");
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    const auto& warrior = *system.GetModel(result.id);
+
+    // A rigid mesh under the head bone becomes a part skinned entirely to it, in model space
+    const auto* helmet = warrior.FindPart("Skeleton_Warrior_Helmet");
+    ASSERT_NE(helmet, nullptr);
+    const auto head = *warrior.skeleton.FindJoint("head");
+    ASSERT_TRUE(helmet->IsSkinned());
+    for (const auto& vertex : helmet->skin) {
+        EXPECT_EQ(vertex.joints[0], head);
+        EXPECT_FLOAT_EQ(vertex.weights[0], 1.0f);
+    }
+    float lowest = 100.0f;
+    for (const auto& vertex : helmet->vertices) lowest = std::min(lowest, vertex.position.y);
+    EXPECT_GT(lowest, 1.0f);   // on the head, not at the feet
+}
+
+TEST(SkinnedModelTests, SameImage_SharedBetweenModels) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+
+    const auto blade = system.LoadModel(dir / "Skeleton_Blade.gltf");
+    const auto axe = system.LoadModel(dir / "Skeleton_Axe.gltf");
+    ASSERT_TRUE(blade.Succeeded()) << blade.error;
+    ASSERT_TRUE(axe.Succeeded()) << axe.error;
+
+    EXPECT_FALSE(system.GetModel(blade.id)->IsSkinned());
+    ASSERT_EQ(system.GetModel(blade.id)->textures.size(), 1u);
+    EXPECT_EQ(system.GetModel(blade.id)->textures[0], system.GetModel(axe.id)->textures[0]);
+}
+
+TEST(AnimationLoadingTests, RigMediumGeneral_LoadsNamedClips) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+
+    const auto result = system.LoadAnimations(dir / "Animations" / "Rig_Medium_General.glb");
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+
+    EXPECT_EQ(result.clips.size(), 15u);
+    for (std::string_view name : { "Idle_A", "Hit_A", "Death_A", "Spawn_Ground", "Throw" }) {
+        const auto id = system.FindAnimation(name);
+        ASSERT_TRUE(id.has_value()) << name;
+        EXPECT_GT(system.GetAnimation(*id)->durationSeconds, 0.0f) << name;
+        EXPECT_FALSE(system.GetAnimation(*id)->channels.empty()) << name;
+    }
+    EXPECT_FALSE(system.FindAnimation("Walking_A").has_value());   // in the movement set
+}
+
+TEST(AnimationLoadingTests, SameFileTwice_SameClips) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+
+    const auto first = system.LoadAnimations(dir / "Animations" / "Rig_Medium_MovementBasic.glb");
+    const auto second = system.LoadAnimations(dir / "Animations" / "." / "Rig_Medium_MovementBasic.glb");
+
+    ASSERT_TRUE(first.Succeeded()) << first.error;
+    EXPECT_EQ(first.clips, second.clips);
+}
+
+TEST(AnimationLoadingTests, FileWithoutAnimations_ReportsFileName) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+
+    const auto result = system.LoadAnimations(dir / "wall.glb");
+
+    EXPECT_FALSE(result.Succeeded());
+    EXPECT_NE(result.error.find("wall.glb: the file has no animations"), std::string::npos) << result.error;
+}
+
+TEST(AnimationLoadingTests, GetJointTransform_HandMovesWithTheWalk) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+    const auto minion = system.LoadModel(dir / "Skeleton_Minion.glb").id;
+    system.LoadAnimations(dir / "Animations" / "Rig_Medium_MovementBasic.glb");
+    const auto walk = *system.FindAnimation("Walking_A");
+
+    AnimationState early;
+    early.current = { walk, 0.0f, true };
+    AnimationState later;
+    later.current = { walk, 0.4f, true };
+    const auto a = system.GetJointTransform(minion, "handslot.r", early);
+    const auto b = system.GetJointTransform(minion, "handslot.r", later);
+
+    ASSERT_TRUE(a.has_value());
+    ASSERT_TRUE(b.has_value());
+    const auto pa = a->Translation();
+    const auto pb = b->Translation();
+    EXPECT_GT(std::abs(pa.x - pb.x) + std::abs(pa.y - pb.y) + std::abs(pa.z - pb.z), 0.01f);
+    EXPECT_FALSE(system.GetJointTransform(minion, "tail", early).has_value());
+    EXPECT_FALSE(system.GetJointTransform(InvalidModelId, "handslot.r", early).has_value());
+}
+
+TEST(AnimationLoadingTests, DrawModel_KeepsAnimationAndTransform) {
+    const auto dir = ModelsDirectory();
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    const auto minion = system.LoadModel(dir / "Skeleton_Minion.glb").id;
+
+    ModelRenderData draw{ minion, { 1.0f, 0.0f, 2.0f } };
+    draw.animation.current = { 3, 0.5f, false };
+    draw.transform = Matrix4::Translation({ 0.0f, 1.0f, 0.0f });
+    system.BeginFrame();
+    system.DrawModel(draw);
+
+    ASSERT_EQ(system.GetQueuedModels().size(), 1u);
+    EXPECT_EQ(system.GetQueuedModels()[0].animation.current.clip, 3u);
+    ASSERT_TRUE(system.GetQueuedModels()[0].transform.has_value());
+    system.EndFrame();   // headless: no posing, but batching still counts the parts
+    EXPECT_EQ(system.GetStats().drawCalls, system.GetModel(minion)->parts.size());
+}
+
+// ============================================================================
+// Bitmap Font and Text Tests
+// ============================================================================
+
+TEST(BitmapFontTests, Measure_FixedWidthTimesScale) {
+    const auto size = BitmapFont::Measure("12", 3.0f);
+
+    EXPECT_FLOAT_EQ(size.width, (2 * BitmapFont::Advance - 1) * 3.0f);
+    EXPECT_FLOAT_EQ(size.height, BitmapFont::GlyphHeight * 3.0f);
+    EXPECT_FLOAT_EQ(BitmapFont::Measure("", 3.0f).width, 0.0f);
+    EXPECT_FLOAT_EQ(RenderingSystem{}.MeasureText("MISS", 2.0f).width, BitmapFont::Measure("MISS", 2.0f).width);
+}
+
+TEST(BitmapFontTests, Glyphs_DigitOneIsAColumn) {
+    // "1": the stem is the middle column on every row but the last (the base spans three)
+    for (int y = 0; y < BitmapFont::GlyphHeight; ++y) EXPECT_TRUE(BitmapFont::Pixel('1', 2, y)) << y;
+    EXPECT_FALSE(BitmapFont::Pixel('1', 0, 3));
+    EXPECT_FALSE(BitmapFont::Pixel(' ', 2, 3));
+    EXPECT_FALSE(BitmapFont::Pixel('1', 5, 0));   // outside the glyph
+}
+
+TEST(BitmapFontTests, LowerCaseAndUnknown_MapToCapitalsAndQuestionMark) {
+    EXPECT_EQ(BitmapFont::GlyphIndex('m'), BitmapFont::GlyphIndex('M'));
+    EXPECT_EQ(BitmapFont::GlyphIndex('~'), BitmapFont::GlyphIndex('?'));
+    EXPECT_EQ(BitmapFont::GlyphIndex('\n'), BitmapFont::GlyphIndex('?'));
+}
+
+TEST(BitmapFontTests, Atlas_HasGlyphsInAlphaAndAWhiteStrip) {
+    const auto atlas = BitmapFont::BuildAtlas();
+    ASSERT_EQ(atlas.size(), static_cast<std::size_t>(BitmapFont::AtlasWidth * BitmapFont::AtlasHeight * 4));
+
+    const auto alpha = [&](int x, int y) { return atlas[static_cast<std::size_t>((y * BitmapFont::AtlasWidth + x) * 4 + 3)]; };
+    const auto [x, y] = BitmapFont::GlyphOrigin('1');
+    EXPECT_EQ(alpha(x + 2, y), 255);
+    EXPECT_EQ(alpha(x, y + 3), 0);
+    EXPECT_EQ(alpha(BitmapFont::AtlasWidth / 2, BitmapFont::WhiteTop + 2), 255);
+}
+
+TEST(RenderingSystemTests, DrawText_KeepsOutlineAndClearsNextFrame) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+
+    system.DrawText(TextRenderData{ "12!", { 10, 20 }, {}, Color::Yellow(), 4.0f, 20, true });
+
+    ASSERT_EQ(system.GetQueuedText().size(), 1u);
+    EXPECT_TRUE(system.GetQueuedText()[0].outline);
+    EXPECT_EQ(system.GetQueuedText()[0].text, "12!");
+    system.EndFrame();
+    EXPECT_EQ(system.GetStats().textRendered, 1u);
+    EXPECT_EQ(system.GetStats().drawCalls, 1u);   // the overlay is one draw
+
+    system.BeginFrame();
+    EXPECT_TRUE(system.GetQueuedText().empty());
+}
+
+TEST(RenderingSystemTests, RectanglesAndText_OneOverlayDraw) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+
+    system.DrawRectangle(Rectangle{ 0, 0, 10, 10 }, Color::Red());
+    system.DrawRectangle(Rectangle{ 0, 0, 10, 10 }, Color::Blue());
+    system.DrawText(TextRenderData{ "HP" });
+    system.EndFrame();
+
+    EXPECT_EQ(system.GetStats().drawCalls, 1u);
+}
+
+// ============================================================================
+// TrueType Font Tests (Assets/Fonts)
+// ============================================================================
+
+namespace {
+    std::filesystem::path FontsDirectory() {
+        const auto models = ModelsDirectory();
+        return models.empty() ? std::filesystem::path{} : models.parent_path() / "Fonts";
+    }
+}
+
+TEST(FontTests, MedievalSharp_BakesGlyphsAndMetrics) {
+    RenderingSystem system;
+    const auto result = system.LoadFont(FontsDirectory() / "MedievalSharp-Regular.ttf");
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    const auto& font = *system.GetFont(result.id);
+
+    EXPECT_EQ(font.name, "MedievalSharp-Regular");
+    EXPECT_EQ(system.FindFont("MedievalSharp-Regular"), std::optional<FontId>(result.id));
+    EXPECT_GT(font.capHeight, RenderingSystem::FontBakeSize * 0.4f);
+    EXPECT_LT(font.capHeight, RenderingSystem::FontBakeSize);
+    for (char32_t c : { U'0', U'9', U'A', U'z', U'!', char32_t{ 0xF1 }, char32_t{ 0xE9 } }) {   // n and e with accents
+        ASSERT_NE(font.Find(c), nullptr) << static_cast<std::uint32_t>(c);
+        EXPECT_GT(font.Find(c)->advance, 0.0f);
+    }
+    EXPECT_EQ(font.Find(U' ')->width, 0.0f);   // no quad for spaces
+    EXPECT_EQ(font.atlas.Width(), 512u);
+    EXPECT_TRUE(std::has_single_bit(font.atlas.Height()));
+}
+
+TEST(FontTests, Glyph_DistanceFieldInAlpha) {
+    RenderingSystem system;
+    const auto& font = *system.GetFont(system.LoadFont(FontsDirectory() / "MedievalSharp-Regular.ttf").id);
+    const auto& glyph = *font.Find(U'I');
+    const auto& pixels = font.atlas.mips[0].pixels;
+    const auto alpha = [&](float x, float y) {
+        return pixels[static_cast<std::size_t>((static_cast<int>(y) * static_cast<int>(font.atlas.Width()) + static_cast<int>(x)) * 4 + 3)];
+    };
+
+    // Inside the stroke above the edge value, the padding corner below it
+    EXPECT_GT(alpha(glyph.atlasX + glyph.width * 0.5f, glyph.atlasY + glyph.height * 0.5f), 128);
+    EXPECT_LT(alpha(glyph.atlasX + 1.0f, glyph.atlasY + 1.0f), 128);
+}
+
+TEST(FontTests, MeasureText_UsesTheDefaultFont) {
+    RenderingSystem system;
+    const auto pixel = system.MeasureText("WAVE 12", 3.0f);
+    ASSERT_TRUE(system.LoadFont(FontsDirectory() / "MedievalSharp-Regular.ttf").Succeeded());
+
+    const auto ttf = system.MeasureText("WAVE 12", 3.0f);
+    EXPECT_FLOAT_EQ(ttf.height, BitmapFont::GlyphHeight * 3.0f);   // capitals match the pixel font
+    EXPECT_GT(ttf.width, 0.0f);
+    EXPECT_NE(ttf.width, pixel.width);
+    EXPECT_FLOAT_EQ(system.MeasureText("WAVE 12", 3.0f, "pixel").width, pixel.width);
+    EXPECT_NEAR(system.MeasureText("WAVE 12", 6.0f).width, ttf.width * 2.0f, 1e-3f);
+    EXPECT_GT(system.MeasureText("MMMM", 3.0f).width, system.MeasureText("iiii", 3.0f).width);   // proportional
+}
+
+TEST(FontTests, SameFileTwice_SameFont_MissingFile_Error) {
+    RenderingSystem system;
+    const auto first = system.LoadFont(FontsDirectory() / "MedievalSharp-Regular.ttf");
+    const auto second = system.LoadFont(FontsDirectory() / "." / "MedievalSharp-Regular.ttf");
+    EXPECT_EQ(first.id, second.id);
+
+    const auto missing = system.LoadFont(FontsDirectory() / "Nope.ttf");
+    EXPECT_FALSE(missing.Succeeded());
+    EXPECT_NE(missing.error.find("Nope.ttf: file not found"), std::string::npos) << missing.error;
+
+    const auto notAFont = system.LoadFont(ModelsDirectory() / "wall.glb");
+    EXPECT_FALSE(notAFont.Succeeded());
+}
+
+TEST(FontTests, DecodeUtf8_AccentsAndInvalidBytes) {
+    EXPECT_TRUE(DecodeUtf8("A\xC3\xB1") == (std::u32string{ U'A', char32_t{ 0xF1 } }));    // A, n with tilde
+    EXPECT_TRUE(DecodeUtf8("\xE2\x82\xAC") == std::u32string(1, char32_t{ 0x20AC }));    // euro sign
+    EXPECT_TRUE(DecodeUtf8("\xFF") == std::u32string(U"?"));
+    EXPECT_TRUE(DecodeUtf8("\xC3") == std::u32string(U"?"));                                      // cut short
 }

@@ -140,6 +140,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Animator.ixx" />
+    <ClCompile Include="Encounter.ixx" />
     <ClCompile Include="GameEngine.ixx" />
     <ClCompile Include="LB.Engine.ixx" />
     <ClCompile Include="StepTimer.ixx" />
@@ -156,6 +158,9 @@
     </ProjectReference>
     <ProjectReference Include="..\Services\LBAssetPersistenceService\LBAssetPersistenceService.vcxproj">
       <Project>{cc3058fb-9cf7-4f26-b020-5d8ee70368a3}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Services\LBCombatService\LBCombatService.vcxproj">
+      <Project>{6404607a-1507-4842-a231-e7761a80b19d}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Services\LBCharacterService\LBCharacterService.vcxproj">
       <Project>{54cb0c98-89a4-472b-b184-98bc3c368f4e}</Project>

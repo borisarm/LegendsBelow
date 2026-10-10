@@ -6,6 +6,100 @@ import std;
 
 namespace LB::Systems::Rendering {
 
+    namespace {
+        // Overlay vertices batched by the atlas they sample (null: the built-in atlas)
+        struct OverlayBuilder {
+            std::vector<Detail::OverlayVertex> vertices;
+            std::vector<Detail::OverlayBatch> batches;
+
+            // Two triangles covering a screen rectangle; atlas coordinates in pixels
+            void Quad(const ModelTexture* atlas, float atlasWidth, float atlasHeight,
+                      float left, float top, float right, float bottom, float u0, float v0, float u1, float v1,
+                      const Color& color, float mode = 0.0f, float outline = 0.0f) {
+                if (batches.empty() || batches.back().atlas != atlas) {
+                    batches.push_back({ atlas, static_cast<std::uint32_t>(vertices.size()), 0 });
+                }
+                u0 /= atlasWidth; u1 /= atlasWidth;
+                v0 /= atlasHeight; v1 /= atlasHeight;
+                const auto vertex = [&](float x, float y, float u, float v) {
+                    return Detail::OverlayVertex{ x, y, u, v, color.r, color.g, color.b, color.a, mode, outline };
+                };
+                vertices.insert(vertices.end(), {
+                    vertex(left, top, u0, v0), vertex(right, top, u1, v0), vertex(left, bottom, u0, v1),
+                    vertex(right, top, u1, v0), vertex(right, bottom, u1, v1), vertex(left, bottom, u0, v1) });
+                batches.back().count += 6;
+            }
+
+            // A solid rectangle samples the built-in atlas's white strip
+            void Rect(const Rectangle& rect, const Color& color) {
+                constexpr float u = BitmapFont::AtlasWidth * 0.5f;
+                constexpr float v = BitmapFont::WhiteTop + 4.0f;
+                Quad(nullptr, BitmapFont::AtlasWidth, BitmapFont::AtlasHeight, static_cast<float>(rect.x), static_cast<float>(rect.y),
+                     static_cast<float>(rect.x + rect.width), static_cast<float>(rect.y + rect.height), u, v, u, v, color);
+            }
+
+            // Pixel font: one quad per visible glyph; an outline draws dark copies one font pixel around it first
+            void PixelText(const TextRenderData& text) {
+                const float scale = std::max(0.25f, text.scale);
+                const auto glyphs = [&](float dx, float dy, const Color& color) {
+                    float x = static_cast<float>(text.position.x) + dx;
+                    const float y = static_cast<float>(text.position.y) + dy;
+                    for (const char c : text.text) {
+                        if (c != ' ') {
+                            const auto [gx, gy] = BitmapFont::GlyphOrigin(c);
+                            Quad(nullptr, BitmapFont::AtlasWidth, BitmapFont::AtlasHeight,
+                                 x, y, x + BitmapFont::GlyphWidth * scale, y + BitmapFont::GlyphHeight * scale,
+                                 static_cast<float>(gx), static_cast<float>(gy),
+                                 static_cast<float>(gx + BitmapFont::GlyphWidth), static_cast<float>(gy + BitmapFont::GlyphHeight), color);
+                        }
+                        x += BitmapFont::Advance * scale;
+                    }
+                };
+
+                if (text.outline) {
+                    const Color dark{ 0.0f, 0.0f, 0.0f, text.color.a };
+                    for (int oy = -1; oy <= 1; ++oy) {
+                        for (int ox = -1; ox <= 1; ++ox) {
+                            if (ox != 0 || oy != 0) glyphs(static_cast<float>(ox) * scale, static_cast<float>(oy) * scale, dark);
+                        }
+                    }
+                }
+                glyphs(0.0f, 0.0f, text.color);
+            }
+
+            // TrueType font: distance field glyphs on the baseline under the capitals' top edge; the
+            // shader draws the outline (about an eighth of the capital height, at least a pixel)
+            void FontText(const FontData& font, const TextRenderData& text) {
+                const float capital = BitmapFont::GlyphHeight * std::max(0.25f, text.scale);
+                const float scale = font.ScaleFor(capital);
+                const float atlasWidth = static_cast<float>(font.atlas.Width());
+                const float atlasHeight = static_cast<float>(font.atlas.Height());
+                const float baseline = static_cast<float>(text.position.y) + capital;
+
+                // Distance field units: 0.5 on the outline, 0.5 / spread per bake pixel
+                const float outlinePixels = std::max(1.0f, capital * 0.12f);
+                const float outline = text.outline ? std::min(0.45f, outlinePixels / scale * 0.5f / font.spread) : 0.0f;
+                const float mode = text.outline ? 2.0f : 1.0f;
+
+                const auto codepoints = DecodeUtf8(text.text);
+                float pen = static_cast<float>(text.position.x);
+                for (std::size_t i = 0; i < codepoints.size(); ++i) {
+                    const auto* glyph = font.Find(codepoints[i]);
+                    if (!glyph) continue;
+                    if (glyph->width > 0.0f) {
+                        const float left = pen + glyph->offsetX * scale;
+                        const float top = baseline + glyph->offsetY * scale;
+                        Quad(&font.atlas, atlasWidth, atlasHeight, left, top, left + glyph->width * scale, top + glyph->height * scale,
+                             glyph->atlasX, glyph->atlasY, glyph->atlasX + glyph->width, glyph->atlasY + glyph->height,
+                             text.color, mode, outline);
+                    }
+                    pen += glyph->advance * scale;
+                    if (i + 1 < codepoints.size()) pen += font.Kerning(codepoints[i], codepoints[i + 1]) * scale;
+                }
+            }
+        };
+    }
+
     struct RenderingSystem::GpuBackend {
         Detail::GpuRenderer renderer;
     };
@@ -30,6 +124,9 @@ namespace LB::Systems::Rendering {
             for (const auto& model : models_) {
                 backend->renderer.AddModel(model);  // loaded before the device existed
             }
+            for (const auto& font : fonts_) {
+                backend->renderer.AddFont(font);
+            }
             gpu_ = std::move(backend);
         }
         catch (const std::exception&) {
@@ -45,6 +142,11 @@ namespace LB::Systems::Rendering {
         gpu_.reset();
         models_.clear();
         modelPaths_.clear();
+        animations_.clear();
+        animationFiles_.clear();
+        textureCache_.clear();
+        fonts_.clear();
+        fontPaths_.clear();
         initialized_ = false;
     }
 
@@ -53,11 +155,21 @@ namespace LB::Systems::Rendering {
 
         // Batch models: every copy of a model is one instanced draw per part. Faded copies
         // (tint alpha < 1) are drawn after the opaque world, in two passes (depth, then blend).
+        // Skinned copies are posed on the CPU: their joint matrices go into the frame's palette.
         opaqueInstances_.assign(models_.size(), {});
         fadedInstances_.assign(models_.size(), {});
+        skinPalette_.clear();
         for (const auto& model : modelQueue_) {
-            const ModelInstance instance{ model.position, model.yawRadians, model.scale,
-                                          { model.tint.r, model.tint.g, model.tint.b, model.tint.a } };
+            const auto& data = *models_[model.model - 1];
+            ModelInstance instance{};
+            instance.world = Matrix4::Placement(model.position, model.yawRadians, model.scale);
+            if (model.transform) instance.world = *model.transform * instance.world;
+            instance.tint = { model.tint.r, model.tint.g, model.tint.b, model.tint.a };
+            instance.partPoses = model.partPoses.empty() ? nullptr : &model.partPoses;
+            if (gpu_ && data.IsSkinned()) {
+                instance.paletteOffset = AppendSkinPalette(data, model.animation, instance.world);
+            }
+
             auto& group = model.tint.a < 1.0f ? fadedInstances_ : opaqueInstances_;
             group[model.model - 1].push_back(instance);
         }
@@ -78,6 +190,7 @@ namespace LB::Systems::Rendering {
                 }
 
                 using Pass = Detail::GpuRenderer::ModelPass;
+                gpu_->renderer.SetSkinPalette(skinPalette_.data(), skinPalette_.size());
                 gpu_->renderer.BeginModelPass();
                 const auto drawGroups = [this](const std::vector<std::vector<ModelInstance>>& groups, Pass pass) {
                     for (std::size_t i = 0; i < groups.size(); ++i) {
@@ -89,18 +202,26 @@ namespace LB::Systems::Rendering {
                 drawGroups(fadedInstances_, Pass::Transparent);
             }
 
-            // 2D overlay: solid rectangles, back to front; clipped to the back buffer
-            auto rectangles = rectangleQueue_;
-            std::ranges::stable_sort(rectangles, {}, &RectangleRenderData::layerDepth);
-            for (const auto& item : rectangles) {
-                const int32_t left = std::clamp(item.rect.x, 0, screenWidth_);
-                const int32_t top = std::clamp(item.rect.y, 0, screenHeight_);
-                const int32_t right = std::clamp(item.rect.x + item.rect.width, 0, screenWidth_);
-                const int32_t bottom = std::clamp(item.rect.y + item.rect.height, 0, screenHeight_);
-                if (right <= left || bottom <= top) continue;
+            // 2D overlay: rectangles and text back to front by layer (submission order within a
+            // layer, rectangles first), alpha-blended in one draw
+            struct OverlayItem { int32_t layer; bool text; std::size_t index; };
+            std::vector<OverlayItem> items;
+            items.reserve(rectangleQueue_.size() + textQueue_.size());
+            for (std::size_t i = 0; i < rectangleQueue_.size(); ++i) items.push_back({ rectangleQueue_[i].layerDepth, false, i });
+            for (std::size_t i = 0; i < textQueue_.size(); ++i) items.push_back({ textQueue_[i].layerDepth, true, i });
+            std::ranges::stable_sort(items, {}, &OverlayItem::layer);
 
-                gpu_->renderer.FillRectangle(left, top, right, bottom, item.color.r, item.color.g, item.color.b, item.color.a);
+            OverlayBuilder overlay;
+            for (const auto& item : items) {
+                if (!item.text) {
+                    overlay.Rect(rectangleQueue_[item.index].rect, rectangleQueue_[item.index].color);
+                    continue;
+                }
+                const auto& text = textQueue_[item.index];
+                if (const auto* font = ResolveFont(text.fontId)) overlay.FontText(*font, text);
+                else overlay.PixelText(text);
             }
+            gpu_->renderer.DrawOverlay(overlay.vertices.data(), overlay.batches);
         }
 
         stats_.meshesRendered = static_cast<uint32_t>(meshQueue_.size());
@@ -130,7 +251,7 @@ namespace LB::Systems::Rendering {
             if (modelPaths_[i] == canonical) return ModelLoadResult{ static_cast<ModelId>(i + 1), {} };
         }
 
-        auto loaded = Detail::LoadGltfModel(path);
+        auto loaded = Detail::LoadGltfModel(path, textureCache_);
         if (!loaded.error.empty()) {
             return ModelLoadResult{ InvalidModelId, std::move(loaded.error) };
         }
@@ -148,6 +269,82 @@ namespace LB::Systems::Rendering {
         models_.push_back(std::move(model));
         modelPaths_.push_back(std::move(canonical));
         return ModelLoadResult{ static_cast<ModelId>(models_.size()), {} };
+    }
+
+    FontLoadResult RenderingSystem::LoadFont(const std::filesystem::path& path) {
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(path, ec);
+        if (ec) canonical = path;
+
+        for (std::size_t i = 0; i < fontPaths_.size(); ++i) {
+            if (fontPaths_[i] == canonical) return FontLoadResult{ static_cast<FontId>(i + 1), {} };
+        }
+
+        auto loaded = Detail::LoadTrueTypeFont(path, FontBakeSize);
+        if (!loaded.error.empty()) {
+            return FontLoadResult{ PixelFontId, std::move(loaded.error) };
+        }
+
+        auto font = std::make_shared<const FontData>(std::move(loaded.font));
+        if (gpu_) {
+            try {
+                gpu_->renderer.AddFont(font);
+            }
+            catch (const std::exception& e) {
+                return FontLoadResult{ PixelFontId, std::format("{}: GPU upload failed ({})", path.filename().string(), e.what()) };
+            }
+        }
+
+        fonts_.push_back(std::move(font));
+        fontPaths_.push_back(std::move(canonical));
+        return FontLoadResult{ static_cast<FontId>(fonts_.size()), {} };
+    }
+
+    TextSize RenderingSystem::MeasureText(std::string_view text, float scale, std::string_view font) const {
+        if (const auto* data = ResolveFont(font)) return MeasureLine(*data, text, BitmapFont::GlyphHeight * scale);
+        return BitmapFont::Measure(text, scale);
+    }
+
+    AnimationLoadResult RenderingSystem::LoadAnimations(const std::filesystem::path& path) {
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(path, ec);
+        if (ec) canonical = path;
+
+        for (const auto& [file, clips] : animationFiles_) {
+            if (file == canonical) return AnimationLoadResult{ clips, {} };
+        }
+
+        auto loaded = Detail::LoadGltfAnimations(path);
+        if (!loaded.error.empty()) {
+            return AnimationLoadResult{ {}, std::move(loaded.error) };
+        }
+
+        AnimationLoadResult result;
+        for (auto& clip : loaded.clips) {
+            animations_.push_back(std::make_shared<const AnimationClip>(std::move(clip)));
+            result.clips.push_back(static_cast<AnimationId>(animations_.size()));
+        }
+        animationFiles_.emplace_back(std::move(canonical), result.clips);
+        return result;
+    }
+
+    std::optional<Matrix4> RenderingSystem::GetJointTransform(ModelId model, std::string_view joint, const AnimationState& animation) const {
+        const auto* data = GetModel(model);
+        if (!data) return std::nullopt;
+        const auto index = data->skeleton.FindJoint(joint);
+        if (!index) return std::nullopt;
+
+        const auto pose = PoseFor(data->skeleton, animation, [this](AnimationId id) { return GetAnimation(id); });
+        return ComputeJointTransforms(data->skeleton, pose)[*index];
+    }
+
+    std::uint32_t RenderingSystem::AppendSkinPalette(const ModelData& model, const AnimationState& animation, const Matrix4& world) {
+        const auto offset = static_cast<std::uint32_t>(skinPalette_.size());
+        const auto pose = PoseFor(model.skeleton, animation, [this](AnimationId id) { return GetAnimation(id); });
+        for (const auto& skin : ComputeSkinMatrices(model.skeleton, ComputeJointTransforms(model.skeleton, pose))) {
+            skinPalette_.push_back(skin * world);
+        }
+        return offset;
     }
 
     void RenderingSystem::OnWindowSizeChanged(int32_t width, int32_t height) {

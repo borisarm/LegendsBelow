@@ -168,6 +168,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         options.saveDirectory = GetSaveDirectory();
         options.contentDirectory = GetAssetDirectory(L"Data");
         options.modelDirectory = GetAssetDirectory(L"Models");
+        options.fontDirectory = GetAssetDirectory(L"Fonts");
 
         if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top, options))
         {
