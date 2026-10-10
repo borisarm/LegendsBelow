@@ -301,8 +301,10 @@ export namespace LB::Engine {
 
             Systems::Persistence::SaveData data;
             data["gameTimeSeconds"] = std::format("{}", gameTimeSeconds_);
-            data["player.x"] = std::format("{}", playerPosition_.x);
-            data["player.y"] = std::format("{}", playerPosition_.y);
+            if (playerId_) {
+                data["player.x"] = std::format("{}", playerPosition_.x);
+                data["player.y"] = std::format("{}", playerPosition_.y);
+            }
 
             return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
         }
@@ -318,17 +320,20 @@ export namespace LB::Engine {
             if (!result.success) return false;
 
             double gameTime = 0.0;
-            double playerX = 0.0;
-            double playerY = 0.0;
-            if (!ParseDouble(result.data, "gameTimeSeconds", gameTime) ||
-                !ParseDouble(result.data, "player.x", playerX) ||
-                !ParseDouble(result.data, "player.y", playerY)) {
+            if (!ParseDouble(result.data, "gameTimeSeconds", gameTime)) {
                 return false;
             }
 
+            // The player's position is restored when both the game and the save have a player
+            double playerX = 0.0;
+            double playerY = 0.0;
+            const bool hasPlayerPosition = ParseDouble(result.data, "player.x", playerX) && ParseDouble(result.data, "player.y", playerY);
+
             gameTimeSeconds_ = gameTime;
-            playerPosition_ = ClampToArena(WorldPoint{ static_cast<float>(playerX), static_cast<float>(playerY) });
-            characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
+            if (playerId_ && hasPlayerPosition) {
+                playerPosition_ = ClampToArena(WorldPoint{ static_cast<float>(playerX), static_cast<float>(playerY) });
+                characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
+            }
             return true;
         }
 
@@ -402,10 +407,30 @@ export namespace LB::Engine {
             return true;
         }
 
+        // Class rules (progression, speed, weapon adjustments) come from classes.json
+        void ConfigureClassRules() {
+            for (const auto& definition : content_->GetClasses()) {
+                Services::Character::ClassRules rules{};
+                rules.baseMovementSpeed = definition.baseMovementSpeed;
+                rules.progression = definition.progression;
+                rules.weaponAdjustments = definition.weaponAdjustments;
+                characterService_.SetClassRules(definition.characterClass, std::move(rules));
+            }
+        }
+
+        /// <summary>
+        /// Create the player from class data. Without class data (no content) there is no player.
+        /// </summary>
         bool SpawnPlayer() {
-            // Warrior starting stats from game-design.md (Character Classes)
-            Services::Character::CharacterCreationRequest request(
-                "Hero", LB::Character::CharacterClass::Warrior, LB::Attributes{ 16, 12, 14, 8, 10, 10 });
+            ConfigureClassRules();
+
+            constexpr auto playerClass = LB::Character::CharacterClass::Warrior;
+            const auto* classData = content_->FindClass(playerClass);
+            if (!classData) {
+                return true;
+            }
+
+            Services::Character::CharacterCreationRequest request("Hero", playerClass, classData->startingAttributes);
 
             playerId_ = characterService_.CreateCharacter(request);
             if (!playerId_) return false;

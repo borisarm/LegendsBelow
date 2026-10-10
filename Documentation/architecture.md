@@ -79,7 +79,7 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 | Project | Module | Namespace | Status |
 |---------|--------|-----------|--------|
-| LBCharacterService | `LB.CharacterService` | `LB::Services::Character` | Implemented and tested; real-time movement speed (`GetMovementSpeed`, design 4.2) and `PlaceCharacter` |
+| LBCharacterService | `LB.CharacterService` | `LB::Services::Character` | Implemented and tested; data-driven class rules (`ClassRules` from classes.json): HP/MP from the progression tables (design 4.2 formulas), movement speed, and `GetAttackBonus` with per-class weapon adjustments; a class without rules cannot be created |
 | LBCombatService | `LB.CombatService` | `LB::Services::Combat` | Implemented and tested |
 | LBInventoryService | `LB.InventoryService` | `LB::Services::Inventory` | Implemented and tested |
 | LBProgressionService | `LB.ProgressionService` (+5 sub-modules) | `LB::Services::Progression` | Implemented and tested |
@@ -120,7 +120,7 @@ One GoogleTest project per component under `Model/`, `Services/`, and `System/`,
 
 ### Data – `Assets/Data/`
 
-`spells.json` (45), `weapons.json` (12), `armour.json` (15). Loaded at startup by `LB::Content::ContentDatabase` from `<exe dir>/Assets/Data` (the build copies them there). Invalid content stops startup with every error listed; `ShippedContentTests` validate the files in the test run.
+`spells.json` (45), `weapons.json` (12), `armour.json` (15), `classes.json` (4: starting attributes, proficiencies, spell schools, movement speed, level 1-20 progression from design-character-system.md). Loaded at startup by `LB::Content::ContentDatabase` from `<exe dir>/Assets/Data` (the build copies them there). Invalid content stops startup with every error listed; `ShippedContentTests` validate the files in the test run. Cross-file rules: items may only allow classes proficient in their category, and class-restricted spells must be in one of the class's schools.
 
 ---
 
@@ -180,6 +180,6 @@ LB.Engine::Save → collect state from Services
 - **Stub module.** LBModel.Progression has three files all declaring `export module LB;`; it needs proper `LB.Progression*` names when implemented.
 - **No vcpkg baseline.** The root `vcpkg.json` has no `builtin-baseline`, so a fresh install takes whatever port versions the local vcpkg provides (GDK, Agility SDK). Pin a baseline for reproducible builds.
 - **Release|Win32 / ARM64 configurations** of the component projects are untested; build Debug|x64 or Release|x64.
-- **Shadow spells have no class.** The six Shadow spells in `spells.json` have no `requiredClass`, and design-spells-system.md does not assign the school, so any class (including Warrior) can cast them. Decide which class owns them.
-- **Placeholder tuning in code.** Class base movement speeds (`CharacterService::getClassBaseSpeed`) should move to a class data file; armour movement penalties are not applied until equipment is modelled.
+- **Shadow spells are reserved.** The six Shadow spells in `spells.json` have no `requiredClass` on purpose: they belong to a special Cleric class that is not defined yet. Until then any class can cast them.
+- **Remaining hard-coded class rules.** `CharacterService` still applies its own class attribute modifiers on creation (on top of the starting attributes in classes.json) and fixed attribute gains per level (the design calls for points the player distributes). Armour still uses proficiency lists (no adjustment model yet), and armour movement penalties are not applied until equipment is modelled.
 - **Placeholder rendering.** The arena and player are solid rectangles drawn with render-target clears in a top-down view; isometric sprite rendering is still to be built.

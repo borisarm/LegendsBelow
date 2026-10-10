@@ -7,6 +7,7 @@ export import LB.Core;
 // Re-export Character components
 export import LB.Character.Enums;
 export import LB.Character.Entities;
+export import LB.Character.Progression;
 
 export namespace LB::Character {
     // Module version

@@ -430,6 +430,9 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Data\armour.json">
       <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
     </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Data\classes.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />

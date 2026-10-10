@@ -14,6 +14,8 @@ using namespace std;
 export namespace LB::Content {
     using LB::String;
     using LB::Character::CharacterClass;
+    using LB::Character::ClassLevelTotals;
+    using LB::Character::ClassProgression;
     using LB::Combat::ArmorCategory;
     using LB::Combat::DamageType;
     using LB::Combat::EquipmentSlot;
@@ -120,6 +122,49 @@ export namespace LB::Content {
     };
 
     /// <summary>
+    /// Class definition (Assets/Data/classes.json, design-character-system.md section 3,
+    /// game-design.md Character Classes)
+    /// </summary>
+    struct ClassDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "class_warrior"
+        CharacterClass characterClass{CharacterClass::None};
+        String name;
+        String role;
+        std::vector<String> primaryAttributes;        // "STR", "DEX", ...
+        LB::Attributes startingAttributes{};
+        String resource;                              // "Mana" or "Stamina"
+        float baseMovementSpeed{4.0f};                // tiles per second before DEX and armour
+        std::vector<ArmorCategory> armorProficiencies;
+        // Attack roll adjustment per weapon category for this class: +3 signature, +1 trained,
+        // -1 untrained, -5 restricted. Every category has a value.
+        std::map<WeaponType, int32_t> weaponAdjustments;
+        std::vector<SpellSchool> spellSchools;        // class spell access; Generic spells are open to all
+        std::vector<String> signatureAbilities;
+        ClassProgression progression;                 // levels 1..ClassProgression::MaxLevel
+
+        [[nodiscard]] int32_t GetWeaponAdjustment(WeaponType weapon) const {
+            auto it = weaponAdjustments.find(weapon);
+            return it != weaponAdjustments.end() ? it->second : 0;
+        }
+
+        [[nodiscard]] bool CanWear(ArmorCategory armor) const {
+            return std::ranges::find(armorProficiencies, armor) != armorProficiencies.end();
+        }
+
+        [[nodiscard]] bool HasSpellSchool(SpellSchool school) const {
+            return std::ranges::find(spellSchools, school) != spellSchools.end();
+        }
+
+        /// <summary>
+        /// Progression totals at a level, clamped to [1, ClassProgression::MaxLevel]
+        /// </summary>
+        [[nodiscard]] ClassLevelTotals TotalsAt(int32_t level) const {
+            return progression.TotalsAt(level);
+        }
+    };
+
+    /// <summary>
     /// Outcome of loading content: every problem found, so data authors can fix them in one pass
     /// </summary>
     struct ContentLoadResult {
@@ -134,30 +179,34 @@ export namespace LB::Content {
     class ContentDatabase {
     public:
         /// <summary>
-        /// Load spells.json, weapons.json and armour.json from a directory (UTF-8 path).
-        /// On any error the database is left empty and every error is reported.
+        /// Load spells.json, weapons.json, armour.json and classes.json from a directory
+        /// (UTF-8 path). On any error the database is left empty and every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
 
         /// <summary>
         /// Load from JSON text (one array per content type). Used by tests and tools; source
-        /// names appear in error messages.
+        /// names appear in error messages. With an empty class array, class rules are not checked;
+        /// otherwise every character class must be defined and items/spells must agree with them.
         /// </summary>
-        ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson);
+        ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
+                                       const String& classesJson = "[]");
 
         void Clear() {
             spells_.clear();
             weapons_.clear();
             armour_.clear();
+            classes_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
-            return spells_.empty() && weapons_.empty() && armour_.empty();
+            return spells_.empty() && weapons_.empty() && armour_.empty() && classes_.empty();
         }
 
         [[nodiscard]] const std::vector<SpellDefinition>& GetSpells() const noexcept { return spells_; }
         [[nodiscard]] const std::vector<WeaponDefinition>& GetWeapons() const noexcept { return weapons_; }
         [[nodiscard]] const std::vector<ArmorDefinition>& GetArmour() const noexcept { return armour_; }
+        [[nodiscard]] const std::vector<ClassDefinition>& GetClasses() const noexcept { return classes_; }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
         [[nodiscard]] const SpellDefinition* FindSpell(std::string_view key) const { return FindByKey(spells_, key); }
@@ -165,6 +214,11 @@ export namespace LB::Content {
         [[nodiscard]] const WeaponDefinition* FindWeapon(std::string_view key) const { return FindByKey(weapons_, key); }
         [[nodiscard]] const ArmorDefinition* FindArmor(ContentId id) const { return FindById(armour_, id); }
         [[nodiscard]] const ArmorDefinition* FindArmor(std::string_view key) const { return FindByKey(armour_, key); }
+        [[nodiscard]] const ClassDefinition* FindClass(std::string_view key) const { return FindByKey(classes_, key); }
+        [[nodiscard]] const ClassDefinition* FindClass(CharacterClass characterClass) const {
+            auto it = std::ranges::find(classes_, characterClass, &ClassDefinition::characterClass);
+            return it != classes_.end() ? &*it : nullptr;
+        }
 
         /// <summary>
         /// Weapons a class may wield at a given character level
@@ -205,6 +259,7 @@ export namespace LB::Content {
         std::vector<SpellDefinition> spells_;
         std::vector<WeaponDefinition> weapons_;
         std::vector<ArmorDefinition> armour_;
+        std::vector<ClassDefinition> classes_;
     };
 
 } // namespace LB::Content
