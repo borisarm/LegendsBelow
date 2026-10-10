@@ -7,6 +7,8 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="GltfLoader.cpp" />
+    <ClCompile Include="Model.ixx" />
     <ClCompile Include="Camera.ixx" />
     <ClCompile Include="LB.RenderingSystem.ixx" />
     <ClCompile Include="DeviceResources.cpp" />

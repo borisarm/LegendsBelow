@@ -11,6 +11,7 @@
     "directxmath",
     "directxtk12",
     "dstorage",
+    "fastgltf",
     {
       "name": "gameinput",
       "platform": "windows & x64"

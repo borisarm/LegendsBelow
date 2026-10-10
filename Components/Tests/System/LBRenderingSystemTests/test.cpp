@@ -680,3 +680,257 @@ TEST(IsometricCameraTests, Zoom_ClampsAndEases) {
     camera.ZoomOut();
     EXPECT_EQ(camera.GetZoom(), ZoomLevel::Wide);
 }
+
+// ============================================================================
+// Model Loading Tests
+// ============================================================================
+
+namespace {
+    // Assets/Models in the repository, found by walking up from the working directory
+    std::filesystem::path ModelsDirectory() {
+        for (auto dir = std::filesystem::current_path(); ; dir = dir.parent_path()) {
+            if (std::filesystem::exists(dir / "Assets" / "Models" / "wall.glb")) return dir / "Assets" / "Models";
+            if (dir == dir.root_path()) return {};
+        }
+    }
+
+    std::string Base64(const std::vector<std::uint8_t>& bytes) {
+        static constexpr char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string out;
+        for (std::size_t i = 0; i < bytes.size(); i += 3) {
+            const std::uint32_t chunk = (bytes[i] << 16) | ((i + 1 < bytes.size() ? bytes[i + 1] : 0) << 8) | (i + 2 < bytes.size() ? bytes[i + 2] : 0);
+            out += table[(chunk >> 18) & 63];
+            out += table[(chunk >> 12) & 63];
+            out += i + 1 < bytes.size() ? table[(chunk >> 6) & 63] : '=';
+            out += i + 2 < bytes.size() ? table[chunk & 63] : '=';
+        }
+        return out;
+    }
+
+    template<typename T>
+    void Append(std::vector<std::uint8_t>& bytes, std::initializer_list<T> values) {
+        for (T value : values) {
+            const auto* raw = reinterpret_cast<const std::uint8_t*>(&value);
+            bytes.insert(bytes.end(), raw, raw + sizeof(T));
+        }
+    }
+
+    // One triangle in a node translated by (1, 2, 3), red material; mode 4 = triangles
+    std::string TriangleGltf(int mode = 4) {
+        std::vector<std::uint8_t> buffer;
+        Append<float>(buffer, { 0, 0, 0,  1, 0, 0,  0, 0, 1 });    // positions, 36 bytes
+        Append<float>(buffer, { 0, 1, 0,  0, 1, 0,  0, 1, 0 });    // normals, 36 bytes
+        Append<std::uint16_t>(buffer, { 0, 2, 1, 0 });             // indices + padding, 8 bytes
+
+        return std::format(R"({{
+  "asset": {{ "version": "2.0" }},
+  "scene": 0,
+  "scenes": [ {{ "nodes": [ 0 ] }} ],
+  "nodes": [ {{ "name": "Tri", "mesh": 0, "translation": [ 1, 2, 3 ] }} ],
+  "materials": [ {{ "name": "Red", "pbrMetallicRoughness": {{ "baseColorFactor": [ 1, 0, 0, 1 ] }} }} ],
+  "meshes": [ {{ "name": "TriMesh", "primitives": [ {{ "attributes": {{ "POSITION": 0, "NORMAL": 1 }}, "indices": 2, "material": 0, "mode": {} }} ] }} ],
+  "buffers": [ {{ "byteLength": {}, "uri": "data:application/octet-stream;base64,{}" }} ],
+  "bufferViews": [
+    {{ "buffer": 0, "byteOffset": 0, "byteLength": 36 }},
+    {{ "buffer": 0, "byteOffset": 36, "byteLength": 36 }},
+    {{ "buffer": 0, "byteOffset": 72, "byteLength": 6 }}
+  ],
+  "accessors": [
+    {{ "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [ 0, 0, 0 ], "max": [ 1, 0, 1 ] }},
+    {{ "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" }},
+    {{ "bufferView": 2, "componentType": 5123, "count": 3, "type": "SCALAR" }}
+  ]
+}})", mode, buffer.size(), Base64(buffer));
+    }
+
+    // A file in a fresh temporary directory, removed with the object
+    struct TempFile {
+        std::filesystem::path path;
+
+        TempFile(std::string_view name, std::string_view content) {
+            const auto dir = std::filesystem::temp_directory_path() / std::format("lb_model_test_{}", std::chrono::steady_clock::now().time_since_epoch().count());
+            std::filesystem::create_directories(dir);
+            path = dir / name;
+            std::ofstream(path, std::ios::binary) << content;
+        }
+
+        ~TempFile() {
+            std::error_code ec;
+            std::filesystem::remove_all(path.parent_path(), ec);
+        }
+    };
+}
+
+TEST(ModelLoadingTests, SyntheticTriangle_ReadsGeometryTransformAndMaterial) {
+    RenderingSystem system;
+    TempFile file("triangle.gltf", TriangleGltf());
+
+    const auto result = system.LoadModel(file.path);
+
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    const auto* model = system.GetModel(result.id);
+    ASSERT_NE(model, nullptr);
+    EXPECT_EQ(model->name, "triangle");
+    ASSERT_EQ(model->parts.size(), 1u);
+    const auto& part = model->parts[0];
+    EXPECT_EQ(part.name, "Tri");
+    ASSERT_EQ(part.vertices.size(), 3u);
+    EXPECT_FLOAT_EQ(part.vertices[1].position.x, 1.0f);
+    EXPECT_FLOAT_EQ(part.vertices[2].position.z, 1.0f);
+    EXPECT_FLOAT_EQ(part.vertices[0].normal.y, 1.0f);
+    EXPECT_EQ(part.indices, (std::vector<std::uint32_t>{ 0, 1, 2 }));  // file order 0 2 1, turned clockwise
+    EXPECT_EQ(model->TriangleCount(), 1u);
+
+    // Node translation applies to the part and the bounds
+    EXPECT_FLOAT_EQ(part.transform.Translation().x, 1.0f);
+    EXPECT_FLOAT_EQ(part.transform.Translation().y, 2.0f);
+    EXPECT_FLOAT_EQ(part.transform.Translation().z, 3.0f);
+    EXPECT_FLOAT_EQ(model->boundsMin.x, 1.0f);
+    EXPECT_FLOAT_EQ(model->boundsMax.x, 2.0f);
+    EXPECT_FLOAT_EQ(model->boundsMin.y, 2.0f);
+    EXPECT_FLOAT_EQ(model->boundsMax.z, 4.0f);
+
+    ASSERT_EQ(model->materials.size(), 1u);
+    EXPECT_EQ(model->materials[0].name, "Red");
+    EXPECT_FLOAT_EQ(model->materials[0].baseColor[0], 1.0f);
+    EXPECT_FLOAT_EQ(model->materials[0].baseColor[1], 0.0f);
+}
+
+TEST(ModelLoadingTests, LinesInsteadOfTriangles_Rejected) {
+    RenderingSystem system;
+    TempFile file("lines.gltf", TriangleGltf(1));
+
+    const auto result = system.LoadModel(file.path);
+
+    EXPECT_FALSE(result.Succeeded());
+    EXPECT_NE(result.error.find("lines.gltf"), std::string::npos) << result.error;
+    EXPECT_NE(result.error.find("only triangle lists"), std::string::npos) << result.error;
+}
+
+TEST(ModelLoadingTests, MissingFile_ReportsFileName) {
+    RenderingSystem system;
+
+    const auto result = system.LoadModel("does_not_exist.glb");
+
+    EXPECT_FALSE(result.Succeeded());
+    EXPECT_NE(result.error.find("does_not_exist.glb"), std::string::npos) << result.error;
+}
+
+TEST(ModelLoadingTests, InvalidFile_Rejected) {
+    RenderingSystem system;
+    TempFile file("broken.gltf", "{ this is not json");
+
+    const auto result = system.LoadModel(file.path);
+
+    EXPECT_FALSE(result.Succeeded());
+    EXPECT_FALSE(result.error.empty());
+    EXPECT_EQ(system.GetModel(1), nullptr);
+}
+
+TEST(ModelLoadingTests, KayKitWall_BoundsAndTriangles) {
+    const auto dir = ModelsDirectory();
+    ASSERT_FALSE(dir.empty()) << "Assets/Models not found";
+    RenderingSystem system;
+
+    const auto result = system.LoadModel(dir / "wall.glb");
+
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    const auto* wall = system.GetModel(result.id);
+    EXPECT_EQ(wall->name, "wall");
+    EXPECT_EQ(wall->TriangleCount(), 5760u);
+    EXPECT_NEAR(wall->boundsMin.x, -2.0f, 1e-3);
+    EXPECT_NEAR(wall->boundsMax.x, 2.0f, 1e-3);
+    EXPECT_NEAR(wall->boundsMin.y, 0.0f, 1e-3);
+    EXPECT_NEAR(wall->boundsMax.y, 4.0f, 1e-3);
+    EXPECT_NEAR(wall->boundsMax.z, 0.75f, 1e-3);
+}
+
+TEST(ModelLoadingTests, KayKitKnight_PartsFollowNodeHierarchy) {
+    const auto dir = ModelsDirectory();
+    ASSERT_FALSE(dir.empty()) << "Assets/Models not found";
+    RenderingSystem system;
+
+    const auto result = system.LoadModel(dir / "character_knight.gltf");
+
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    const auto* knight = system.GetModel(result.id);
+    EXPECT_EQ(knight->materials.size(), 9u);
+    for (const char* name : { "character_knightBody", "character_knightHead", "character_knightArmLeft",
+                              "character_knightArmRight", "character_knightHelmet", "character_knightHelmetVisor" }) {
+        EXPECT_NE(knight->FindPart(name), nullptr) << name;
+    }
+
+    // Head is a child of the body (identity); the visor is a child of the helmet
+    EXPECT_NEAR(knight->FindPart("character_knightHead")->transform.Translation().y, 0.7037f, 1e-3);
+    const auto visor = knight->FindPart("character_knightHelmetVisor")->transform.Translation();
+    const auto helmet = knight->FindPart("character_knightHelmet")->transform.Translation();
+    EXPECT_NEAR(visor.y, helmet.y + 0.3104f, 1e-3);
+    EXPECT_NEAR(visor.z, helmet.z + 0.0498f, 1e-3);
+
+    // Stands upright: taller than wide
+    EXPECT_GT(knight->boundsMax.y - knight->boundsMin.y, knight->boundsMax.x - knight->boundsMin.x);
+}
+
+TEST(ModelLoadingTests, SameFileTwice_SameModel) {
+    const auto dir = ModelsDirectory();
+    ASSERT_FALSE(dir.empty());
+    RenderingSystem system;
+
+    const auto first = system.LoadModel(dir / "pillar.glb");
+    const auto second = system.LoadModel(dir / "." / "pillar.glb");
+
+    ASSERT_TRUE(first.Succeeded()) << first.error;
+    EXPECT_EQ(first.id, second.id);
+    EXPECT_EQ(system.FindModel("pillar"), first.id);
+    EXPECT_FALSE(system.FindModel("nothing").has_value());
+}
+
+TEST(ModelLoadingTests, AllShippedModels_Load) {
+    const auto dir = ModelsDirectory();
+    ASSERT_FALSE(dir.empty());
+    RenderingSystem system;
+
+    std::size_t loaded = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        const auto extension = entry.path().extension();
+        if (extension != ".glb" && extension != ".gltf") continue;
+        const auto result = system.LoadModel(entry.path());
+        EXPECT_TRUE(result.Succeeded()) << result.error;
+        ++loaded;
+    }
+    EXPECT_GE(loaded, 8u);
+}
+
+TEST(ModelLoadingTests, DrawModel_QueuesKnownModelsOnly) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    TempFile file("triangle.gltf", TriangleGltf());
+    const auto id = system.LoadModel(file.path).id;
+    system.BeginFrame();
+
+    system.DrawModel(ModelRenderData{ id, { 1.0f, 0.0f, 2.0f }, 0.5f, 2.0f });
+    system.DrawModel(ModelRenderData{ 42 });
+    system.DrawModel(ModelRenderData{ InvalidModelId });
+
+    ASSERT_EQ(system.GetQueuedModels().size(), 1u);
+    EXPECT_EQ(system.GetQueuedModels()[0].model, id);
+    EXPECT_FLOAT_EQ(system.GetQueuedModels()[0].scale, 2.0f);
+
+    system.EndFrame();
+    EXPECT_EQ(system.GetStats().modelsRendered, 1u);
+    EXPECT_EQ(system.GetStats().drawCalls, 1u);  // one part
+
+    system.BeginFrame();
+    EXPECT_TRUE(system.GetQueuedModels().empty());
+}
+
+TEST(ModelLoadingTests, Shutdown_ForgetsModels) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    TempFile file("triangle.gltf", TriangleGltf());
+    const auto id = system.LoadModel(file.path).id;
+
+    system.Shutdown();
+
+    EXPECT_EQ(system.GetModel(id), nullptr);
+}

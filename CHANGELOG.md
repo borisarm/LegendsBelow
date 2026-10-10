@@ -5,6 +5,8 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ## [Unreleased]
 
 ### Added
+- glTF 2.0 model loading with fastgltf: `RenderingSystem::LoadModel` (.gltf and .glb; triangles with position, normal, and texture coordinates; node hierarchy resolved to per-part transforms; flat base-color materials; bounds), `GetModel`, `FindModel`, `DrawModel`, `GetQueuedModels`, `RenderStats::modelsRendered`. Models load headless too and upload to default-heap GPU buffers with a device; they are uploaded again after a device loss.
+- KayKit Dungeon Pack starter models (CC0) in `Assets/Models`, copied next to the game. The arena is built from floor tiles, wall segments, and corner pillars at `ModelScale` 0.5, and the player is the knight, turned to face the walk direction. `EngineOptions::modelDirectory`; a missing or invalid model stops startup with every problem listed.
 - Full 3D rendering on DirectXTK12: a depth-tested world pass of lit primitives (`RenderingSystem::DrawMesh` with box, cylinder, sphere, cone) drawn before the 2D overlay; `SetCamera`, `GetQueuedMeshes`, `WorldToScreen`, `RenderStats::meshesRendered`.
 - `IsometricCamera` (`LB.RenderingSystem:Camera`): perspective camera at a 40 degree pitch, 90 degree rotation steps with a 0.25 s ease, Close/Medium/Wide zoom with easing, soft follow with a 1.5-tile dead zone, instant refocus (`SnapTo`), screen-to-ground directions, and world-to-screen projection matching the GPU.
 - The placeholder arena is drawn in 3D (floor slabs and a ring of walls) with the player as a body, head, and visor facing the walk direction. The camera follows the player and refocuses on spawn and load; Q/E and right stick flicks rotate it, the mouse wheel and right stick up/down zoom, also during the tactical pause.
@@ -33,6 +35,8 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ### Changed
 - `CharacterService` uses data-driven class rules: HP/MP come from the class progression tables (MaxHP = table HP + CON_mod x level; MaxMP = table MP + INT/WIS_mod x level for Mages/Clerics), replacing the hard-coded formulas. Characters can only be created for classes whose rules are configured; the engine configures them from classes.json and runs without a player when there is no content.
 - Removed the hard-coded class attribute bonus on creation (classes.json starting attributes are the class template) and the fixed per-level attribute gains. Armour proficiency lists replaced by the armour adjustment model; armour.json `allowedClasses` is no longer cross-checked against them.
+- The render target is sRGB (shading in linear space, matching glTF colors); the engine converts its display-space colors, and the default lighting is dimmed with almost no specular.
+- fastgltf and simdjson are static (overlay triplets) and built with `/guard:cf /guard:ehcont`; LBRenderingSystem drops `/GL` in Release (corrupt module debug info, LNK4020).
 - Movement is screen-relative through the camera: W/stick up walks away from the camera whatever its rotation. The background is a dim ambient color instead of cornflower blue.
 - `LB.Engine` re-exports `LB.RenderingSystem`. DirectXTK12 added to `vcpkg.json` and linked statically into `LBRenderingSystem.lib` through overlay triplets (`triplets/`, `vcpkg-configuration.json`) that keep every other port dynamic; no DirectXTK12.dll ships.
 - LegendsBelow is now a Win32/GDK shell: `Main.cpp` imports `LB.Engine` and forwards window events; `Game`, `DeviceResources`, and `StepTimer` removed from the executable.
