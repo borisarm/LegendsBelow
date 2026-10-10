@@ -5,6 +5,9 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ## [Unreleased]
 
 ### Added
+- Full 3D rendering on DirectXTK12: a depth-tested world pass of lit primitives (`RenderingSystem::DrawMesh` with box, cylinder, sphere, cone) drawn before the 2D overlay; `SetCamera`, `GetQueuedMeshes`, `WorldToScreen`, `RenderStats::meshesRendered`.
+- `IsometricCamera` (`LB.RenderingSystem:Camera`): perspective camera at a 40 degree pitch, 90 degree rotation steps with a 0.25 s ease, Close/Medium/Wide zoom with easing, soft follow with a 1.5-tile dead zone, instant refocus (`SnapTo`), screen-to-ground directions, and world-to-screen projection matching the GPU.
+- The placeholder arena is drawn in 3D (floor slabs and a ring of walls) with the player as a body, head, and visor facing the walk direction. The camera follows the player and refocuses on spawn and load; Q/E and right stick flicks rotate it, the mouse wheel and right stick up/down zoom, also during the tactical pause.
 - Class data file `Assets/Data/classes.json`: starting attributes (game-design.md), weapon adjustments, spell schools, resource, base movement speed, and the level 1-20 progression tables parsed from design-character-system.md. Loaded as `ClassDefinition`, validated, and cross-checked against spells.
 - Class weapon adjustment model: every class has an attack adjustment for every weapon category (+3 signature, +1 trained, -1 untrained, -5 restricted; e.g. a sword is +3 for Warriors, +1 Rogues, -1 Mages, -5 Clerics). `CharacterService::GetAttackBonus` = class attack progression + STR (melee) or DEX (bows, crossbows) + adjustment.
 - `LB::Character::ClassProgression` domain type shared by content loading and `CharacterService`.
@@ -30,6 +33,8 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ### Changed
 - `CharacterService` uses data-driven class rules: HP/MP come from the class progression tables (MaxHP = table HP + CON_mod x level; MaxMP = table MP + INT/WIS_mod x level for Mages/Clerics), replacing the hard-coded formulas. Characters can only be created for classes whose rules are configured; the engine configures them from classes.json and runs without a player when there is no content.
 - Removed the hard-coded class attribute bonus on creation (classes.json starting attributes are the class template) and the fixed per-level attribute gains. Armour proficiency lists replaced by the armour adjustment model; armour.json `allowedClasses` is no longer cross-checked against them.
+- Movement is screen-relative through the camera: W/stick up walks away from the camera whatever its rotation. The background is a dim ambient color instead of cornflower blue.
+- `LB.Engine` re-exports `LB.RenderingSystem`. DirectXTK12 added to `vcpkg.json` (used as a DLL); test projects that link the renderer copy `DirectXTK12.dll` next to them (`LBDeployDirectXTK12`).
 - LegendsBelow is now a Win32/GDK shell: `Main.cpp` imports `LB.Engine` and forwards window events; `Game`, `DeviceResources`, and `StepTimer` removed from the executable.
 - `vcpkg.json` moved to the repository root so all projects share one manifest.
 - LBEngineCore references only the projects it imports (LBRenderingSystem, LBModel.Core).

@@ -1,6 +1,7 @@
 // LB.RenderingSystem.ixx - Graphics rendering and display system
 export module LB.RenderingSystem;
 
+export import :Camera;
 import LB.Core;
 import std;
 
@@ -77,6 +78,27 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
+    /// Built-in 3D shapes, each of unit size centered on the origin (placeholders until models)
+    /// </summary>
+    enum class MeshShape {
+        Box,
+        Cylinder,   // upright (axis along Y)
+        Sphere,
+        Cone        // upright, tip up
+    };
+
+    /// <summary>
+    /// A lit, solid-colored 3D shape in world space
+    /// </summary>
+    struct MeshRenderData {
+        MeshShape shape{MeshShape::Box};
+        Vector3 position{};                    // center of the shape
+        Vector3 size{1.0f, 1.0f, 1.0f};        // full extents along X, Y, Z
+        float yawRadians{0.0f};                // rotation around the vertical axis
+        Color color{Color::White()};
+    };
+
+    /// <summary>
     /// Text render data
     /// </summary>
     struct TextRenderData {
@@ -93,6 +115,7 @@ export namespace LB::Systems::Rendering {
     /// </summary>
     struct RenderStats {
         uint32_t drawCalls{0};
+        uint32_t meshesRendered{0};
         uint32_t spritesRendered{0};
         uint32_t textRendered{0};
         float frameTime{0.0f};
@@ -176,8 +199,10 @@ export namespace LB::Systems::Rendering {
             spriteQueue_.clear();
             textQueue_.clear();
             rectangleQueue_.clear();
+            meshQueue_.clear();
 
             stats_.drawCalls = 0;
+            stats_.meshesRendered = 0;
             stats_.spritesRendered = 0;
             stats_.textRendered = 0;
         }
@@ -196,6 +221,39 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
+        /// Set the camera the 3D world is drawn through this frame
+        /// </summary>
+        void SetCamera(const CameraView& view) {
+            cameraView_ = view;
+        }
+
+        [[nodiscard]] const CameraView& GetCameraView() const noexcept {
+            return cameraView_;
+        }
+
+        /// <summary>
+        /// Queue a 3D shape for the world pass (depth-tested, drawn before the 2D overlay)
+        /// </summary>
+        void DrawMesh(const MeshRenderData& mesh) {
+            if (!initialized_) return;
+            meshQueue_.push_back(mesh);
+        }
+
+        /// <summary>
+        /// Meshes queued this frame (in submission order)
+        /// </summary>
+        const std::vector<MeshRenderData>& GetQueuedMeshes() const {
+            return meshQueue_;
+        }
+
+        /// <summary>
+        /// Project a world point to the screen through the current camera
+        /// </summary>
+        [[nodiscard]] ScreenPoint WorldToScreen(Vector3 point) const noexcept {
+            return IsometricCamera::WorldToScreen(cameraView_, point, static_cast<float>(screenWidth_), static_cast<float>(screenHeight_));
+        }
+
+        /// <summary>
         /// Queue text for rendering
         /// </summary>
         void DrawText(const TextRenderData& text) {
@@ -204,7 +262,7 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
-        /// Draw a filled rectangle
+        /// Draw a filled screen-space rectangle on the 2D overlay (above the 3D world)
         /// </summary>
         void DrawRectangle(const Rectangle& rect, const Color& color, int32_t layerDepth = 0) {
             if (!initialized_) return;
@@ -292,6 +350,8 @@ export namespace LB::Systems::Rendering {
         std::vector<SpriteRenderData> spriteQueue_;
         std::vector<TextRenderData> textQueue_;
         std::vector<RectangleRenderData> rectangleQueue_;
+        std::vector<MeshRenderData> meshQueue_;
+        CameraView cameraView_{};
         RenderStats stats_{};
 
         void RenderSprites() {

@@ -466,3 +466,217 @@ TEST(RenderingSystemTests, EndFrame_Headless_RectanglesOffScreen_NoError) {
 
     EXPECT_EQ(system.GetStats().spritesRendered, 2u);
 }
+
+// ============================================================================
+// Mesh Queue Tests
+// ============================================================================
+
+TEST(RenderingSystemMeshTests, DrawMesh_QueuesUntilNextFrame) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+
+    MeshRenderData mesh{};
+    mesh.shape = MeshShape::Cylinder;
+    mesh.position = { 1.0f, 0.5f, -2.0f };
+    system.DrawMesh(mesh);
+
+    ASSERT_EQ(system.GetQueuedMeshes().size(), 1u);
+    EXPECT_EQ(system.GetQueuedMeshes()[0].shape, MeshShape::Cylinder);
+    EXPECT_FLOAT_EQ(system.GetQueuedMeshes()[0].position.z, -2.0f);
+
+    system.BeginFrame();
+    EXPECT_TRUE(system.GetQueuedMeshes().empty());
+}
+
+TEST(RenderingSystemMeshTests, DrawMesh_NotInitialized_Ignored) {
+    RenderingSystem system;
+
+    system.DrawMesh(MeshRenderData{});
+
+    EXPECT_TRUE(system.GetQueuedMeshes().empty());
+}
+
+TEST(RenderingSystemMeshTests, EndFrame_CountsMeshes) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    system.BeginFrame();
+    system.DrawMesh(MeshRenderData{});
+    system.DrawMesh(MeshRenderData{});
+
+    system.EndFrame();
+
+    EXPECT_EQ(system.GetStats().meshesRendered, 2u);
+    EXPECT_GE(system.GetStats().drawCalls, 2u);
+}
+
+TEST(RenderingSystemMeshTests, SetCamera_UsedForWorldToScreen) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    IsometricCamera camera;
+    camera.SnapTo({ 3.0f, 4.0f });
+
+    system.SetCamera(camera.GetView());
+    const auto center = system.WorldToScreen({ 3.0f, 0.0f, 4.0f });
+
+    EXPECT_TRUE(center.inFront);
+    EXPECT_NEAR(center.x, 400.0f, 0.01f);
+    EXPECT_NEAR(center.y, 300.0f, 0.01f);
+}
+
+// ============================================================================
+// IsometricCamera Tests
+// ============================================================================
+
+namespace {
+    float Length(Vector3 v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+}
+
+TEST(IsometricCameraTests, DefaultView_DistanceAndPitch) {
+    IsometricCamera camera;
+
+    const auto view = camera.GetView();
+    const Vector3 offset{ view.eye.x - view.target.x, view.eye.y - view.target.y, view.eye.z - view.target.z };
+
+    EXPECT_NEAR(Length(offset), IsometricCamera::MediumDistance, 1e-4);
+    const float pitch = std::asin(offset.y / Length(offset)) * 180.0f / std::numbers::pi_v<float>;
+    EXPECT_NEAR(pitch, IsometricCamera::PitchDegrees, 1e-3);
+    EXPECT_GT(offset.x, 0.0f);  // yaw 45: camera to the south-east of the focus
+    EXPECT_GT(offset.z, 0.0f);
+}
+
+TEST(IsometricCameraTests, ScreenToGround_DefaultYawIsDiagonal) {
+    IsometricCamera camera;
+
+    const auto right = camera.ScreenToGround(1.0f, 0.0f);
+    const auto up = camera.ScreenToGround(0.0f, 1.0f);
+
+    EXPECT_NEAR(right.x, std::sqrt(0.5f), 1e-6);
+    EXPECT_NEAR(right.y, -std::sqrt(0.5f), 1e-6);
+    EXPECT_NEAR(up.x, -std::sqrt(0.5f), 1e-6);
+    EXPECT_NEAR(up.y, -std::sqrt(0.5f), 1e-6);
+}
+
+TEST(IsometricCameraTests, ScreenToGround_MatchesProjection) {
+    IsometricCamera camera;
+    const auto view = camera.GetView();
+
+    const auto right = camera.ScreenToGround(1.0f, 0.0f);
+    const auto up = camera.ScreenToGround(0.0f, 1.0f);
+    const auto onRight = IsometricCamera::WorldToScreen(view, { right.x, 0.0f, right.y }, 800.0f, 600.0f);
+    const auto onUp = IsometricCamera::WorldToScreen(view, { up.x, 0.0f, up.y }, 800.0f, 600.0f);
+
+    EXPECT_GT(onRight.x, 400.0f);
+    EXPECT_NEAR(onRight.y, 300.0f, 0.5f);
+    EXPECT_LT(onUp.y, 300.0f);
+    EXPECT_NEAR(onUp.x, 400.0f, 0.01f);
+}
+
+TEST(IsometricCameraTests, WorldToScreen_HigherPointsAppearHigher) {
+    IsometricCamera camera;
+    const auto view = camera.GetView();
+
+    const auto ground = IsometricCamera::WorldToScreen(view, { 0.0f, 0.0f, 0.0f }, 800.0f, 600.0f);
+    const auto raised = IsometricCamera::WorldToScreen(view, { 0.0f, 1.0f, 0.0f }, 800.0f, 600.0f);
+
+    EXPECT_LT(raised.y, ground.y);
+    EXPECT_NEAR(raised.x, ground.x, 0.01f);
+}
+
+TEST(IsometricCameraTests, WorldToScreen_BehindCamera_NotInFront) {
+    IsometricCamera camera;
+    const auto view = camera.GetView();
+    const Vector3 behind{ view.eye.x * 2.0f, view.eye.y * 2.0f, view.eye.z * 2.0f };
+
+    EXPECT_FALSE(IsometricCamera::WorldToScreen(view, behind, 800.0f, 600.0f).inFront);
+}
+
+TEST(IsometricCameraTests, Follow_InsideDeadZone_DoesNotMove) {
+    IsometricCamera camera;
+
+    camera.Follow({ 1.0f, 0.5f });
+
+    EXPECT_FLOAT_EQ(camera.GetFocus().x, 0.0f);
+    EXPECT_FLOAT_EQ(camera.GetFocus().y, 0.0f);
+}
+
+TEST(IsometricCameraTests, Follow_OutsideDeadZone_PushesToEdge) {
+    IsometricCamera camera;
+
+    camera.Follow({ 4.0f, 0.0f });
+
+    EXPECT_FLOAT_EQ(camera.GetFocus().x, 4.0f - IsometricCamera::DeadZoneRadius);
+    EXPECT_FLOAT_EQ(camera.GetFocus().y, 0.0f);
+}
+
+TEST(IsometricCameraTests, SnapTo_MovesFocusImmediately) {
+    IsometricCamera camera;
+
+    camera.SnapTo({ -5.0f, 7.0f });
+
+    EXPECT_FLOAT_EQ(camera.GetFocus().x, -5.0f);
+    EXPECT_FLOAT_EQ(camera.GetFocus().y, 7.0f);
+    EXPECT_FLOAT_EQ(camera.GetView().target.z, 7.0f);
+}
+
+TEST(IsometricCameraTests, Rotate_ControlsSwitchAtOnce_ViewEases) {
+    IsometricCamera camera;
+
+    camera.RotateClockwise();
+
+    EXPECT_FLOAT_EQ(camera.GetTargetYawDegrees(), 135.0f);
+    EXPECT_FLOAT_EQ(camera.GetYawDegrees(), 45.0f);
+    EXPECT_TRUE(camera.IsRotating());
+
+    camera.Update(IsometricCamera::RotationSeconds * 0.5f);
+    EXPECT_NEAR(camera.GetYawDegrees(), 90.0f, 1e-3);  // smoothstep midpoint
+
+    camera.Update(IsometricCamera::RotationSeconds);
+    EXPECT_FALSE(camera.IsRotating());
+    EXPECT_FLOAT_EQ(camera.GetYawDegrees(), 135.0f);
+}
+
+TEST(IsometricCameraTests, Rotate_WrapsWithinFullTurn) {
+    IsometricCamera camera;
+
+    camera.RotateCounterClockwise();
+    EXPECT_FLOAT_EQ(camera.GetTargetYawDegrees(), 315.0f);
+    camera.Update(1.0f);
+    EXPECT_FLOAT_EQ(camera.GetYawDegrees(), 315.0f);
+
+    for (int i = 0; i < 4; ++i) camera.RotateClockwise();
+    EXPECT_FLOAT_EQ(camera.GetTargetYawDegrees(), 315.0f);
+}
+
+TEST(IsometricCameraTests, Rotate_MidEase_ContinuesFromShownYaw) {
+    IsometricCamera camera;
+    camera.RotateClockwise();
+    camera.Update(IsometricCamera::RotationSeconds * 0.5f);
+    const float shown = camera.GetYawDegrees();
+
+    camera.RotateClockwise();
+
+    EXPECT_NEAR(camera.GetYawDegrees(), shown, 1e-3);  // no jump
+    EXPECT_FLOAT_EQ(camera.GetTargetYawDegrees(), 225.0f);
+}
+
+TEST(IsometricCameraTests, Zoom_ClampsAndEases) {
+    IsometricCamera camera;
+
+    camera.ZoomIn();
+    camera.ZoomIn();
+    EXPECT_EQ(camera.GetZoom(), ZoomLevel::Close);
+    EXPECT_FLOAT_EQ(camera.GetDistance(), IsometricCamera::MediumDistance);  // not eased yet
+
+    camera.Update(0.05f);
+    EXPECT_LT(camera.GetDistance(), IsometricCamera::MediumDistance);
+    EXPECT_GT(camera.GetDistance(), IsometricCamera::CloseDistance);
+
+    for (int i = 0; i < 120; ++i) camera.Update(1.0f / 60.0f);
+    EXPECT_FLOAT_EQ(camera.GetDistance(), IsometricCamera::CloseDistance);
+
+    camera.ZoomOut();
+    camera.ZoomOut();
+    camera.ZoomOut();
+    EXPECT_EQ(camera.GetZoom(), ZoomLevel::Wide);
+}

@@ -34,9 +34,9 @@ Documentation/             Game design and architecture documents
 |------|-------|
 | Domain model | Implemented as C++20 modules, unit tested |
 | Services (Character, Combat, Inventory, Progression, Dungeon) | Implemented, unit tested; CharacterService uses the class data (HP/MP progression, movement, weapon adjustments) |
-| Systems | Unit tested. Rendering: Direct3D 12 (clear, solid rectangles, present). Input: keyboard/mouse from the window, gamepads through GameInput. Audio: XAudio2 output device. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
+| Systems | Unit tested. Rendering: Direct3D 12 with DirectXTK12: a lit 3D world pass (placeholder primitives) through an isometric camera, plus a 2D rectangle overlay. Input: keyboard/mouse from the window, gamepads through GameInput. Audio: XAudio2 output device. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
 | Repositories | Spell facade via Microsoft Proxy 4 with a content-backed implementation |
-| Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: a Warrior moves around a test arena with WASD/arrows or the left stick; Esc/Start toggles the tactical pause; F5/F9 quick save and load |
+| Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: a Warrior walks around a 3D test arena with WASD/arrows or the left stick (screen-relative); Q/E or right stick left/right rotate the camera 90 degrees, the mouse wheel or right stick up/down zoom; Esc/Start toggles the tactical pause; F5/F9 quick save and load |
 | Asset pipeline | Not started (see `Documentation/asset-preprocesing-strategy-instructions.md`) |
 | Content | 4 classes, 45 spells, 12 weapons, 15 armour pieces authored in JSON, validated (including cross-file class rules) and loaded at startup |
 

@@ -49,7 +49,20 @@ namespace LB::Systems::Rendering {
         if (gpu_) {
             gpu_->renderer.BeginFrame(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
 
-            // Solid rectangles, back to front; clipped to the back buffer
+            // World pass: lit 3D shapes through the camera, depth-tested
+            if (!meshQueue_.empty()) {
+                const auto& view = cameraView_;
+                gpu_->renderer.SetCamera(view.eye.x, view.eye.y, view.eye.z, view.target.x, view.target.y, view.target.z,
+                                         view.verticalFovRadians, view.nearPlane, view.farPlane);
+                for (const auto& mesh : meshQueue_) {
+                    gpu_->renderer.DrawMesh(static_cast<int>(mesh.shape),
+                        mesh.position.x, mesh.position.y, mesh.position.z,
+                        mesh.size.x, mesh.size.y, mesh.size.z, mesh.yawRadians,
+                        mesh.color.r, mesh.color.g, mesh.color.b, mesh.color.a);
+                }
+            }
+
+            // 2D overlay: solid rectangles, back to front; clipped to the back buffer
             auto rectangles = rectangleQueue_;
             std::ranges::stable_sort(rectangles, {}, &RectangleRenderData::layerDepth);
             for (const auto& item : rectangles) {
@@ -62,6 +75,9 @@ namespace LB::Systems::Rendering {
                 gpu_->renderer.FillRectangle(left, top, right, bottom, item.color.r, item.color.g, item.color.b, item.color.a);
             }
         }
+
+        stats_.meshesRendered = static_cast<uint32_t>(meshQueue_.size());
+        stats_.drawCalls += stats_.meshesRendered;
 
         // Sort and render all queued items
         RenderSprites();
