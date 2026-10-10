@@ -49,6 +49,11 @@ export namespace LB::Engine {
         static constexpr std::string_view PauseAction = "Pause";
         static constexpr std::string_view QuickSaveAction = "QuickSave";
         static constexpr std::string_view QuickLoadAction = "QuickLoad";
+        static constexpr std::string_view RotateCameraLeftAction = "RotateCameraLeft";
+        static constexpr std::string_view RotateCameraRightAction = "RotateCameraRight";
+
+        // Right stick flicks past this deflection rotate (X) or zoom (Y) the camera
+        static constexpr float CameraStickThreshold = 0.6f;
 
         // Save slot used by quick save/load (F5/F9)
         static constexpr std::int32_t QuickSaveSlot = 0;
@@ -57,7 +62,7 @@ export namespace LB::Engine {
         static constexpr float ArenaHalfWidth = 10.0f;
         static constexpr float ArenaHalfHeight = 7.0f;
         static constexpr float PlayerSizeTiles = 0.75f;
-        static constexpr std::int32_t TileSizePixels = 32;
+        static constexpr float WallHeight = 1.2f;
 
         GameEngine() {
             timer_.SetFixedTimeStep(true);
@@ -307,6 +312,13 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// The isometric camera following the player
+        /// </summary>
+        [[nodiscard]] const Systems::Rendering::IsometricCamera& GetCamera() const noexcept {
+            return camera_;
+        }
+
+        /// <summary>
         /// Save the game state to a slot
         /// </summary>
         bool SaveGame(std::int32_t slotIndex) {
@@ -350,6 +362,7 @@ export namespace LB::Engine {
             if (playerId_ && hasPlayerPosition) {
                 playerPosition_ = ClampToArena(WorldPoint{ static_cast<float>(playerX), static_cast<float>(playerY) });
                 characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
+                camera_.SnapTo({ playerPosition_.x, playerPosition_.y });  // instant refocus
             }
             return true;
         }
@@ -374,11 +387,19 @@ export namespace LB::Engine {
                 LoadGame(QuickSaveSlot);
             }
 
+            // The camera can be turned and zoomed during the tactical pause
+            UpdateCameraControls();
+
             if (!paused_) {
                 gameTimeSeconds_ += elapsedSeconds;
                 MovePlayer(static_cast<float>(elapsedSeconds));
                 // TODO: Add game logic here (combat, AI).
             }
+
+            if (playerId_) {
+                camera_.Follow({ playerPosition_.x, playerPosition_.y });
+            }
+            camera_.Update(static_cast<float>(elapsedSeconds));
 
             // This step has consumed the input frame; presses are seen by exactly one step
             inputSystem_.Update();
@@ -401,7 +422,9 @@ export namespace LB::Engine {
                 return Systems::Rendering::Color{ r * dim, g * dim, b * dim, 1.0f };
             };
 
-            renderingSystem_.Clear(shade(0.392156899f, 0.584313750f, 0.929411829f));  // CornflowerBlue
+            // Dim ambient background (design-technical-directx12.md 2.2), then the 3D world
+            renderingSystem_.Clear(shade(0.05f, 0.05f, 0.07f));
+            renderingSystem_.SetCamera(camera_.GetView());
             DrawArena(shade);
             DrawPlayer(shade);
 
@@ -457,12 +480,41 @@ export namespace LB::Engine {
 
             playerPosition_ = WorldPoint{};
             characterService_.PlaceCharacter(*playerId_, ToTile(playerPosition_));
+            camera_.SnapTo({ playerPosition_.x, playerPosition_.y });
             return true;
         }
 
         /// <summary>
+        /// Q/E and right stick flicks rotate the camera; the mouse wheel and right stick up/down zoom
+        /// </summary>
+        void UpdateCameraControls() {
+            if (inputSystem_.IsActionTriggered(std::string(RotateCameraLeftAction))) camera_.RotateCounterClockwise();
+            if (inputSystem_.IsActionTriggered(std::string(RotateCameraRightAction))) camera_.RotateClockwise();
+
+            const auto wheel = inputSystem_.GetMouseState().wheelDelta;
+            if (wheel > 0) camera_.ZoomIn();
+            if (wheel < 0) camera_.ZoomOut();
+
+            // Flicks act once when the stick crosses the threshold
+            const auto& pad = inputSystem_.GetGamepadState(0);
+            const auto flick = [](float now, float before) {
+                if (now >= CameraStickThreshold && before < CameraStickThreshold) return 1;
+                if (now <= -CameraStickThreshold && before > -CameraStickThreshold) return -1;
+                return 0;
+            };
+            const int turn = flick(pad.rightThumbX, previousRightStick_.x);
+            const int zoom = flick(pad.rightThumbY, previousRightStick_.y);
+            if (turn > 0) camera_.RotateClockwise();
+            if (turn < 0) camera_.RotateCounterClockwise();
+            if (zoom > 0) camera_.ZoomIn();
+            if (zoom < 0) camera_.ZoomOut();
+            previousRightStick_ = WorldPoint{ pad.rightThumbX, pad.rightThumbY };
+        }
+
+        /// <summary>
         /// Real-time movement for one simulation step: WASD/arrow keys (screen directions,
-        /// diagonals normalized) or the left stick (analog). Speed comes from CharacterService.
+        /// diagonals normalized) or the left stick (analog), turned to the ground through the
+        /// camera so "up" always walks away from it. Speed comes from CharacterService.
         /// </summary>
         void MovePlayer(float elapsedSeconds) {
             if (!playerId_) return;
@@ -498,10 +550,14 @@ export namespace LB::Engine {
 
             if (dx == 0.0f && dy == 0.0f) return;
 
+            // dy is screen-down; the camera maps (right, up) onto the ground
+            const auto direction = camera_.ScreenToGround(dx, -dy);
+            playerFacingYaw_ = std::atan2(direction.x, direction.y);
+
             const float speed = characterService_.GetMovementSpeed(*playerId_).value_or(0.0f);
             playerPosition_ = ClampToArena(WorldPoint{
-                playerPosition_.x + dx * speed * elapsedSeconds,
-                playerPosition_.y + dy * speed * elapsedSeconds });
+                playerPosition_.x + direction.x * speed * elapsedSeconds,
+                playerPosition_.y + direction.y * speed * elapsedSeconds });
 
             // Keep the domain's tile position in sync (at most one tile per step at these speeds)
             const auto tile = ToTile(playerPosition_);
@@ -521,45 +577,76 @@ export namespace LB::Engine {
             return LB::Position{ static_cast<std::int32_t>(std::floor(point.x)), static_cast<std::int32_t>(std::floor(point.y)) };
         }
 
-        // World tiles -> screen pixels; the arena is centered in the window (placeholder top-down
-        // view until the isometric renderer exists)
-        Systems::Rendering::Rectangle ToScreen(float x, float y, float width, float height) const {
-            std::int32_t screenWidth = 0;
-            std::int32_t screenHeight = 0;
-            renderingSystem_.GetScreenSize(screenWidth, screenHeight);
-
-            const float originX = static_cast<float>(screenWidth) * 0.5f;
-            const float originY = static_cast<float>(screenHeight) * 0.5f;
-            const auto px = [](float value) { return static_cast<std::int32_t>(std::lround(value)); };
-
-            const std::int32_t left = px(originX + x * TileSizePixels);
-            const std::int32_t top = px(originY + y * TileSizePixels);
-            const std::int32_t right = px(originX + (x + width) * TileSizePixels);
-            const std::int32_t bottom = px(originY + (y + height) * TileSizePixels);
-            return Systems::Rendering::Rectangle{ left, top, right - left, bottom - top };
-        }
-
+        // Placeholder 3D arena: one floor slab per tile (top at height 0) and a ring of wall blocks
+        // around it. Tile (tx, ty) covers [tx, tx + 1) x [ty, ty + 1); ground y is world Z.
         template<typename Shade>
         void DrawArena(const Shade& shade) {
+            using Systems::Rendering::MeshRenderData;
+            using Systems::Rendering::MeshShape;
+
+            constexpr float FloorThickness = 0.2f;
             const auto tilesX = static_cast<std::int32_t>(ArenaHalfWidth);
             const auto tilesY = static_cast<std::int32_t>(ArenaHalfHeight);
-            for (std::int32_t ty = -tilesY; ty < tilesY; ++ty) {
-                for (std::int32_t tx = -tilesX; tx < tilesX; ++tx) {
-                    const bool light = ((tx + ty) & 1) == 0;
-                    const auto color = light ? shade(0.30f, 0.29f, 0.27f) : shade(0.24f, 0.23f, 0.22f);
-                    renderingSystem_.DrawRectangle(ToScreen(static_cast<float>(tx), static_cast<float>(ty), 1.0f, 1.0f), color, 0);
+            for (std::int32_t ty = -tilesY - 1; ty <= tilesY; ++ty) {
+                for (std::int32_t tx = -tilesX - 1; tx <= tilesX; ++tx) {
+                    const bool wall = tx < -tilesX || tx >= tilesX || ty < -tilesY || ty >= tilesY;
+                    const float centerX = static_cast<float>(tx) + 0.5f;
+                    const float centerZ = static_cast<float>(ty) + 0.5f;
+
+                    MeshRenderData mesh{};
+                    mesh.shape = MeshShape::Box;
+                    if (wall) {
+                        mesh.position = { centerX, WallHeight * 0.5f - FloorThickness * 0.5f, centerZ };
+                        mesh.size = { 1.0f, WallHeight + FloorThickness, 1.0f };
+                        mesh.color = shade(0.42f, 0.40f, 0.38f);
+                    }
+                    else {
+                        const bool light = ((tx + ty) & 1) == 0;
+                        mesh.position = { centerX, -FloorThickness * 0.5f, centerZ };
+                        mesh.size = { 0.96f, FloorThickness, 0.96f };  // thin seams between flagstones
+                        mesh.color = light ? shade(0.30f, 0.29f, 0.27f) : shade(0.24f, 0.23f, 0.22f);
+                    }
+                    renderingSystem_.DrawMesh(mesh);
                 }
             }
         }
 
+        // Placeholder hero: a body, a head, and a visor showing where they face
         template<typename Shade>
         void DrawPlayer(const Shade& shade) {
             if (!playerId_) return;
 
-            constexpr float half = PlayerSizeTiles * 0.5f;
-            renderingSystem_.DrawRectangle(
-                ToScreen(playerPosition_.x - half, playerPosition_.y - half, PlayerSizeTiles, PlayerSizeTiles),
-                shade(0.95f, 0.75f, 0.20f), 10);
+            using Systems::Rendering::MeshRenderData;
+            using Systems::Rendering::MeshShape;
+
+            constexpr float BodyHeight = 1.1f;
+            constexpr float HeadSize = 0.42f;
+            const float x = playerPosition_.x;
+            const float z = playerPosition_.y;
+            const float forwardX = std::sin(playerFacingYaw_);
+            const float forwardZ = std::cos(playerFacingYaw_);
+
+            MeshRenderData body{};
+            body.shape = MeshShape::Cylinder;
+            body.position = { x, BodyHeight * 0.5f, z };
+            body.size = { PlayerSizeTiles * 0.8f, BodyHeight, PlayerSizeTiles * 0.8f };
+            body.color = shade(0.95f, 0.75f, 0.20f);
+            renderingSystem_.DrawMesh(body);
+
+            MeshRenderData head{};
+            head.shape = MeshShape::Sphere;
+            head.position = { x, BodyHeight + HeadSize * 0.45f, z };
+            head.size = { HeadSize, HeadSize, HeadSize };
+            head.color = shade(0.85f, 0.70f, 0.55f);
+            renderingSystem_.DrawMesh(head);
+
+            MeshRenderData visor{};
+            visor.shape = MeshShape::Box;
+            visor.position = { x + forwardX * HeadSize * 0.45f, BodyHeight + HeadSize * 0.5f, z + forwardZ * HeadSize * 0.45f };
+            visor.size = { HeadSize * 0.7f, HeadSize * 0.2f, HeadSize * 0.2f };
+            visor.yawRadians = playerFacingYaw_;
+            visor.color = shade(0.15f, 0.15f, 0.20f);
+            renderingSystem_.DrawMesh(visor);
         }
 
         void SetPaused(bool paused) {
@@ -621,6 +708,8 @@ export namespace LB::Engine {
 
             RegisterKeyBinding(QuickSaveAction, Systems::Input::Keys::F5);
             RegisterKeyBinding(QuickLoadAction, Systems::Input::Keys::F9);
+            RegisterKeyBinding(RotateCameraLeftAction, Systems::Input::Keys::FromChar('Q'));
+            RegisterKeyBinding(RotateCameraRightAction, Systems::Input::Keys::FromChar('E'));
         }
 
         void OnDeviceLost() {
@@ -640,6 +729,9 @@ export namespace LB::Engine {
         std::shared_ptr<const Content::ContentDatabase> content_ = std::make_shared<Content::ContentDatabase>();
         std::string initializationError_;
         WorldPoint playerPosition_{};
+        float playerFacingYaw_{0.0f};             // radians around the vertical axis; 0 faces +Z (south)
+        Systems::Rendering::IsometricCamera camera_;
+        WorldPoint previousRightStick_{};         // for right stick flick detection
         StepTimer timer_;
         double gameTimeSeconds_{0.0};
         bool paused_{false};

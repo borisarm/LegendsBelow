@@ -5,6 +5,8 @@ import std;
 
 using namespace LB::Engine;
 using namespace std::chrono_literals;
+using LB::Systems::Rendering::IsometricCamera;
+using LB::Systems::Rendering::ZoomLevel;
 
 namespace {
     // One fixed step at the default 60 Hz rate, as a real-time duration.
@@ -779,6 +781,37 @@ namespace {
         state.leftThumbY = y;
         return state;
     }
+
+    GamepadState RightStick(float x, float y) {
+        GamepadState state{};
+        state.connected = true;
+        state.rightThumbX = x;
+        state.rightThumbY = y;
+        return state;
+    }
+
+    // Distance from the spawn point (the origin)
+    float Travelled(const GameEngine& engine) {
+        const auto p = engine.GetPlayerPosition();
+        return std::sqrt(p.x * p.x + p.y * p.y);
+    }
+
+    // Ground direction of a screen direction through the engine's camera (unit for unit input)
+    LB::Systems::Rendering::GroundPoint Ground(const GameEngine& engine, float right, float up) {
+        return engine.GetCamera().ScreenToGround(right, up);
+    }
+
+    // Where a ground point is drawn, through the camera the engine last rendered with
+    LB::Systems::Rendering::ScreenPoint OnScreen(const GameEngine& engine, float x, float y) {
+        return engine.GetRendering().WorldToScreen({ x, 0.0f, y });
+    }
+
+    // Placeholder arena: floor tiles plus the ring of wall blocks around them
+    std::size_t ArenaMeshCount() {
+        return static_cast<std::size_t>((GameEngine::ArenaHalfWidth * 2 + 2) * (GameEngine::ArenaHalfHeight * 2 + 2));
+    }
+
+    constexpr std::size_t PlayerMeshCount = 3;  // body, head, visor
 }
 
 TEST(GameEngineMovementTests, NoContent_NoPlayer) {
@@ -788,8 +821,7 @@ TEST(GameEngineMovementTests, NoContent_NoPlayer) {
     HoldKeysFor(engine, { Keys::FromChar('D') }, 10);
 
     EXPECT_FALSE(engine.GetPlayerId().has_value());
-    const auto arenaTiles = static_cast<std::size_t>(GameEngine::ArenaHalfWidth * 2 * GameEngine::ArenaHalfHeight * 2);
-    EXPECT_EQ(engine.GetRendering().GetQueuedRectangles().size(), arenaTiles);  // arena only
+    EXPECT_EQ(engine.GetRendering().GetQueuedMeshes().size(), ArenaMeshCount());  // arena only
     EXPECT_TRUE(engine.SaveGame(1));
     EXPECT_TRUE(engine.LoadGame(1));
 }
@@ -806,14 +838,31 @@ TEST(GameEngineMovementTests, Initialize_SpawnsPlayerAtOrigin) {
     EXPECT_EQ(character.GetPosition(), (LB::Position{0, 0}));
 }
 
-TEST(GameEngineMovementTests, HoldD_MovesRightAtCharacterSpeed) {
+TEST(GameEngineMovementTests, HoldD_MovesScreenRightAtCharacterSpeed) {
     GameEngine engine;
     InitializeWithContent(engine);
 
     HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
 
-    EXPECT_NEAR(engine.GetPlayerPosition().x, PlayerSpeed(engine) * 30 * StepSeconds(engine), 1e-4);
-    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().y, 0.0f);
+    // Isometric: screen-right is a ground diagonal at the default camera yaw
+    const float distance = PlayerSpeed(engine) * 30 * static_cast<float>(StepSeconds(engine));
+    const auto right = Ground(engine, 1.0f, 0.0f);
+    EXPECT_NEAR(engine.GetPlayerPosition().x, right.x * distance, 1e-4);
+    EXPECT_NEAR(engine.GetPlayerPosition().y, right.y * distance, 1e-4);
+    EXPECT_GT(engine.GetPlayerPosition().x, 0.0f);
+    EXPECT_LT(engine.GetPlayerPosition().y, 0.0f);
+}
+
+TEST(GameEngineMovementTests, HoldD_PlayerGoesRightOnScreen) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 20);  // stays inside the camera dead zone
+
+    const auto start = OnScreen(engine, 0.0f, 0.0f);
+    const auto end = OnScreen(engine, engine.GetPlayerPosition().x, engine.GetPlayerPosition().y);
+    EXPECT_GT(end.x, start.x + 10.0f);
+    EXPECT_NEAR(end.y, start.y, 1.0f);
 }
 
 TEST(GameEngineMovementTests, HoldW_MovesUpTheScreen) {
@@ -822,8 +871,10 @@ TEST(GameEngineMovementTests, HoldW_MovesUpTheScreen) {
 
     HoldKeysFor(engine, { Keys::FromChar('W') }, 20);
 
-    EXPECT_LT(engine.GetPlayerPosition().y, 0.0f);
-    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+    const auto start = OnScreen(engine, 0.0f, 0.0f);
+    const auto end = OnScreen(engine, engine.GetPlayerPosition().x, engine.GetPlayerPosition().y);
+    EXPECT_LT(end.y, start.y - 10.0f);
+    EXPECT_NEAR(end.x, start.x, 1.0f);
 }
 
 TEST(GameEngineMovementTests, ArrowKeys_AlsoMove) {
@@ -832,8 +883,10 @@ TEST(GameEngineMovementTests, ArrowKeys_AlsoMove) {
 
     HoldKeysFor(engine, { Keys::Left, Keys::Down }, 20);
 
-    EXPECT_LT(engine.GetPlayerPosition().x, 0.0f);
-    EXPECT_GT(engine.GetPlayerPosition().y, 0.0f);
+    const auto start = OnScreen(engine, 0.0f, 0.0f);
+    const auto end = OnScreen(engine, engine.GetPlayerPosition().x, engine.GetPlayerPosition().y);
+    EXPECT_LT(end.x, start.x);
+    EXPECT_GT(end.y, start.y);
 }
 
 TEST(GameEngineMovementTests, Diagonal_NotFasterThanStraight) {
@@ -842,9 +895,11 @@ TEST(GameEngineMovementTests, Diagonal_NotFasterThanStraight) {
 
     HoldKeysFor(engine, { Keys::FromChar('D'), Keys::FromChar('S') }, 30);
 
-    const auto p = engine.GetPlayerPosition();
-    EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y), PlayerSpeed(engine) * 30 * StepSeconds(engine), 1e-4);
-    EXPECT_NEAR(p.x, p.y, 1e-6);
+    const float distance = PlayerSpeed(engine) * 30 * static_cast<float>(StepSeconds(engine));
+    EXPECT_NEAR(Travelled(engine), distance, 1e-4);
+    const auto direction = Ground(engine, std::sqrt(0.5f), -std::sqrt(0.5f));
+    EXPECT_NEAR(engine.GetPlayerPosition().x, direction.x * distance, 1e-4);
+    EXPECT_NEAR(engine.GetPlayerPosition().y, direction.y * distance, 1e-4);
 }
 
 TEST(GameEngineMovementTests, OppositeKeys_Cancel) {
@@ -853,7 +908,7 @@ TEST(GameEngineMovementTests, OppositeKeys_Cancel) {
 
     HoldKeysFor(engine, { Keys::FromChar('A'), Keys::FromChar('D') }, 20);
 
-    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+    EXPECT_FLOAT_EQ(Travelled(engine), 0.0f);
 }
 
 TEST(GameEngineMovementTests, LeftStick_AnalogSpeed) {
@@ -863,7 +918,7 @@ TEST(GameEngineMovementTests, LeftStick_AnalogSpeed) {
     engine.OnGamepadState(0, Stick(0.5f, 0.0f));
     RunSteps(engine, 30);
 
-    EXPECT_NEAR(engine.GetPlayerPosition().x, 0.5 * PlayerSpeed(engine) * 30 * StepSeconds(engine), 1e-4);
+    EXPECT_NEAR(Travelled(engine), 0.5 * PlayerSpeed(engine) * 30 * StepSeconds(engine), 1e-4);
 }
 
 TEST(GameEngineMovementTests, LeftStickUp_MovesUpTheScreen) {
@@ -873,7 +928,9 @@ TEST(GameEngineMovementTests, LeftStickUp_MovesUpTheScreen) {
     engine.OnGamepadState(0, Stick(0.0f, 1.0f));
     RunSteps(engine, 10);
 
-    EXPECT_LT(engine.GetPlayerPosition().y, 0.0f);
+    const auto start = OnScreen(engine, 0.0f, 0.0f);
+    const auto end = OnScreen(engine, engine.GetPlayerPosition().x, engine.GetPlayerPosition().y);
+    EXPECT_LT(end.y, start.y);
 }
 
 TEST(GameEngineMovementTests, Paused_DoesNotMove) {
@@ -884,7 +941,7 @@ TEST(GameEngineMovementTests, Paused_DoesNotMove) {
 
     HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
 
-    EXPECT_FLOAT_EQ(engine.GetPlayerPosition().x, 0.0f);
+    EXPECT_FLOAT_EQ(Travelled(engine), 0.0f);
 }
 
 TEST(GameEngineMovementTests, ArenaEdge_StopsPlayer) {
@@ -903,9 +960,11 @@ TEST(GameEngineMovementTests, DomainTilePosition_FollowsPlayer) {
     HoldKeysFor(engine, { Keys::FromChar('D') }, 45);  // ~2.7 tiles at Warrior speed
 
     const auto expectedTileX = static_cast<std::int32_t>(std::floor(engine.GetPlayerPosition().x));
+    const auto expectedTileY = static_cast<std::int32_t>(std::floor(engine.GetPlayerPosition().y));
     const auto& character = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
-    EXPECT_GE(expectedTileX, 2);
-    EXPECT_EQ(character.GetPosition(), (LB::Position{expectedTileX, 0}));
+    EXPECT_GE(expectedTileX, 1);
+    EXPECT_LE(expectedTileY, -2);
+    EXPECT_EQ(character.GetPosition(), (LB::Position{expectedTileX, expectedTileY}));
 }
 
 TEST(GameEngineMovementTests, SaveLoad_RestoresPlayerPosition) {
@@ -930,17 +989,44 @@ TEST(GameEngineMovementTests, Render_DrawsArenaAndCenteredPlayer) {
 
     engine.Tick(OneSixtieth);
 
-    const auto& rects = engine.GetRendering().GetQueuedRectangles();
-    const auto arenaTiles = static_cast<std::size_t>(GameEngine::ArenaHalfWidth * 2 * GameEngine::ArenaHalfHeight * 2);
-    ASSERT_EQ(rects.size(), arenaTiles + 1);
+    const auto& meshes = engine.GetRendering().GetQueuedMeshes();
+    ASSERT_EQ(meshes.size(), ArenaMeshCount() + PlayerMeshCount);
 
-    // Player is drawn last, centered in the 800x600 window, 0.75 tiles of 32 px = 24 px
-    const auto& player = rects.back();
-    EXPECT_EQ(player.rect.x, 388);
-    EXPECT_EQ(player.rect.y, 288);
-    EXPECT_EQ(player.rect.width, 24);
-    EXPECT_EQ(player.rect.height, 24);
-    EXPECT_GT(player.layerDepth, rects.front().layerDepth);
+    // The player's body stands on the floor at the player's position...
+    const auto& body = meshes[ArenaMeshCount()];
+    EXPECT_EQ(body.shape, LB::Systems::Rendering::MeshShape::Cylinder);
+    EXPECT_FLOAT_EQ(body.position.x, 0.0f);
+    EXPECT_FLOAT_EQ(body.position.z, 0.0f);
+    EXPECT_FLOAT_EQ(body.position.y - body.size.y * 0.5f, 0.0f);
+
+    // ...in the middle of the 800x600 window, where the camera looks
+    const auto feet = OnScreen(engine, 0.0f, 0.0f);
+    ASSERT_TRUE(feet.inFront);
+    EXPECT_NEAR(feet.x, 400.0f, 0.01f);
+    EXPECT_NEAR(feet.y, 300.0f, 0.01f);
+}
+
+TEST(GameEngineMovementTests, Render_FloorTopAtGroundAndWallsAroundArena) {
+    GameEngine engine;
+    engine.Initialize(nullptr, 800, 600);
+    engine.Tick(OneSixtieth);
+
+    std::size_t walls = 0;
+    for (const auto& mesh : engine.GetRendering().GetQueuedMeshes()) {
+        const float top = mesh.position.y + mesh.size.y * 0.5f;
+        if (top > 0.5f) {
+            ++walls;
+            const bool outsideX = std::abs(mesh.position.x) > GameEngine::ArenaHalfWidth;
+            const bool outsideY = std::abs(mesh.position.z) > GameEngine::ArenaHalfHeight;
+            EXPECT_TRUE(outsideX || outsideY) << mesh.position.x << ", " << mesh.position.z;
+            EXPECT_FLOAT_EQ(top, GameEngine::WallHeight);
+        }
+        else {
+            EXPECT_FLOAT_EQ(top, 0.0f);  // floor
+        }
+    }
+    const auto perimeter = static_cast<std::size_t>((GameEngine::ArenaHalfWidth * 2 + 2) * 2 + GameEngine::ArenaHalfHeight * 2 * 2);
+    EXPECT_EQ(walls, perimeter);
 }
 
 TEST(GameEngineMovementTests, Shutdown_RemovesPlayer) {
@@ -1065,7 +1151,7 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
 
     const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
     const float speed = 8.0f + static_cast<float>(player.GetAttributes().GetDexterityModifier()) * 0.1f;
-    EXPECT_NEAR(engine.GetPlayerPosition().x, speed * 30 * StepSeconds(engine), 1e-4);
+    EXPECT_NEAR(Travelled(engine), speed * 30 * StepSeconds(engine), 1e-4);
 }
 
 // ============================================================================
@@ -1096,7 +1182,7 @@ TEST(GameEngineArmorTests, HeavyBreastplate_SlowsWarriorByScaledPenalty) {
     EXPECT_FLOAT_EQ(*engine.GetCharacters().GetCastTimeMultiplier(*engine.GetPlayerId()), 1.0f + 0.05f);
 
     HoldKeysFor(engine, { Keys::FromChar('D') }, 30);
-    EXPECT_NEAR(engine.GetPlayerPosition().x, unarmored * (1.0f - 0.075f) * 30 * StepSeconds(engine), 1e-4);
+    EXPECT_NEAR(Travelled(engine), unarmored * (1.0f - 0.075f) * 30 * StepSeconds(engine), 1e-4);
 }
 
 TEST(GameEngineArmorTests, EquipPlayerArmor_UnknownKey_Fails) {
@@ -1111,4 +1197,164 @@ TEST(GameEngineArmorTests, EquipPlayerArmor_WithoutPlayer_Fails) {
     engine.Initialize(nullptr, 800, 600);
 
     EXPECT_FALSE(engine.EquipPlayerArmor("armor_chest_rusted_breastplate_t1"));
+}
+
+// ============================================================================
+// GameEngine Camera Tests
+// ============================================================================
+
+TEST(GameEngineCameraTests, Initialize_CameraFocusesPlayerAtDefaults) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    const auto& camera = engine.GetCamera();
+    EXPECT_FLOAT_EQ(camera.GetFocus().x, 0.0f);
+    EXPECT_FLOAT_EQ(camera.GetFocus().y, 0.0f);
+    EXPECT_FLOAT_EQ(camera.GetTargetYawDegrees(), IsometricCamera::DefaultYawDegrees);
+    EXPECT_EQ(camera.GetZoom(), ZoomLevel::Medium);
+}
+
+TEST(GameEngineCameraTests, KeyE_RotatesClockwise_KeyQ_Back) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    TapKey(engine, Keys::FromChar('E'));
+    RunSteps(engine, 1);
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetTargetYawDegrees(), IsometricCamera::DefaultYawDegrees + 90.0f);
+
+    TapKey(engine, Keys::FromChar('Q'));
+    RunSteps(engine, 1);
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetTargetYawDegrees(), IsometricCamera::DefaultYawDegrees);
+}
+
+TEST(GameEngineCameraTests, Rotation_EasesThenSettles) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    TapKey(engine, Keys::FromChar('E'));
+    RunSteps(engine, 1);
+    EXPECT_TRUE(engine.GetCamera().IsRotating());
+
+    RunSteps(engine, 30);  // 0.5 s > RotationSeconds
+    EXPECT_FALSE(engine.GetCamera().IsRotating());
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetYawDegrees(), IsometricCamera::DefaultYawDegrees + 90.0f);
+}
+
+TEST(GameEngineCameraTests, AfterRotation_DStillMovesScreenRight) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+    TapKey(engine, Keys::FromChar('E'));
+    RunSteps(engine, 1);
+    RunSteps(engine, 30);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 20);
+
+    const auto start = OnScreen(engine, 0.0f, 0.0f);
+    const auto end = OnScreen(engine, engine.GetPlayerPosition().x, engine.GetPlayerPosition().y);
+    EXPECT_GT(end.x, start.x + 10.0f);
+    EXPECT_NEAR(end.y, start.y, 1.0f);
+}
+
+TEST(GameEngineCameraTests, Rotation_WorksWhilePaused) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+    TapKey(engine, Keys::Escape);
+    RunSteps(engine, 1);
+    ASSERT_TRUE(engine.IsPaused());
+
+    TapKey(engine, Keys::FromChar('Q'));
+    RunSteps(engine, 1);
+
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetTargetYawDegrees(), IsometricCamera::DefaultYawDegrees - 90.0f + 360.0f);
+}
+
+TEST(GameEngineCameraTests, MouseWheel_Zooms) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    engine.OnMouseWheel(120);
+    RunSteps(engine, 1);
+    EXPECT_EQ(engine.GetCamera().GetZoom(), ZoomLevel::Close);
+
+    engine.OnMouseWheel(-120);
+    RunSteps(engine, 1);
+    engine.OnMouseWheel(-120);
+    RunSteps(engine, 1);
+    EXPECT_EQ(engine.GetCamera().GetZoom(), ZoomLevel::Wide);
+
+    RunSteps(engine, 60);
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetDistance(), IsometricCamera::WideDistance);
+}
+
+TEST(GameEngineCameraTests, RightStickFlick_RotatesOncePerFlick) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    engine.OnGamepadState(0, RightStick(1.0f, 0.0f));
+    RunSteps(engine, 10);  // held: one rotation only
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetTargetYawDegrees(), IsometricCamera::DefaultYawDegrees + 90.0f);
+
+    engine.OnGamepadState(0, RightStick(0.0f, 0.0f));
+    RunSteps(engine, 1);
+    engine.OnGamepadState(0, RightStick(1.0f, 0.0f));
+    RunSteps(engine, 1);
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetTargetYawDegrees(), IsometricCamera::DefaultYawDegrees + 180.0f);
+}
+
+TEST(GameEngineCameraTests, RightStickUp_ZoomsIn) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    engine.OnGamepadState(0, RightStick(0.0f, 0.9f));
+    RunSteps(engine, 1);
+
+    EXPECT_EQ(engine.GetCamera().GetZoom(), ZoomLevel::Close);
+}
+
+TEST(GameEngineCameraTests, Camera_FollowsPlayerOutsideDeadZone) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 60);  // ~4 tiles
+
+    const auto focus = engine.GetCamera().GetFocus();
+    const auto player = engine.GetPlayerPosition();
+    EXPECT_NEAR(std::hypot(player.x - focus.x, player.y - focus.y), IsometricCamera::DeadZoneRadius, 1e-4);
+}
+
+TEST(GameEngineCameraTests, Camera_StaysInsideDeadZone) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 10);  // well under 1.5 tiles
+
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetFocus().x, 0.0f);
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetFocus().y, 0.0f);
+}
+
+TEST(GameEngineCameraTests, LoadGame_SnapsCameraToPlayer) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 120);
+    ASSERT_TRUE(engine.SaveGame(1));
+    HoldKeysFor(engine, { Keys::FromChar('A') }, 240);
+
+    ASSERT_TRUE(engine.LoadGame(1));
+
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetFocus().x, engine.GetPlayerPosition().x);
+    EXPECT_FLOAT_EQ(engine.GetCamera().GetFocus().y, engine.GetPlayerPosition().y);
+}
+
+TEST(GameEngineCameraTests, Render_UsesCameraView) {
+    GameEngine engine;
+    InitializeWithContent(engine);
+    TapKey(engine, Keys::FromChar('E'));
+    RunSteps(engine, 1);
+    RunSteps(engine, 30);
+
+    const auto expected = engine.GetCamera().GetView();
+    const auto& rendered = engine.GetRendering().GetCameraView();
+    EXPECT_FLOAT_EQ(rendered.eye.x, expected.eye.x);
+    EXPECT_FLOAT_EQ(rendered.eye.y, expected.eye.y);
+    EXPECT_FLOAT_EQ(rendered.eye.z, expected.eye.z);
 }
