@@ -449,6 +449,17 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
+        /// Where a world point is drawn, in UI units (for 2D drawn over the world: health bars,
+        /// damage numbers)
+        /// </summary>
+        [[nodiscard]] ScreenPoint WorldToUi(Vector3 point) const noexcept {
+            auto screen = WorldToScreen(point);
+            screen.x /= uiScale_;
+            screen.y /= uiScale_;
+            return screen;
+        }
+
+        /// <summary>
         /// Queue overlay text (drawn with the rectangles, back to front by layer)
         /// </summary>
         void DrawText(const TextRenderData& text) {
@@ -539,6 +550,21 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
+        /// The 2D layer's scale: rectangles and text are given in UI units, drawn at this many
+        /// pixels each (the game sets it so its layout grows with the window)
+        /// </summary>
+        void SetUiScale(float scale) noexcept { uiScale_ = std::clamp(scale, 0.25f, 8.0f); }
+        [[nodiscard]] float GetUiScale() const noexcept { return uiScale_; }
+
+        /// <summary>
+        /// The window's size in UI units (what 2D layout should fill)
+        /// </summary>
+        void GetUiSize(std::int32_t& width, std::int32_t& height) const {
+            width = static_cast<std::int32_t>(std::lround(static_cast<float>(screenWidth_) / uiScale_));
+            height = static_cast<std::int32_t>(std::lround(static_cast<float>(screenHeight_) / uiScale_));
+        }
+
+        /// <summary>
         /// Get render statistics
         /// </summary>
         const RenderStats& GetStats() const {
@@ -577,6 +603,7 @@ export namespace LB::Systems::Rendering {
         bool initialized_{false};
         std::int32_t screenWidth_{1920};
         std::int32_t screenHeight_{1080};
+        float uiScale_{1.0f};
         Color clearColor_{Color::Black()};
         Rectangle viewport_{0, 0, 1920, 1080};
         bool vsyncEnabled_{true};

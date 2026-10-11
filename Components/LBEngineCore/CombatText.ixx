@@ -61,7 +61,7 @@ export namespace LB::Engine {
             for (const auto& floating : texts_) {
                 const float t = std::clamp(floating.ageSeconds / Seconds, 0.0f, 1.0f);
                 const float rise = Rise * (1.0f - (1.0f - t) * (1.0f - t));
-                const auto point = renderer.WorldToScreen({ floating.position.x, floating.position.y + rise, floating.position.z });
+                const auto point = renderer.WorldToUi({ floating.position.x, floating.position.y + rise, floating.position.z });
                 if (!point.inFront) continue;
 
                 const float fade = std::clamp((t - 0.6f) / 0.4f, 0.0f, 1.0f);

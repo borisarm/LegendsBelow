@@ -13,6 +13,7 @@ namespace LB::Systems::Rendering {
         struct OverlayBuilder {
             std::vector<Detail::OverlayVertex> vertices;
             std::vector<Detail::OverlayBatch> batches;
+            float uiScale{1.0f};   // UI units to pixels: applied to every corner, so all 2D scales together
 
             // Two triangles covering a screen rectangle; atlas coordinates in pixels
             void Quad(const ModelTexture* atlas, float atlasWidth, float atlasHeight,
@@ -24,7 +25,7 @@ namespace LB::Systems::Rendering {
                 u0 /= atlasWidth; u1 /= atlasWidth;
                 v0 /= atlasHeight; v1 /= atlasHeight;
                 const auto vertex = [&](float x, float y, float u, float v) {
-                    return Detail::OverlayVertex{ x, y, u, v, color.r, color.g, color.b, color.a, mode, outline };
+                    return Detail::OverlayVertex{ x * uiScale, y * uiScale, u, v, color.r, color.g, color.b, color.a, mode, outline };
                 };
                 vertices.insert(vertices.end(), {
                     vertex(left, top, u0, v0), vertex(right, top, u1, v0), vertex(left, bottom, u0, v1),
@@ -244,6 +245,7 @@ namespace LB::Systems::Rendering {
             std::ranges::stable_sort(items, {}, &OverlayItem::layer);
 
             OverlayBuilder overlay;
+            overlay.uiScale = uiScale_;
             for (const auto& item : items) {
                 if (!item.text) {
                     overlay.Rect(rectangleQueue_[item.index].rect, rectangleQueue_[item.index].color);

@@ -151,6 +151,8 @@
     <ClCompile Include="GameSounds.cpp" />
     <ClCompile Include="Sounds.ixx" />
     <ClCompile Include="Music.ixx" />
+    <ClCompile Include="Menus.ixx" />
+    <ClCompile Include="GameMenus.cpp" />
     <ClCompile Include="Loot.ixx" />
     <ClCompile Include="Particles.ixx" />
     <ClCompile Include="Effects.ixx" />

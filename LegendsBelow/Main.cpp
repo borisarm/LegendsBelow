@@ -143,6 +143,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     const ScopeExit releaseEngine([] { g_engine.reset(); });
 
     // Register class and create window
+    HWND hwnd = nullptr;
     {
         // Register class
         WNDCLASSEXW wcex = {};
@@ -166,7 +167,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
         AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
-        HWND hwnd = CreateWindowExW(0, L"LegendsBelowWindowClass", g_szAppName, WS_OVERLAPPEDWINDOW,
+        hwnd = CreateWindowExW(0, L"LegendsBelowWindowClass", g_szAppName, WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
             nullptr, nullptr, hInstance,
             g_engine.get());
@@ -188,6 +189,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         options.fontDirectory = GetAssetDirectory(L"Fonts");
         options.soundDirectory = GetAssetDirectory(L"Sounds");
         options.musicDirectory = GetAssetDirectory(L"Music");
+        options.titleScreen = true;
         options.dungeon = true;
 
         if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top, options))
@@ -211,6 +213,12 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         else
         {
             g_engine->Tick();
+            if (g_engine->IsQuitRequested() && hwnd)
+            {
+                // Quit from the menu: close the window like its close button does
+                DestroyWindow(hwnd);
+                hwnd = nullptr;
+            }
         }
     }
 

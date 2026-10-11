@@ -384,7 +384,7 @@ namespace LB::Engine {
 
         std::int32_t width = 0;
         std::int32_t height = 0;
-        renderingSystem_.GetScreenSize(width, height);
+        renderingSystem_.GetUiSize(width, height);
         const std::int32_t panelWidth = std::min(width - 40, 620);
         const std::int32_t left = (width - panelWidth) / 2;
         const std::int32_t top = 30;

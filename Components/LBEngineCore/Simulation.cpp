@@ -20,12 +20,19 @@ namespace LB::Engine {
             inputSystem_.PollDevices();
         }
 
-        // The character screen takes the input while open (Esc closes it instead of pausing)
+        // An open menu takes the input; else the character screen does while open (Esc closes it
+        // instead of opening the pause menu)
+        const bool menuWasOpen = menu_.IsOpen();
         const bool screenWasOpen = session_->characterScreen.IsOpen();
-        UpdateCharacterScreen();
-
-        if (!screenWasOpen && !session_->characterScreen.IsOpen() && inputSystem_.IsActionTriggered(std::string(PauseAction))) {
-            SetPaused(!session_->paused);
+        if (menuWasOpen) {
+            UpdateMenu();
+        }
+        else {
+            UpdateCharacterScreen();
+            if (!screenWasOpen && !session_->characterScreen.IsOpen() && inputSystem_.IsActionTriggered(std::string(PauseAction))) {
+                OpenMenu(MenuPage::Pause);
+                PlaySound(GameSound::ScreenOpen);
+            }
         }
 
         if (inputSystem_.IsActionTriggered(std::string(QuickSaveAction))) {
@@ -42,7 +49,7 @@ namespace LB::Engine {
         }
 
         session_->combatEvents.clear();
-        const bool running = !session_->paused && !screenWasOpen && !session_->characterScreen.IsOpen();
+        const bool running = !session_->paused && !menu_.IsOpen() && !screenWasOpen && !session_->characterScreen.IsOpen();
         if (running) {
             session_->gameTimeSeconds += elapsedSeconds;
             // Attacks first: a swing that starts this step roots the player at once

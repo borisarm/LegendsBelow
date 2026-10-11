@@ -18,16 +18,14 @@ namespace LB::Engine {
         Shutdown();   // a second Initialize starts a fresh run
         initializationError_.clear();
 
+        options_ = options;
+
         // Content first: invalid data is a fatal authoring error (fail fast, report everything)
         if (!LoadContent(options.contentDirectory)) {
             return false;
         }
-
-        session_->dungeonMode = options.dungeon;
-        session_->baseSeed = options.randomSeed ? *options.randomSeed : std::random_device{}();
+        LoadCredits(options.contentDirectory);
         session_->world = WorldMap::Arena(ArenaHalfWidth, ArenaHalfHeight);
-        session_->depth = 0;
-        session_->rooms.clear();
 
         if (!renderingSystem_.Initialize(nativeWindow, width, height)) {
             initializationError_ = "Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.";
@@ -50,19 +48,6 @@ namespace LB::Engine {
         }
         ApplyPreferences(persistenceSystem_.LoadPreferences());
 
-        if (!SpawnPlayer()) {
-            return false;
-        }
-
-        session_->encounter = options.randomSeed ? Encounter(*options.randomSeed) : Encounter();
-        session_->lootRoller = options.randomSeed ? LootRoller(*options.randomSeed + 1) : LootRoller();
-        session_->spawnEnemies = options.spawnEnemies;
-        GiveStartingKit();
-        if (session_->dungeonMode && session_->playerId) {
-            StartFloor(1);
-        }
-        StartEncounter();
-
         inputSystem_.Initialize();
         RegisterDefaultBindings();
 
@@ -77,10 +62,42 @@ namespace LB::Engine {
             [this] { OnDeviceLost(); },
             [this] { OnDeviceRestored(); });
 
-        StartMusic();
+        if (!StartRun()) {
+            return false;
+        }
+        if (options.titleScreen) {
+            OpenMenu(MenuPage::Title);
+        }
         timer_.ResetElapsedTime();
         initialized_ = true;
 
+        return true;
+    }
+
+    // A new run in a fresh session: the player with the starting kit, the first floor (or the test
+    // arena) with its walls, the enemies, and the music. What the last run played stops.
+    bool GameEngine::StartRun() {
+        audioSystem_.StopAll();
+        session_ = std::make_unique<Session>();
+        session_->dungeonMode = options_.dungeon;
+        session_->baseSeed = options_.randomSeed ? *options_.randomSeed : std::random_device{}();
+        session_->world = WorldMap::Arena(ArenaHalfWidth, ArenaHalfHeight);
+        if (assets_.models.loaded) {
+            session_->walls.Build(session_->world, renderingSystem_, assets_.models.wall, assets_.models.corner, ModelScale);
+        }
+
+        if (!SpawnPlayer()) {
+            return false;
+        }
+        session_->encounter = options_.randomSeed ? Encounter(*options_.randomSeed) : Encounter();
+        session_->lootRoller = options_.randomSeed ? LootRoller(*options_.randomSeed + 1) : LootRoller();
+        session_->spawnEnemies = options_.spawnEnemies;
+        GiveStartingKit();
+        if (session_->dungeonMode && session_->playerId) {
+            StartFloor(1);
+        }
+        StartEncounter();
+        StartMusic();
         return true;
     }
 
@@ -98,6 +115,8 @@ namespace LB::Engine {
         // also what a failed Initialize had set up
         session_ = std::make_unique<Session>();
         assets_ = {};
+        menu_ = {};
+        quitRequested_ = false;
         initialized_ = false;
     }
 
@@ -403,6 +422,12 @@ namespace LB::Engine {
         RegisterKeyBinding(MenuConfirmAction, Systems::Input::Keys::Space);
         RegisterGamepadBinding(MenuConfirmAction, Systems::Input::GamepadButton::A);
         RegisterKeyBinding(MenuBackAction, Systems::Input::Keys::Escape);
+        RegisterKeyBinding(MenuLeftAction, Systems::Input::Keys::FromChar('A'));
+        RegisterKeyBinding(MenuLeftAction, Systems::Input::Keys::Left);
+        RegisterGamepadBinding(MenuLeftAction, Systems::Input::GamepadButton::DPadLeft);
+        RegisterKeyBinding(MenuRightAction, Systems::Input::Keys::FromChar('D'));
+        RegisterKeyBinding(MenuRightAction, Systems::Input::Keys::Right);
+        RegisterGamepadBinding(MenuRightAction, Systems::Input::GamepadButton::DPadRight);
         RegisterKeyBinding(MapAction, Systems::Input::Keys::FromChar('M'));
         RegisterGamepadBinding(MapAction, Systems::Input::GamepadButton::RightThumb);
         RegisterGamepadBinding(MenuBackAction, Systems::Input::GamepadButton::B);

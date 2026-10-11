@@ -35,6 +35,7 @@ import :CombatText;
 import :Hud;
 import :Sounds;
 import :Music;
+import :Menus;
 import :CharacterScreen;
 
 export namespace LB::Engine {
@@ -55,6 +56,8 @@ export namespace LB::Engine {
         std::string soundDirectory;
         // Music (MusicTracks); empty: no music
         std::string musicDirectory;
+        // Open the title menu at startup (the game); off: straight into play (tests, tools)
+        bool titleScreen{false};
         // Waves of enemies from enemies.json fight the player (needs content with a player)
         bool spawnEnemies{true};
         // Fixed seed for dice, spawn points, and dungeon floors (tests, replays); empty: random
@@ -74,6 +77,16 @@ export namespace LB::Engine {
         static constexpr std::int32_t DefaultWindowWidth = 800;
         static constexpr std::int32_t DefaultWindowHeight = 600;
 
+        /// <summary>
+        /// The HUD and menus are laid out for the default window size and scaled with the window:
+        /// as large as fits both ways (the layout keeps its proportions)
+        /// </summary>
+        [[nodiscard]] static float UiScaleFor(std::int32_t width, std::int32_t height) noexcept {
+            const float byWidth = static_cast<float>(width) / static_cast<float>(DefaultWindowWidth);
+            const float byHeight = static_cast<float>(height) / static_cast<float>(DefaultWindowHeight);
+            return std::max(0.5f, std::min(byWidth, byHeight));
+        }
+
         // Simulation runs at a fixed 60 Hz (see design-combat-system.md, combat model)
         static constexpr double DefaultTargetElapsedSeconds = 1.0 / 60.0;
 
@@ -91,6 +104,8 @@ export namespace LB::Engine {
         static constexpr std::string_view MenuConfirmAction = "MenuConfirm";
         static constexpr std::string_view MenuBackAction = "MenuBack";
         static constexpr std::string_view MapAction = "Map";
+        static constexpr std::string_view MenuLeftAction = "MenuLeft";
+        static constexpr std::string_view MenuRightAction = "MenuRight";
 
         // Right stick flicks past this deflection rotate (X) or zoom (Y) the camera
         static constexpr float CameraStickThreshold = 0.6f;
@@ -368,6 +383,22 @@ export namespace LB::Engine {
         [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return session_->torches.Torches(); }
 
         /// <summary>
+        /// The menus: the title screen, the pause menu, options, and credits (any open menu pauses
+        /// the game)
+        /// </summary>
+        [[nodiscard]] const GameMenu& GetMenu() const noexcept { return menu_; }
+
+        /// <summary>
+        /// The player chose Quit: the host should close the game
+        /// </summary>
+        [[nodiscard]] bool IsQuitRequested() const noexcept { return quitRequested_; }
+
+        /// <summary>
+        /// The credits (credits.txt in the content directory), one line each
+        /// </summary>
+        [[nodiscard]] const std::vector<std::string>& GetCredits() const noexcept { return credits_; }
+
+        /// <summary>
         /// How the music is mixed (the calm and combat layers)
         /// </summary>
         [[nodiscard]] const MusicDirector& GetMusic() const noexcept { return session_->music; }
@@ -586,6 +617,7 @@ export namespace LB::Engine {
         };
 
         // Startup, shutdown, preferences, input bindings (EngineSetup.cpp)
+        bool StartRun();
         bool LoadContent(const std::string& contentDirectory);
         bool LoadModels(const std::string& modelDirectory);
         bool LoadFonts(const std::string& fontDirectory);
@@ -634,6 +666,16 @@ export namespace LB::Engine {
         void DrawMinimap();
         void WriteFloor(Systems::Persistence::SaveData& data) const;
         void ReadFloor(const Systems::Persistence::SaveData& data);
+
+        // Menus (GameMenus.cpp)
+        void LoadCredits(const std::string& contentDirectory);
+        void OpenMenu(MenuPage page);
+        void CloseMenu();
+        std::vector<MenuItem> BuildMenuItems() const;
+        void UpdateMenu();
+        void AdjustMenuItem(MenuCommand command, int direction);
+        void ChooseMenuItem(MenuCommand command);
+        void DrawMenu();
 
         // Sounds (GameSounds.cpp): `at` places a sound in the world (heard from the player)
         bool LoadSounds(const std::string& soundDirectory);
@@ -779,6 +821,10 @@ export namespace LB::Engine {
         };
 
         Assets assets_;
+        EngineOptions options_;                     // what Initialize was given (new runs start from it)
+        GameMenu menu_;                             // spans runs: New Game and Quit to Title start new ones
+        bool quitRequested_{false};
+        std::vector<std::string> credits_;
         std::unique_ptr<Session> session_ = std::make_unique<Session>();   // on the heap: it is large (~20 KB)
         StepTimer timer_;
         bool active_{true};

@@ -35,6 +35,12 @@ namespace LB::Engine {
 
         renderingSystem_.BeginFrame();
 
+        // The HUD and menus grow with the window
+        std::int32_t screenWidth = 0;
+        std::int32_t screenHeight = 0;
+        renderingSystem_.GetScreenSize(screenWidth, screenHeight);
+        renderingSystem_.SetUiScale(UiScaleFor(screenWidth, screenHeight));
+
         // Placeholder pause feedback until there is a pause menu: dim the whole frame.
         // Colors are picked as display (sRGB) values and handed to the renderer as linear.
         const float dim = session_->paused || session_->characterScreen.IsOpen() ? 0.4f : 1.0f;
@@ -61,9 +67,12 @@ namespace LB::Engine {
         session_->torches.Draw(renderingSystem_, session_->walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
                               ModelScale, shade(1.0f, 1.0f, 1.0f), timer_.GetTotalSeconds());
         session_->effects.Draw(renderingSystem_, shade(1.0f, 1.0f, 1.0f));
-        DrawHud();
-        DrawMinimap();
+        if (!menu_.IsOpen()) {   // menus show only the dungeon behind them
+            DrawHud();
+            DrawMinimap();
+        }
         DrawCharacterScreen();
+        DrawMenu();
 
         renderingSystem_.EndFrame();
     }

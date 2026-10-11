@@ -24,5 +24,6 @@ export import :CombatText;
 export import :Hud;
 export import :Sounds;
 export import :Music;
+export import :Menus;
 export import :CharacterScreen;
 export import :GameEngine;

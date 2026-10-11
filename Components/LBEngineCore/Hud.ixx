@@ -57,7 +57,7 @@ export namespace LB::Engine {
 
             std::int32_t screenWidth = 0;
             std::int32_t screenHeight = 0;
-            renderer.GetScreenSize(screenWidth, screenHeight);
+            renderer.GetUiSize(screenWidth, screenHeight);
 
             if (hud.player) {
                 const auto& player = *hud.player;
@@ -73,7 +73,7 @@ export namespace LB::Engine {
             }
 
             for (const auto& enemy : hud.enemyBars) {
-                const auto point = renderer.WorldToScreen(enemy.overHead);
+                const auto point = renderer.WorldToUi(enemy.overHead);
                 if (!point.inFront) continue;
                 bar(static_cast<std::int32_t>(point.x) - 22, static_cast<std::int32_t>(point.y) - 8, 44, 5, enemy.fraction, display(0.85f, 0.20f, 0.15f));
             }

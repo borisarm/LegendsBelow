@@ -1476,3 +1476,42 @@ TEST(LightingTests, DustAndGlowingParticles_OneDrawEach) {
 
     EXPECT_EQ(system.GetStats().drawCalls, 2u);
 }
+
+// ============================================================================
+// UI Scale Tests
+// ============================================================================
+
+TEST(UiScaleTests, UiSize_IsTheScreenInUiUnits) {
+    RenderingSystem system;
+    system.Initialize(1600, 1200);
+
+    system.SetUiScale(2.0f);
+
+    std::int32_t width = 0;
+    std::int32_t height = 0;
+    system.GetUiSize(width, height);
+    EXPECT_EQ(width, 800);
+    EXPECT_EQ(height, 600);
+    EXPECT_FLOAT_EQ(system.GetUiScale(), 2.0f);
+}
+
+TEST(UiScaleTests, WorldToUi_IsWorldToScreenScaledDown) {
+    RenderingSystem system;
+    system.Initialize(1600, 1200);
+    system.SetUiScale(2.0f);
+    const Vector3 point{ 1.0f, 0.5f, 2.0f };
+
+    const auto screen = system.WorldToScreen(point);
+    const auto ui = system.WorldToUi(point);
+
+    EXPECT_FLOAT_EQ(ui.x, screen.x / 2.0f);
+    EXPECT_FLOAT_EQ(ui.y, screen.y / 2.0f);
+}
+
+TEST(UiScaleTests, Scale_Clamped) {
+    RenderingSystem system;
+    system.SetUiScale(0.0f);
+    EXPECT_FLOAT_EQ(system.GetUiScale(), 0.25f);
+    system.SetUiScale(100.0f);
+    EXPECT_FLOAT_EQ(system.GetUiScale(), 8.0f);
+}

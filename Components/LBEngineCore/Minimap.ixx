@@ -89,7 +89,7 @@ export namespace LB::Engine {
 
         std::int32_t screenWidth = 0;
         std::int32_t screenHeight = 0;
-        renderer.GetScreenSize(screenWidth, screenHeight);
+        renderer.GetUiSize(screenWidth, screenHeight);
         const auto cellOf = [&](WorldPoint at) {
             return std::pair{ (at.x - world.Origin().x) / WorldMap::CellTiles, (at.y - world.Origin().y) / WorldMap::CellTiles };
         };
