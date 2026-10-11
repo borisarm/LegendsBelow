@@ -31,6 +31,54 @@ namespace LB::Engine {
         return true;
     }
 
+    // The music tracks from the music directory; without a directory there is no music, a
+    // missing or invalid track stops startup
+    bool GameEngine::LoadMusic(const std::string& musicDirectory) {
+        assets_.musicLoaded = false;
+        if (musicDirectory.empty()) return true;
+
+        const auto directory = std::filesystem::path(std::u8string(musicDirectory.begin(), musicDirectory.end()));
+        std::vector<std::string> errors;
+        for (const auto track : MusicTracks::All) {
+            const auto result = audioSystem_.LoadClip(std::string(track), directory / track);
+            if (!result.Succeeded()) errors.push_back(result.error);
+        }
+        if (!errors.empty()) {
+            initializationError_ = std::format("Music in '{}' could not be loaded ({} problems):", musicDirectory, errors.size());
+            for (const auto& error : errors) initializationError_ += "\n" + error;
+            return false;
+        }
+        assets_.musicLoaded = true;
+        return true;
+    }
+
+    // Both layers loop from the start, silent until the director brings them in: the floor's (or
+    // the arena's) calm theme and the combat theme
+    void GameEngine::StartMusic() {
+        if (!assets_.musicLoaded) return;
+        using Systems::Audio::AudioChannel;
+        const auto calm = std::string(session_->dungeonMode ? MusicTracks::DungeonCalm : MusicTracks::ArenaCalm);
+        session_->calmMusic = audioSystem_.PlaySound(calm, AudioChannel::Music, 0.0f, true);
+        session_->combatMusic = audioSystem_.PlaySound(std::string(MusicTracks::Combat), AudioChannel::Music, 0.0f, true);
+    }
+
+    // A fight is on while any enemy is after the player (chasing, attacking, or reeling from a hit)
+    void GameEngine::UpdateMusic(float elapsedSeconds) {
+        if (!assets_.musicLoaded) return;
+        bool fighting = false;
+        if (IsPlayerAlive()) {
+            for (const auto& enemy : session_->encounter.GetEnemies()) {
+                if (enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking || enemy.state == EnemyState::Staggered) {
+                    fighting = true;
+                    break;
+                }
+            }
+        }
+        session_->music.Update(elapsedSeconds, fighting);
+        audioSystem_.SetVolume(session_->calmMusic, session_->music.CalmVolume());
+        audioSystem_.SetVolume(session_->combatMusic, session_->music.CombatVolume());
+    }
+
     void GameEngine::PlaySound(GameSound sound, std::optional<WorldPoint> at) {
         if (!assets_.soundsLoaded) return;
         const auto recipe = SoundBank::RecipeFor(sound);
@@ -75,6 +123,7 @@ namespace LB::Engine {
     // sounds of enemies starting to rise or to swing
     void GameEngine::UpdateSounds(float elapsedSeconds, bool running) {
         audioSystem_.Update(elapsedSeconds);
+        UpdateMusic(elapsedSeconds);
         if (!running) {
             session_->soundPlayerPosition = session_->playerPosition;
             return;

@@ -2,7 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="AudioSystem.cpp" />
-    <ClCompile Include="VorbisDecoder.cpp" />
+    <ClCompile Include="AudioDecoders.cpp" />
     <ClCompile Include="XAudio2Backend.cpp" />
     <ClCompile Include="LB.AudioSystem.ixx" />
   </ItemGroup>

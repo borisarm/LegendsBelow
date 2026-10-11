@@ -91,8 +91,14 @@ namespace LB::Systems::Audio {
         in.seekg(0, std::ios::beg);
         in.read(reinterpret_cast<char*>(encoded.data()), static_cast<std::streamsize>(encoded.size()));
 
+        std::string extension = path.extension().string();
+        std::ranges::transform(extension, extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         std::string error;
-        auto clip = Detail::DecodeOggVorbis(encoded, error);
+        std::optional<AudioClip> clip;
+        if (extension == ".ogg") clip = Detail::DecodeOggVorbis(encoded, error);
+        else if (extension == ".mp3") clip = Detail::DecodeMp3(encoded, error);
+        else if (extension == ".wav") clip = Detail::DecodeWav(encoded, error);
+        else error = "not a .ogg, .mp3, or .wav file";
         if (!clip) {
             return { std::format("{}: {}", path.filename().string(), error) };
         }
@@ -153,6 +159,15 @@ namespace LB::Systems::Audio {
 
         it->second.info.state = PlaybackState::Paused;
         if (device_ && it->second.voice != 0) device_->xaudio2.Pause(it->second.voice);
+        return true;
+    }
+
+    bool AudioSystem::SetVolume(AudioSourceId sourceId, float volume) {
+        auto it = activeSources_.find(sourceId);
+        if (it == activeSources_.end()) return false;
+
+        it->second.info.volume = std::clamp(volume, 0.0f, 1.0f);
+        if (device_ && it->second.voice != 0) device_->xaudio2.SetVolume(it->second.voice, it->second.info.volume);
         return true;
     }
 

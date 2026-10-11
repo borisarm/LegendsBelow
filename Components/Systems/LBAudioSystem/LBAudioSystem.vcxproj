@@ -144,9 +144,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AudioSystem.cpp" />
-    <!-- stb_vorbis.c is compiled into this unit: its code generation warnings (possibly
+    <!-- stb_vorbis.c, dr_mp3, and dr_wav are compiled into this unit: its code generation warnings (possibly
          uninitialized locals) come after the #pragma warning region, so they are off here -->
-    <ClCompile Include="VorbisDecoder.cpp">
+    <ClCompile Include="AudioDecoders.cpp">
       <DisableSpecificWarnings>4701;4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <ClCompile Include="XAudio2Backend.cpp">

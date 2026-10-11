@@ -23,5 +23,6 @@ export import :Minimap;
 export import :CombatText;
 export import :Hud;
 export import :Sounds;
+export import :Music;
 export import :CharacterScreen;
 export import :GameEngine;

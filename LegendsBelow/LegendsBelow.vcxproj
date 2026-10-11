@@ -455,6 +455,10 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Sounds\*.ogg;..\Assets\Sounds\LICENSE-*.txt">
       <DestinationFolders>$(OutDir)Assets\Sounds</DestinationFolders>
     </CopyFileToFolders>
+    <!-- Music (see Assets\Music\CREDITS.txt), loaded at startup from <exe dir>\Assets\Music -->
+    <CopyFileToFolders Include="..\Assets\Music\*.mp3;..\Assets\Music\*.wav;..\Assets\Music\CREDITS.txt">
+      <DestinationFolders>$(OutDir)Assets\Music</DestinationFolders>
+    </CopyFileToFolders>
     <CopyFileToFolders Include="..\Assets\Models\Animations\*.glb">
       <DestinationFolders>$(OutDir)Assets\Models\Animations</DestinationFolders>
     </CopyFileToFolders>

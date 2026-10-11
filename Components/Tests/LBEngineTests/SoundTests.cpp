@@ -137,3 +137,85 @@ TEST(GameEngineSoundTests, Chest_AndTheWayDown_Heard) {
     EXPECT_TRUE(Played(played, GameSound::Gold));   // the chest always holds gold
     EXPECT_TRUE(Played(played, GameSound::Descend));
 }
+
+// ============================================================================
+// Music Tests
+// ============================================================================
+
+TEST(MusicDirectorTests, Start_CalmFadesIn_CombatSilent) {
+    MusicDirector music;
+
+    music.Update(MusicDirector::FadeInSeconds * 0.5f, false);
+    EXPECT_GT(music.CalmVolume(), 0.0f);
+    EXPECT_LT(music.CalmVolume(), MusicDirector::LayerVolume);
+    music.Update(MusicDirector::FadeInSeconds, false);
+
+    EXPECT_FLOAT_EQ(music.CalmVolume(), MusicDirector::LayerVolume);
+    EXPECT_FLOAT_EQ(music.CombatVolume(), 0.0f);
+}
+
+TEST(MusicDirectorTests, Fight_CrossfadesToCombat_ThenBackAfterQuiet) {
+    MusicDirector music;
+    music.Update(10.0f, false);
+
+    music.Update(MusicDirector::CombatInSeconds, true);
+    EXPECT_TRUE(music.InCombat());
+    EXPECT_FLOAT_EQ(music.CombatVolume(), MusicDirector::LayerVolume);
+    EXPECT_FLOAT_EQ(music.CalmVolume(), 0.0f);
+
+    music.Update(MusicDirector::CalmAfterSeconds * 0.5f, false);   // a lull: still the fight
+    EXPECT_TRUE(music.InCombat());
+
+    music.Update(MusicDirector::CalmAfterSeconds, false);
+    EXPECT_FALSE(music.InCombat());
+    music.Update(MusicDirector::CombatOutSeconds, false);
+    EXPECT_FLOAT_EQ(music.CalmVolume(), MusicDirector::LayerVolume);
+    EXPECT_FLOAT_EQ(music.CombatVolume(), 0.0f);
+}
+
+namespace {
+    std::string ShippedMusicDirectory() {
+        const auto sounds = ShippedSoundDirectory();
+        const auto music = std::filesystem::path(std::u8string(sounds.begin(), sounds.end())).parent_path() / "Music";
+        const auto text = music.u8string();
+        return std::string(text.begin(), text.end());
+    }
+}
+
+TEST(GameEngineMusicTests, Dungeon_CalmThemeThenCombatWhenEnemiesCome) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .musicDirectory = ShippedMusicDirectory(), .randomSeed = 7u, .dungeon = true }))
+        << engine.GetInitializationError();
+    const auto started = engine.GetAudio().TakePlayedClips();
+    EXPECT_NE(std::ranges::find(started, std::string(MusicTracks::DungeonCalm)), started.end());
+    EXPECT_NE(std::ranges::find(started, std::string(MusicTracks::Combat)), started.end());
+
+    RunSteps(engine, 60 * 3);
+    EXPECT_FALSE(engine.GetMusic().InCombat());
+    EXPECT_GT(engine.GetMusic().CalmVolume(), 0.5f);
+
+    const auto right = Ground(engine, 2.0f, 0.0f);   // two tiles toward the screen's right
+    const auto player = engine.GetPlayerPosition();
+    engine.SpawnEnemy(GameEngine::LightEnemy, { player.x + right.x, player.y + right.y });
+    RunSteps(engine, 60 * 2);
+    EXPECT_TRUE(engine.GetMusic().InCombat());
+    EXPECT_GT(engine.GetMusic().CombatVolume(), 0.5f);
+}
+
+TEST(GameEngineMusicTests, Arena_PlaysItsOwnCalmTheme) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .musicDirectory = ShippedMusicDirectory(), .spawnEnemies = false }));
+
+    const auto started = engine.GetAudio().TakePlayedClips();
+    EXPECT_NE(std::ranges::find(started, std::string(MusicTracks::ArenaCalm)), started.end());
+}
+
+TEST(GameEngineMusicTests, MissingMusic_StopsStartup) {
+    GameEngine engine;
+
+    EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .musicDirectory = "Z:/no/music" }));
+    EXPECT_NE(engine.GetInitializationError().find("Music in"), std::string::npos);
+}

@@ -342,6 +342,16 @@ namespace {
         return {};
     }
 
+    // Assets/Music of the repository
+    std::filesystem::path ShippedMusic(const char* file) {
+        for (auto directory = std::filesystem::current_path(); !directory.empty(); directory = directory.parent_path()) {
+            const auto candidate = directory / "Assets" / "Music" / file;
+            if (std::filesystem::exists(candidate)) return candidate;
+            if (directory == directory.parent_path()) break;
+        }
+        return {};
+    }
+
     // A clip of `seconds` of silence (mono, 1 kHz) without a file
     AudioClip SilentClip(float seconds) {
         AudioClip clip;
@@ -488,4 +498,37 @@ TEST(AudioDeviceTests, RealDevice_ShippedClip_PlaysOnAVoiceAndEnds) {
     system.Update(system.FindClip("coins")->DurationSeconds() + 0.1f);
     EXPECT_EQ(system.GetSource(id), nullptr);
     system.Shutdown();
+}
+
+TEST(AudioClipTests, LoadClip_ShippedMusic_Mp3AndWav) {
+    AudioSystem system;
+    for (const auto* file : { "battle_theme_a.mp3", "mystical_theme.mp3", "awesomeness.wav" }) {
+        const auto path = ShippedMusic(file);
+        ASSERT_FALSE(path.empty()) << file;
+        const auto result = system.LoadClip(file, path);
+        ASSERT_TRUE(result.Succeeded()) << result.error;
+        const auto* clip = system.FindClip(file);
+        EXPECT_EQ(clip->channels, 2u) << file;
+        EXPECT_EQ(clip->sampleRate, 44100u) << file;
+        EXPECT_GT(clip->DurationSeconds(), 30.0f) << file;
+        std::printf("  %s: %.1f s\n", file, clip->DurationSeconds());
+    }
+}
+
+TEST(AudioClipTests, LoadClip_UnknownExtension_Rejected) {
+    AudioSystem system;
+    const auto result = system.LoadClip("text", ShippedSound("LICENSE-Kenney-RPGAudio.txt"));
+    EXPECT_FALSE(result.Succeeded());
+    EXPECT_NE(result.error.find(".ogg, .mp3, or .wav"), std::string::npos);
+}
+
+TEST(AudioPlaybackTests, SetVolume_ChangesAPlayingSource) {
+    AudioSystem system;
+    system.Initialize();
+    system.AddClip("beep", SilentClip(1.0f));
+    const auto id = system.PlaySound("beep", AudioChannel::Music, 0.0f, true);
+
+    EXPECT_TRUE(system.SetVolume(id, 0.6f));
+    EXPECT_FLOAT_EQ(system.GetSource(id)->volume, 0.6f);
+    EXPECT_FALSE(system.SetVolume(9999, 1.0f));
 }

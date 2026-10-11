@@ -34,6 +34,7 @@ import :Minimap;
 import :CombatText;
 import :Hud;
 import :Sounds;
+import :Music;
 import :CharacterScreen;
 
 export namespace LB::Engine {
@@ -52,6 +53,8 @@ export namespace LB::Engine {
         std::string fontDirectory;
         // Sound effects (SoundBank's .ogg clips); empty: the game is silent
         std::string soundDirectory;
+        // Music (MusicTracks); empty: no music
+        std::string musicDirectory;
         // Waves of enemies from enemies.json fight the player (needs content with a player)
         bool spawnEnemies{true};
         // Fixed seed for dice, spawn points, and dungeon floors (tests, replays); empty: random
@@ -365,6 +368,11 @@ export namespace LB::Engine {
         [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return session_->torches.Torches(); }
 
         /// <summary>
+        /// How the music is mixed (the calm and combat layers)
+        /// </summary>
+        [[nodiscard]] const MusicDirector& GetMusic() const noexcept { return session_->music; }
+
+        /// <summary>
         /// Particles in the world: torch fire, hit sparks, dust, sparkles
         /// </summary>
         [[nodiscard]] const ParticleField& GetParticles() const noexcept { return session_->effects.Particles(); }
@@ -629,6 +637,9 @@ export namespace LB::Engine {
 
         // Sounds (GameSounds.cpp): `at` places a sound in the world (heard from the player)
         bool LoadSounds(const std::string& soundDirectory);
+        bool LoadMusic(const std::string& musicDirectory);
+        void StartMusic();
+        void UpdateMusic(float elapsedSeconds);
         void PlaySound(GameSound sound, std::optional<WorldPoint> at = std::nullopt);
         void PlayCombatSounds();
         void UpdateSounds(float elapsedSeconds, bool running);
@@ -705,6 +716,7 @@ export namespace LB::Engine {
             std::unordered_map<std::string, Systems::Rendering::ModelId, StringHash, std::equal_to<>> characterModels;   // enemy bodies, weapons, props by file
             EnemyClips enemyClips{};
             bool soundsLoaded{false};
+            bool musicLoaded{false};
         };
 
         // The player's side of combat
@@ -755,6 +767,9 @@ export namespace LB::Engine {
             WorldPoint soundPlayerPosition{};        // where the player was last step (footsteps)
             float strideTiles{0.0f};                 // walked since the last footstep
             std::unordered_map<std::uint32_t, EnemyState> enemyStatesHeard;   // last step's, for state sounds
+            MusicDirector music;
+            std::int32_t calmMusic{-1};              // the playing layers (audio source ids)
+            std::int32_t combatMusic{-1};
             WorldPoint effectsPlayerPosition{};      // where the player was last step (footstep dust)
 
             Systems::Rendering::IsometricCamera camera;

@@ -1,0 +1,19 @@
+LegendsBelow - music credits
+============================
+
+mystical_theme.mp3  (exploring the dungeon; downloaded as "мистичная тема.mp3")
+    "Mystical Theme" by Alexandr Zhelanov, https://soundcloud.com/alexandr-zhelanov
+    Source:  https://opengameart.org/content/mystical-theme
+    License: Creative Commons Attribution 3.0 (CC-BY 3.0)
+             https://creativecommons.org/licenses/by/3.0/
+    This credit is required: keep it here and in the game's credits.
+
+battle_theme_a.mp3  (combat, dungeon and arena)
+    "Battle Theme A" by cynicmusic - cynicmusic.com pixelsphere.org
+    Source:  https://opengameart.org/content/battle-theme-a
+    License: CC0 (public domain); credited at the author's request
+
+awesomeness.wav  (the wave arena)
+    "Menu Music" by mrpoly
+    Source:  https://opengameart.org/content/menu-music
+    License: CC0 (public domain)

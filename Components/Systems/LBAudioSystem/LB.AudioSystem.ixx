@@ -76,8 +76,10 @@ export namespace LB::Systems::Audio {
     };
 
     namespace Detail {
-        // Decode an Ogg Vorbis file in memory (VorbisDecoder.cpp)
+        // Decode a sound file in memory to 16-bit PCM (AudioDecoders.cpp)
         std::optional<AudioClip> DecodeOggVorbis(std::span<const std::byte> encoded, std::string& error);
+        std::optional<AudioClip> DecodeMp3(std::span<const std::byte> encoded, std::string& error);
+        std::optional<AudioClip> DecodeWav(std::span<const std::byte> encoded, std::string& error);
     }
 
     /// <summary>
@@ -154,8 +156,8 @@ export namespace LB::Systems::Audio {
         }
 
         /// <summary>
-        /// Decode an Ogg Vorbis file and keep it under a name for PlaySound. Loading a name again
-        /// replaces the clip.
+        /// Decode a sound file (.ogg, .mp3, or .wav; mono or stereo) and keep it under a name for
+        /// PlaySound. Loading a name again replaces the clip.
         /// </summary>
         ClipLoadResult LoadClip(const String& clipId, const std::filesystem::path& path);
 
@@ -186,6 +188,11 @@ export namespace LB::Systems::Audio {
         /// Pause a playing audio source
         /// </summary>
         bool Pause(AudioSourceId sourceId);
+
+        /// <summary>
+        /// Change a playing source's volume (fades, crossfades)
+        /// </summary>
+        bool SetVolume(AudioSourceId sourceId, float volume);
 
         /// <summary>
         /// Resume a paused audio source

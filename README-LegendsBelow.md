@@ -27,6 +27,8 @@ Tools/
 Assets/Data/               spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json, loot.json
 Assets/Models/             KayKit glTF models (CC0); Animations/ holds the skeletons' animation sets
 Assets/Fonts/              MedievalSharp (SIL Open Font License)
+Assets/Sounds/             Kenney Impact Sounds and RPG Audio (CC0)
+Assets/Music/              Music tracks; see Assets/Music/CREDITS.txt (one is CC-BY: credit required)
 Documentation/             Game design and architecture documents
 ```
 
@@ -36,7 +38,7 @@ Documentation/             Game design and architecture documents
 |------|-------|
 | Domain model | Implemented as C++20 modules, unit tested |
 | Services (Character, Combat, Inventory, Progression, Dungeon) | Implemented, unit tested; DungeonService generates the floor layouts; CharacterService uses the class data (HP/MP progression, movement, weapon adjustments); CombatService resolves the arena's weapon attacks (d20 vs AC, dice, crits, armour, resistances) |
-| Systems | Unit tested. Rendering: Direct3D 12 with DirectXTK12: a lit 3D world pass of glTF models (fastgltf; textured, skinned, and animated with cross-fades; instanced per model part, see-through walls) and primitives through an isometric camera, plus a 2D overlay of rectangles and text (TrueType fonts as distance fields, MedievalSharp for the HUD and damage numbers). Input: keyboard/mouse from the window, gamepads through GameInput. Audio: Ogg Vorbis sound effects through XAudio2, with channels, volume, and stereo pan. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
+| Systems | Unit tested. Rendering: Direct3D 12 with DirectXTK12: a lit 3D world pass of glTF models (fastgltf; textured, skinned, and animated with cross-fades; instanced per model part, see-through walls) and primitives through an isometric camera, plus a 2D overlay of rectangles and text (TrueType fonts as distance fields, MedievalSharp for the HUD and damage numbers). Input: keyboard/mouse from the window, gamepads through GameInput. Audio: sound effects and crossfading music (Ogg, MP3, WAV) through XAudio2, with channels, volume, and stereo pan. Persistence: JSON save slots and preferences in `%LOCALAPPDATA%\LegendsBelow\Saves`. The Asset system has no file backend yet |
 | Repositories | Spell facade via Microsoft Proxy 4 with a content-backed implementation |
 | Engine / game loop | `LB.Engine` runs the loop and all wired systems. In the game: a Warrior (the KayKit knight) explores generated, torch-lit dungeon floors of KayKit rooms and corridors (M: map) with WASD/arrows or the left stick (screen-relative), fights the animated KayKit skeletons that rise when a room is entered, opens treasure chests, and takes the trapdoor down to deeper floors with Left Click, Space, or gamepad A, gaining experience and picking up gold and gear they drop (I/C or View: character screen; R or X: drink a potion); Q/E or right stick left/right rotate the camera 90 degrees, the mouse wheel or right stick up/down zoom; Esc/Start toggles the tactical pause; F5/F9 quick save and load |
 | Asset pipeline | Not started (see `Documentation/asset-preprocesing-strategy-instructions.md`) |
@@ -68,6 +70,18 @@ Run the projects under `Components/Tests/` from Test Explorer. Each Model, Servi
 - [Asset Processing Strategy](Documentation/asset-preprocesing-strategy-instructions.md)
 - [Microsoft Proxy Repositories](Documentation/microsoft-proxy-implementation.md)
 - [Coding Guidelines](.github/copilot-instructions.md): module conventions, namespaces, and common build errors
+
+## Credits
+
+- 3D models: KayKit Dungeon Pack, Skeletons, and Character Animations by Kay Lousberg (CC0)
+- Sound effects: Impact Sounds and RPG Audio by Kenney, kenney.nl (CC0)
+- Font: MedievalSharp (SIL Open Font License)
+- Music:
+  - "Mystical Theme" by Alexandr Zhelanov, https://soundcloud.com/alexandr-zhelanov (CC-BY 3.0, https://creativecommons.org/licenses/by/3.0/)
+  - "Battle Theme A" by cynicmusic, cynicmusic.com pixelsphere.org (CC0)
+  - "Menu Music" by mrpoly (CC0)
+
+Details and sources: `Assets/Music/CREDITS.txt` and the license files next to each asset set.
 
 ## Origin
 

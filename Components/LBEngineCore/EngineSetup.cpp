@@ -34,7 +34,7 @@ namespace LB::Engine {
             return false;
         }
 
-        if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory) || !LoadSounds(options.soundDirectory)) {
+        if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory) || !LoadSounds(options.soundDirectory) || !LoadMusic(options.musicDirectory)) {
             renderingSystem_.Shutdown();
             return false;
         }
@@ -77,6 +77,7 @@ namespace LB::Engine {
             [this] { OnDeviceLost(); },
             [this] { OnDeviceRestored(); });
 
+        StartMusic();
         timer_.ResetElapsedTime();
         initialized_ = true;
 

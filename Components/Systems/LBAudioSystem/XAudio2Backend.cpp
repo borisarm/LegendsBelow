@@ -168,6 +168,12 @@ namespace LB::Systems::Audio::Detail
             m_sources.erase(it);
         }
 
+        void SetVolume(std::uint32_t handle, float volume) noexcept
+        {
+            if (const auto it = m_sources.find(handle); it != m_sources.end())
+                it->second->SetVolume(volume);
+        }
+
         void Pause(std::uint32_t handle) noexcept
         {
             if (const auto it = m_sources.find(handle); it != m_sources.end())
