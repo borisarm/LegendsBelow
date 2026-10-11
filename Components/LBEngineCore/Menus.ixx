@@ -172,6 +172,26 @@ export namespace LB::Engine {
     };
 
     /// <summary>
+    /// The images that frame the menus (Kenney Fantasy UI Borders, white, tinted when drawn): the
+    /// panels' frame, the selected item's frame, and the ornament beside headings. All invalid
+    /// without a UI directory: the menus are then plain panels.
+    /// </summary>
+    struct MenuArt {
+        static constexpr std::string_view FrameFile = "panel-border-014.png";
+        static constexpr std::string_view SelectionFile = "panel-border-008.png";
+        static constexpr std::string_view DividerFile = "divider-fade-003.png";
+        static constexpr float Slice = 16.0f;       // image pixels of each frame corner
+
+        Systems::Rendering::ImageId frame{Systems::Rendering::InvalidImageId};
+        Systems::Rendering::ImageId selection{Systems::Rendering::InvalidImageId};
+        Systems::Rendering::ImageId divider{Systems::Rendering::InvalidImageId};
+
+        [[nodiscard]] bool Loaded() const noexcept {
+            return frame != Systems::Rendering::InvalidImageId && selection != Systems::Rendering::InvalidImageId && divider != Systems::Rendering::InvalidImageId;
+        }
+    };
+
+    /// <summary>
     /// What a menu page shows this frame
     /// </summary>
     struct MenuModel {
@@ -182,6 +202,7 @@ export namespace LB::Engine {
         std::string message;
         std::vector<std::string> lines;          // the credits
         std::size_t firstLine{0};
+        MenuArt art;
     };
 
     /// <summary>
@@ -191,6 +212,66 @@ export namespace LB::Engine {
     class MenuView {
     public:
         static constexpr std::size_t CreditLinesShown = 12;   // the rest scroll (fits an 800 x 600 window)
+
+        // Display (sRGB) colors to the renderer's linear ones
+        static Systems::Rendering::Color Display(float r, float g, float b, float a = 1.0f) {
+            return { std::pow(r, 2.2f), std::pow(g, 2.2f), std::pow(b, 2.2f), a };
+        }
+
+        /// <summary>
+        /// A panel: a dark fill, framed in gold when the art is loaded
+        /// </summary>
+        static void Panel(Systems::Rendering::RenderingSystem& renderer, const MenuArt& art, Systems::Rendering::Rectangle panel, std::int32_t layer) {
+            renderer.DrawRectangle(panel, Display(0.03f, 0.03f, 0.05f, 0.85f), layer);
+            if (!art.Loaded()) return;
+            Systems::Rendering::ImageRenderData frame{};
+            frame.image = art.frame;
+            frame.rect = { panel.x - 6, panel.y - 6, panel.width + 12, panel.height + 12 };
+            frame.color = Display(0.85f, 0.66f, 0.30f);
+            frame.layerDepth = layer;
+            frame.nineSlice = MenuArt::Slice;
+            frame.corner = 24.0f;
+            renderer.DrawImage(frame);
+        }
+
+        /// <summary>
+        /// The selected row: a framed highlight (or a plain bar without the art)
+        /// </summary>
+        static void Selection(Systems::Rendering::RenderingSystem& renderer, const MenuArt& art, Systems::Rendering::Rectangle row, std::int32_t layer) {
+            renderer.DrawRectangle(row, art.Loaded() ? Display(0.30f, 0.22f, 0.10f, 0.55f) : Display(0.30f, 0.22f, 0.10f, 0.9f), layer);
+            if (!art.Loaded()) return;
+            Systems::Rendering::ImageRenderData frame{};
+            frame.image = art.selection;
+            frame.rect = row;
+            frame.color = Display(1.0f, 0.88f, 0.60f);
+            frame.layerDepth = layer;
+            frame.nineSlice = MenuArt::Slice;
+            frame.corner = std::min(12.0f, static_cast<float>(row.height) * 0.4f);
+            renderer.DrawImage(frame);
+        }
+
+        /// <summary>
+        /// Ornaments either side of a centered heading (`textWidth` wide at `y`, `height` tall):
+        /// fading lines that end in a cross, the right one mirrored
+        /// </summary>
+        static void HeadingOrnaments(Systems::Rendering::RenderingSystem& renderer, const MenuArt& art, std::int32_t centerX, std::int32_t y,
+                                     float textWidth, std::int32_t height, std::int32_t layer) {
+            if (!art.Loaded()) return;
+            constexpr std::int32_t width = 132;   // UI units: the 96 x 18 image drawn larger
+            constexpr std::int32_t tall = 24;
+            const std::int32_t gap = 16;
+            const std::int32_t middle = y + height / 2 - tall / 2;
+            const std::int32_t half = static_cast<std::int32_t>(textWidth / 2.0f);
+            Systems::Rendering::ImageRenderData ornament{};
+            ornament.image = art.divider;
+            ornament.color = Display(0.85f, 0.66f, 0.30f);
+            ornament.layerDepth = layer;
+            ornament.rect = { centerX - half - gap - width, middle, width, tall };
+            renderer.DrawImage(ornament);
+            ornament.rect = { centerX + half + gap, middle, width, tall };
+            ornament.mirrored = true;
+            renderer.DrawImage(ornament);
+        }
 
         static void Draw(Systems::Rendering::RenderingSystem& renderer, const MenuModel& menu) {
             using Systems::Rendering::Color;
@@ -213,16 +294,23 @@ export namespace LB::Engine {
             // Panel behind the page
             const std::int32_t panelWidth = std::min(width - 40, 560);
             const std::int32_t panelTop = menu.titlePage ? height / 3 : height / 6;
-            const std::int32_t panelHeight = height - panelTop - height / 10;
-            renderer.DrawRectangle({ center - panelWidth / 2, panelTop, panelWidth, panelHeight }, display(0.03f, 0.03f, 0.05f, 0.82f), 30);
+            // Tall enough for what the page holds: the heading, the credit lines, the items, a message
+            const std::int32_t shownLines = static_cast<std::int32_t>(std::min(menu.lines.size(), CreditLinesShown));
+            const std::int32_t content = (menu.titlePage ? 30 : 90) + (shownLines > 0 ? shownLines * 24 + 12 : 0)
+                                       + static_cast<std::int32_t>(menu.items.size()) * 40 + (menu.message.empty() ? 0 : 40) + 24;
+            const std::int32_t panelHeight = std::min(content, height - panelTop - 16);
+            Panel(renderer, menu.art, { center - panelWidth / 2, panelTop, panelWidth, panelHeight }, 30);
 
             const auto gold = display(0.95f, 0.75f, 0.30f);
             if (menu.titlePage) {
                 centered("LEGENDS BELOW", center, height / 3 - 110, 7.0f, gold);
-                centered("a dungeon crawler", center, height / 3 - 34, 2.0f, display(0.80f, 0.78f, 0.72f));
+                const std::string subtitle = "a dungeon crawler";
+                centered(subtitle, center, height / 3 - 34, 2.0f, display(0.80f, 0.78f, 0.72f));
+                HeadingOrnaments(renderer, menu.art, center, height / 3 - 34, renderer.MeasureText(subtitle, 2.0f).width, 14, 32);
             }
             else {
                 centered(menu.heading, center, panelTop + 18, 4.0f, gold);
+                HeadingOrnaments(renderer, menu.art, center, panelTop + 18, renderer.MeasureText(menu.heading, 4.0f).width, 28, 32);
             }
 
             std::int32_t y = panelTop + (menu.titlePage ? 30 : 90);
@@ -242,7 +330,7 @@ export namespace LB::Engine {
                 const auto& item = menu.items[i];
                 const bool selected = i == menu.cursor && item.enabled;
                 if (selected) {
-                    renderer.DrawRectangle({ left - 20, y - 4, right - left + 40, rowHeight - 4 }, display(0.30f, 0.22f, 0.10f, 0.9f), 31);
+                    Selection(renderer, menu.art, { left - 20, y - 8, right - left + 40, rowHeight - 2 }, 31);
                 }
                 const auto color = !item.enabled ? display(0.45f, 0.44f, 0.42f) : selected ? display(1.0f, 0.92f, 0.70f) : display(0.85f, 0.83f, 0.78f);
                 text(item.text, left, y, 2.6f, color);

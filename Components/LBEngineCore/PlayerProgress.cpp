@@ -391,7 +391,7 @@ namespace LB::Engine {
         const auto& rows = session_->characterScreen.GetRows();
         constexpr std::int32_t lineHeight = 22;
         const std::int32_t panelHeight = std::min(height - 60, static_cast<std::int32_t>(rows.size()) * lineHeight + 60);
-        renderingSystem_.DrawRectangle({ left, top, panelWidth, panelHeight }, Display(0.06f, 0.05f, 0.06f, 0.92f), 30);
+        MenuView::Panel(renderingSystem_, assets_.menuArt, { left, top, panelWidth, panelHeight }, 30);
 
         const auto text = [&](std::string line, std::int32_t x, std::int32_t y, float scale, Color color) {
             renderingSystem_.DrawText(Systems::Rendering::TextRenderData{ std::move(line), LB::Position{ x, y }, {}, color, scale, 32, false });
@@ -407,7 +407,7 @@ namespace LB::Engine {
             const std::int32_t y = top + 50 + static_cast<std::int32_t>(i - first) * lineHeight;
             const bool selected = i == session_->characterScreen.GetCursor() && row.IsSelectable();
             if (selected) {
-                renderingSystem_.DrawRectangle({ left + 8, y - 4, panelWidth - 16, lineHeight }, Display(0.30f, 0.22f, 0.10f, 0.9f), 31);
+                MenuView::Selection(renderingSystem_, assets_.menuArt, { left + 8, y - 4, panelWidth - 16, lineHeight }, 31);
             }
             const auto color = row.heading ? Display(0.95f, 0.75f, 0.30f)
                              : !row.enabled ? Display(0.55f, 0.40f, 0.40f)

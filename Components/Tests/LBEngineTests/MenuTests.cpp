@@ -238,3 +238,58 @@ TEST(GameEngineUiScaleTests, LargerWindow_HudLaidOutInUiUnits) {
     EXPECT_LT(hp->position.y, 600);    // in UI units: within the 800 x 600 layout, drawn twice as large
     EXPECT_GT(hp->position.y, 500);
 }
+
+// ============================================================================
+// Menu Frame Tests
+// ============================================================================
+
+namespace {
+    std::string ShippedUiDirectory() {
+        const auto content = ShippedContentDirectory();
+        const auto ui = std::filesystem::path(std::u8string(content.begin(), content.end())).parent_path() / "UI";
+        const auto text = ui.u8string();
+        return std::string(text.begin(), text.end());
+    }
+}
+
+TEST(GameEngineMenuFrameTests, Title_FramedPanelSelectionAndOrnaments) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .titleScreen = true, .uiDirectory = ShippedUiDirectory() }))
+        << engine.GetInitializationError();
+
+    engine.Tick(OneSixtieth);
+
+    // The panel's frame, the selected item's frame, and the two ornaments beside the subtitle
+    const auto& images = engine.GetRendering().GetQueuedImages();
+    ASSERT_EQ(images.size(), 4u);
+    EXPECT_EQ(std::ranges::count_if(images, [](const auto& image) { return image.nineSlice > 0.0f; }), 2);
+    EXPECT_EQ(std::ranges::count_if(images, [](const auto& image) { return image.mirrored; }), 1);
+}
+
+TEST(GameEngineMenuFrameTests, CharacterScreen_Framed_HudHidden) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .uiDirectory = ShippedUiDirectory() }));
+
+    Press(engine, Keys::FromChar('I'));
+
+    EXPECT_FALSE(engine.GetRendering().GetQueuedImages().empty());
+    // The HUD's potion count (the screen shows hit points itself)
+    EXPECT_FALSE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text.starts_with("POTIONS "); }));
+}
+
+TEST(GameEngineMenuFrameTests, NoUiDirectory_PlainPanels) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+
+    EXPECT_TRUE(engine.GetRendering().GetQueuedImages().empty());
+    EXPECT_TRUE(Drawn(engine, "New Game"));
+}
+
+TEST(GameEngineMenuFrameTests, MissingUiImages_StopStartup) {
+    GameEngine engine;
+
+    EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .uiDirectory = "Z:/no/ui" }));
+    EXPECT_NE(engine.GetInitializationError().find("UI images in"), std::string::npos);
+}

@@ -28,6 +28,7 @@ Assets/Data/               spells.json, weapons.json, armour.json, classes.json,
 Assets/Models/             KayKit glTF models (CC0); Animations/ holds the skeletons' animation sets
 Assets/Fonts/              MedievalSharp (SIL Open Font License)
 Assets/Sounds/             Kenney Impact Sounds and RPG Audio (CC0)
+Assets/UI/                 Menu frames: Kenney Fantasy UI Borders (CC0)
 Assets/Music/              Music tracks; see Assets/Music/CREDITS.txt (one is CC-BY: credit required)
 Documentation/             Game design and architecture documents
 ```
@@ -74,7 +75,7 @@ Run the projects under `Components/Tests/` from Test Explorer. Each Model, Servi
 ## Credits
 
 - 3D models: KayKit Dungeon Pack, Skeletons, and Character Animations by Kay Lousberg (CC0)
-- Sound effects: Impact Sounds and RPG Audio by Kenney, kenney.nl (CC0)
+- Sound effects and menu frames: Impact Sounds, RPG Audio, and Fantasy UI Borders by Kenney, kenney.nl (CC0)
 - Font: MedievalSharp (SIL Open Font License)
 - Music:
   - "Mystical Theme" by Alexandr Zhelanov, https://soundcloud.com/alexandr-zhelanov (CC-BY 3.0, https://creativecommons.org/licenses/by/3.0/)

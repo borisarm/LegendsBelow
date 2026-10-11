@@ -24,6 +24,32 @@ namespace LB::Engine {
         while (!credits_.empty() && credits_.back().empty()) credits_.pop_back();
     }
 
+    // The images that frame the menus, from the UI directory; without a directory the menus are
+    // plain panels, a missing or invalid image stops startup
+    bool GameEngine::LoadMenuArt(const std::string& uiDirectory) {
+        assets_.menuArt = {};
+        if (uiDirectory.empty()) return true;
+
+        const auto directory = std::filesystem::path(std::u8string(uiDirectory.begin(), uiDirectory.end()));
+        std::vector<std::string> errors;
+        const auto load = [&](std::string_view file) {
+            const auto result = renderingSystem_.LoadImage(directory / file);
+            if (!result.Succeeded()) errors.push_back(result.error);
+            return result.id;
+        };
+        MenuArt art;
+        art.frame = load(MenuArt::FrameFile);
+        art.selection = load(MenuArt::SelectionFile);
+        art.divider = load(MenuArt::DividerFile);
+        if (!errors.empty()) {
+            initializationError_ = std::format("UI images in '{}' could not be loaded ({} problems):", uiDirectory, errors.size());
+            for (const auto& error : errors) initializationError_ += "\n" + error;
+            return false;
+        }
+        assets_.menuArt = art;
+        return true;
+    }
+
     void GameEngine::OpenMenu(MenuPage page) {
         menu_.Open(page);
         SetPaused(true);
@@ -183,6 +209,7 @@ namespace LB::Engine {
         model.items = menu_.Items();
         model.cursor = menu_.Cursor();
         model.message = menu_.Message();
+        model.art = assets_.menuArt;
         if (menu_.Page() == MenuPage::Credits) {
             model.lines = credits_;
             model.firstLine = menu_.ScrollPosition();

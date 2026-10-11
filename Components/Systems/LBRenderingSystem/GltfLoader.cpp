@@ -403,6 +403,33 @@ namespace LB::Systems::Rendering::Detail {
     /// Read a .gltf or .glb file. Every problem is reported with the file name; a model with
     /// no drawable geometry is an error.
     /// </summary>
+    // A UI image: one level (no mips: drawn at about its size, point sampled)
+    std::shared_ptr<const ModelTexture> LoadImageFile(const std::filesystem::path& path, std::string& error) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) {
+            error = std::format("{}: cannot be opened", path.filename().string());
+            return nullptr;
+        }
+        const std::vector<char> encoded((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        const std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
+            stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(encoded.data()), static_cast<int>(encoded.size()), &width, &height, &channels, 4),
+            &stbi_image_free);
+        if (!pixels) {
+            error = std::format("{}: image could not be decoded ({})", path.filename().string(), stbi_failure_reason());
+            return nullptr;
+        }
+        auto texture = std::make_shared<ModelTexture>();
+        ModelTexture::MipLevel level;
+        level.width = static_cast<std::uint32_t>(width);
+        level.height = static_cast<std::uint32_t>(height);
+        level.pixels.assign(pixels.get(), pixels.get() + std::size_t{ level.width } * level.height * 4);
+        texture->mips.push_back(std::move(level));
+        return texture;
+    }
+
     GltfLoadResult LoadGltfModel(const std::filesystem::path& path, TextureCache& textureCache) {
         GltfLoadResult result;
         const auto fail = [&](std::string_view reason) {

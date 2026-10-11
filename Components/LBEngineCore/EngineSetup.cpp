@@ -32,7 +32,7 @@ namespace LB::Engine {
             return false;
         }
 
-        if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory) || !LoadSounds(options.soundDirectory) || !LoadMusic(options.musicDirectory)) {
+        if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory) || !LoadSounds(options.soundDirectory) || !LoadMusic(options.musicDirectory) || !LoadMenuArt(options.uiDirectory)) {
             renderingSystem_.Shutdown();
             return false;
         }

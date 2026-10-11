@@ -462,6 +462,10 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Music\*.mp3;..\Assets\Music\*.wav;..\Assets\Music\CREDITS.txt">
       <DestinationFolders>$(OutDir)Assets\Music</DestinationFolders>
     </CopyFileToFolders>
+    <!-- Menu frames (Kenney Fantasy UI Borders, CC0), loaded at startup from <exe dir>\Assets\UI -->
+    <CopyFileToFolders Include="..\Assets\UI\*.png;..\Assets\UI\LICENSE-*.txt">
+      <DestinationFolders>$(OutDir)Assets\UI</DestinationFolders>
+    </CopyFileToFolders>
     <CopyFileToFolders Include="..\Assets\Models\Animations\*.glb">
       <DestinationFolders>$(OutDir)Assets\Models\Animations</DestinationFolders>
     </CopyFileToFolders>

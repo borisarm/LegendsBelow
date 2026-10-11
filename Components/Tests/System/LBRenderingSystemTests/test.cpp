@@ -1515,3 +1515,60 @@ TEST(UiScaleTests, Scale_Clamped) {
     system.SetUiScale(100.0f);
     EXPECT_FLOAT_EQ(system.GetUiScale(), 8.0f);
 }
+
+// ============================================================================
+// UI Image Tests
+// ============================================================================
+
+namespace {
+    std::filesystem::path ShippedUi(const char* file) {
+        for (auto directory = std::filesystem::current_path(); !directory.empty(); directory = directory.parent_path()) {
+            const auto candidate = directory / "Assets" / "UI" / file;
+            if (std::filesystem::exists(candidate)) return candidate;
+            if (directory == directory.parent_path()) break;
+        }
+        return {};
+    }
+}
+
+TEST(UiImageTests, LoadImage_ShippedPng_OnceById) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    const auto path = ShippedUi("panel-border-014.png");
+    ASSERT_FALSE(path.empty());
+
+    const auto first = system.LoadImage(path);
+    const auto again = system.LoadImage(path);
+
+    ASSERT_TRUE(first.Succeeded()) << first.error;
+    EXPECT_EQ(first.id, again.id);
+    ASSERT_NE(system.GetImage(first.id), nullptr);
+    EXPECT_EQ(system.GetImage(first.id)->Width(), 48u);
+    EXPECT_EQ(system.GetImage(first.id)->Height(), 48u);
+}
+
+TEST(UiImageTests, LoadImage_MissingOrInvalid_Reported) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+
+    EXPECT_FALSE(system.LoadImage("Z:/no/such/image.png").Succeeded());
+    const auto notImage = system.LoadImage(ShippedUi("LICENSE-Kenney-FantasyUIBorders.txt"));
+    EXPECT_FALSE(notImage.Succeeded());
+    EXPECT_FALSE(notImage.error.empty());
+}
+
+TEST(UiImageTests, DrawImage_QueuedForTheFrame_UnknownImageIgnored) {
+    RenderingSystem system;
+    system.Initialize(800, 600);
+    const auto image = system.LoadImage(ShippedUi("panel-border-008.png")).id;
+    system.BeginFrame();
+
+    system.DrawImage(ImageRenderData{ image, { 10, 10, 200, 40 }, Color::White(), 5, 16.0f, 12.0f });
+    system.DrawImage(ImageRenderData{ 999, { 0, 0, 10, 10 } });
+
+    ASSERT_EQ(system.GetQueuedImages().size(), 1u);
+    EXPECT_FLOAT_EQ(system.GetQueuedImages()[0].nineSlice, 16.0f);
+    system.EndFrame();
+    system.BeginFrame();
+    EXPECT_TRUE(system.GetQueuedImages().empty());
+}

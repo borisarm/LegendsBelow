@@ -67,7 +67,7 @@ namespace LB::Engine {
         session_->torches.Draw(renderingSystem_, session_->walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
                               ModelScale, shade(1.0f, 1.0f, 1.0f), timer_.GetTotalSeconds());
         session_->effects.Draw(renderingSystem_, shade(1.0f, 1.0f, 1.0f));
-        if (!menu_.IsOpen()) {   // menus show only the dungeon behind them
+        if (!menu_.IsOpen() && !session_->characterScreen.IsOpen()) {   // full-screen panels show only the dungeon behind them
             DrawHud();
             DrawMinimap();
         }

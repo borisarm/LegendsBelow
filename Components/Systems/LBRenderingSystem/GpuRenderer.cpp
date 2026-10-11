@@ -157,6 +157,14 @@ namespace LB::Systems::Rendering::Detail
                 m_resources.UploadTextures({ &m_fonts.back()->atlas });
         }
 
+        // Keep a UI image and upload it; it is uploaded again after a device loss
+        void AddImage(std::shared_ptr<const ModelTexture> image)
+        {
+            m_images.push_back(std::move(image));
+            if (m_resources.IsReady())
+                m_resources.UploadTextures({ m_images.back().get() });
+        }
+
         // Particles (x, y, z, size, r, g, b, a each), glowing (added) or dust (blended). Call
         // after the models.
         void DrawParticles(const float* particles, std::size_t count, bool additive)
@@ -240,6 +248,8 @@ namespace LB::Systems::Rendering::Detail
             m_resources.Create();
             for (const auto& font : m_fonts)
                 m_resources.UploadTextures({ &font->atlas });
+            for (const auto& image : m_images)
+                m_resources.UploadTextures({ image.get() });
 
             const DirectX::RenderTargetState renderTargetState(m_device->GetBackBufferFormat(), m_device->GetDepthBufferFormat());
             m_primitives.Create(device, renderTargetState, m_lights);
@@ -259,6 +269,7 @@ namespace LB::Systems::Rendering::Detail
 
         SceneLights m_lights;
         std::vector<std::shared_ptr<const FontData>> m_fonts;
+        std::vector<std::shared_ptr<const ModelTexture>> m_images;
         DirectX::XMFLOAT4 m_cameraRight{ 1.0f, 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT4 m_cameraUp{ 0.0f, 1.0f, 0.0f, 0.0f };
         DeviceCallback m_onDeviceLost;

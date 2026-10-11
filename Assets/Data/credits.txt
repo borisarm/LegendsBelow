@@ -13,8 +13,8 @@ KayKit Dungeon Pack, Skeletons,
 and Character Animations
 by Kay Lousberg - www.kaylousberg.com (CC0)
 
-SOUND EFFECTS
-Impact Sounds and RPG Audio
+SOUND EFFECTS AND MENU FRAMES
+Impact Sounds, RPG Audio, and Fantasy UI Borders
 by Kenney - www.kenney.nl (CC0)
 
 FONT

@@ -58,6 +58,8 @@ export namespace LB::Engine {
         std::string musicDirectory;
         // Open the title menu at startup (the game); off: straight into play (tests, tools)
         bool titleScreen{false};
+        // Images that frame the menus (MenuArt); empty: plain panels
+        std::string uiDirectory;
         // Waves of enemies from enemies.json fight the player (needs content with a player)
         bool spawnEnemies{true};
         // Fixed seed for dice, spawn points, and dungeon floors (tests, replays); empty: random
@@ -669,6 +671,7 @@ export namespace LB::Engine {
 
         // Menus (GameMenus.cpp)
         void LoadCredits(const std::string& contentDirectory);
+        bool LoadMenuArt(const std::string& uiDirectory);
         void OpenMenu(MenuPage page);
         void CloseMenu();
         std::vector<MenuItem> BuildMenuItems() const;
@@ -759,6 +762,7 @@ export namespace LB::Engine {
             EnemyClips enemyClips{};
             bool soundsLoaded{false};
             bool musicLoaded{false};
+            MenuArt menuArt;
         };
 
         // The player's side of combat

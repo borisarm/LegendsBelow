@@ -182,6 +182,37 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
+    /// A loaded UI image (1-based; 0 is none)
+    /// </summary>
+    using ImageId = std::uint32_t;
+    inline constexpr ImageId InvalidImageId = 0;
+
+    /// <summary>
+    /// Outcome of RenderingSystem::LoadImage
+    /// </summary>
+    struct ImageLoadResult {
+        ImageId id{InvalidImageId};
+        String error;                          // why loading failed (empty on success)
+        [[nodiscard]] bool Succeeded() const noexcept { return id != InvalidImageId; }
+    };
+
+    /// <summary>
+    /// A UI image drawn into a rectangle (UI units), multiplied by a tint (white images take its
+    /// color). With `nineSlice` > 0 it is a frame: corners of that many image pixels keep their
+    /// proportions (drawn `corner` UI units wide), edges and the middle stretch. `mirrored` flips it
+    /// left to right.
+    /// </summary>
+    struct ImageRenderData {
+        ImageId image{InvalidImageId};
+        Rectangle rect{};
+        Color color{Color::White()};
+        std::int32_t layerDepth{0};
+        float nineSlice{0.0f};
+        float corner{0.0f};
+        bool mirrored{false};
+    };
+
+    /// <summary>
     /// Outcome of RenderingSystem::LoadFont
     /// </summary>
     struct FontLoadResult {
@@ -281,6 +312,7 @@ export namespace LB::Systems::Rendering {
             spriteQueue_.clear();
             textQueue_.clear();
             rectangleQueue_.clear();
+            imageQueue_.clear();
             meshQueue_.clear();
             modelQueue_.clear();
             lightQueue_.clear();
@@ -487,6 +519,25 @@ export namespace LB::Systems::Rendering {
         FontLoadResult LoadFont(const std::filesystem::path& path);
 
         /// <summary>
+        /// Load a UI image (PNG), kept for DrawImage; the same file again returns the same id
+        /// </summary>
+        ImageLoadResult LoadImage(const std::filesystem::path& path);
+
+        [[nodiscard]] const ModelTexture* GetImage(ImageId id) const noexcept {
+            return id != InvalidImageId && id <= images_.size() ? images_[id - 1].get() : nullptr;
+        }
+
+        /// <summary>
+        /// Queue a UI image for this frame's overlay (ordered with rectangles and text by layer)
+        /// </summary>
+        void DrawImage(const ImageRenderData& image) {
+            if (!initialized_ || !GetImage(image.image)) return;
+            imageQueue_.push_back(image);
+        }
+
+        [[nodiscard]] const std::vector<ImageRenderData>& GetQueuedImages() const noexcept { return imageQueue_; }
+
+        /// <summary>
         /// A loaded font by handle, or null (the pixel font has no FontData)
         /// </summary>
         [[nodiscard]] const FontData* GetFont(FontId id) const noexcept {
@@ -625,6 +676,9 @@ export namespace LB::Systems::Rendering {
         std::unordered_map<std::uint64_t, std::shared_ptr<const ModelTexture>> textureCache_;   // by image content
         std::vector<Matrix4> skinPalette_;                       // this frame's joint matrices, world space
         std::vector<std::shared_ptr<const FontData>> fonts_;     // FontId - 1
+        std::vector<std::shared_ptr<const ModelTexture>> images_;   // ImageId - 1
+        std::vector<std::filesystem::path> imagePaths_;
+        std::vector<ImageRenderData> imageQueue_;
         std::vector<std::filesystem::path> fontPaths_;
 
         // The font a text item names: null for the pixel font (also when no font is loaded)
@@ -703,6 +757,11 @@ namespace LB::Systems::Rendering::Detail {
     /// Bake a .ttf file to a distance field atlas (FontLoader.cpp, stb_truetype)
     /// </summary>
     TrueTypeLoadResult LoadTrueTypeFont(const std::filesystem::path& path, float bakeSize);
+
+    /// <summary>
+    /// Read a PNG (or other stb_image format) as a one-level UI image (GltfLoader.cpp)
+    /// </summary>
+    std::shared_ptr<const ModelTexture> LoadImageFile(const std::filesystem::path& path, std::string& error);
 
     /// <summary>
     /// Read a .gltf or .glb file (GltfLoader.cpp, fastgltf)

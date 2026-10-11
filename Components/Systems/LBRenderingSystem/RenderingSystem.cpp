@@ -33,6 +33,40 @@ namespace LB::Systems::Rendering {
                 batches.back().count += 6;
             }
 
+            // A UI image into a rectangle, or a nine-slice frame: the corners keep their shape, the
+            // edges and the middle stretch between them
+            void Image(const ModelTexture& texture, const ImageRenderData& image) {
+                const float w = static_cast<float>(texture.Width());
+                const float h = static_cast<float>(texture.Height());
+                const float left = static_cast<float>(image.rect.x);
+                const float top = static_cast<float>(image.rect.y);
+                const float right = left + static_cast<float>(image.rect.width);
+                const float bottom = top + static_cast<float>(image.rect.height);
+                // Mirroring swaps the u range
+                const auto quad = [&](float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1) {
+                    if (image.mirrored) {
+                        u0 = w - u0;
+                        u1 = w - u1;
+                    }
+                    Quad(&texture, w, h, x0, y0, x1, y1, u0, v0, u1, v1, image.color);
+                };
+                if (image.nineSlice <= 0.0f) {
+                    quad(left, top, right, bottom, 0.0f, 0.0f, w, h);
+                    return;
+                }
+                const float s = image.nineSlice;
+                const float c = std::min({ image.corner > 0.0f ? image.corner : s, (right - left) * 0.5f, (bottom - top) * 0.5f });
+                const float xs[4] = { left, left + c, right - c, right };
+                const float ys[4] = { top, top + c, bottom - c, bottom };
+                const float us[4] = { 0.0f, s, w - s, w };
+                const float vs[4] = { 0.0f, s, h - s, h };
+                for (int row = 0; row < 3; ++row) {
+                    for (int column = 0; column < 3; ++column) {
+                        quad(xs[column], ys[row], xs[column + 1], ys[row + 1], us[column], vs[row], us[column + 1], vs[row + 1]);
+                    }
+                }
+            }
+
             // A solid rectangle samples the built-in atlas's white strip
             void Rect(const Rectangle& rect, const Color& color) {
                 constexpr float u = BitmapFont::AtlasWidth * 0.5f;
@@ -129,6 +163,9 @@ namespace LB::Systems::Rendering {
             }
             for (const auto& font : fonts_) {
                 backend->renderer.AddFont(font);
+            }
+            for (const auto& image : images_) {
+                backend->renderer.AddImage(image);
             }
             gpu_ = std::move(backend);
         }
@@ -237,18 +274,25 @@ namespace LB::Systems::Rendering {
 
             // 2D overlay: rectangles and text back to front by layer (submission order within a
             // layer, rectangles first), alpha-blended in one draw
-            struct OverlayItem { std::int32_t layer; bool text; std::size_t index; };
+            enum class Kind { Rectangle, Image, Text };
+            struct OverlayItem { std::int32_t layer; Kind kind; std::size_t index; };
             std::vector<OverlayItem> items;
-            items.reserve(rectangleQueue_.size() + textQueue_.size());
-            for (std::size_t i = 0; i < rectangleQueue_.size(); ++i) items.push_back({ rectangleQueue_[i].layerDepth, false, i });
-            for (std::size_t i = 0; i < textQueue_.size(); ++i) items.push_back({ textQueue_[i].layerDepth, true, i });
+            items.reserve(rectangleQueue_.size() + imageQueue_.size() + textQueue_.size());
+            for (std::size_t i = 0; i < rectangleQueue_.size(); ++i) items.push_back({ rectangleQueue_[i].layerDepth, Kind::Rectangle, i });
+            for (std::size_t i = 0; i < imageQueue_.size(); ++i) items.push_back({ imageQueue_[i].layerDepth, Kind::Image, i });
+            for (std::size_t i = 0; i < textQueue_.size(); ++i) items.push_back({ textQueue_[i].layerDepth, Kind::Text, i });
             std::ranges::stable_sort(items, {}, &OverlayItem::layer);
 
             OverlayBuilder overlay;
             overlay.uiScale = uiScale_;
             for (const auto& item : items) {
-                if (!item.text) {
+                if (item.kind == Kind::Rectangle) {
                     overlay.Rect(rectangleQueue_[item.index].rect, rectangleQueue_[item.index].color);
+                    continue;
+                }
+                if (item.kind == Kind::Image) {
+                    const auto& image = imageQueue_[item.index];
+                    overlay.Image(*images_[image.image - 1], image);
                     continue;
                 }
                 const auto& text = textQueue_[item.index];
@@ -305,6 +349,30 @@ namespace LB::Systems::Rendering {
         models_.push_back(std::move(model));
         modelPaths_.push_back(std::move(canonical));
         return ModelLoadResult{ static_cast<ModelId>(models_.size()), {} };
+    }
+
+    ImageLoadResult RenderingSystem::LoadImage(const std::filesystem::path& path) {
+        std::error_code ec;
+        auto canonical = std::filesystem::weakly_canonical(path, ec);
+        if (ec) canonical = path;
+        for (std::size_t i = 0; i < imagePaths_.size(); ++i) {
+            if (imagePaths_[i] == canonical) return ImageLoadResult{ static_cast<ImageId>(i + 1), {} };
+        }
+
+        std::string error;
+        auto image = Detail::LoadImageFile(path, error);
+        if (!image) return ImageLoadResult{ InvalidImageId, std::move(error) };
+        if (gpu_) {
+            try {
+                gpu_->renderer.AddImage(image);
+            }
+            catch (const std::exception& e) {
+                return ImageLoadResult{ InvalidImageId, std::format("{}: GPU upload failed ({})", path.filename().string(), e.what()) };
+            }
+        }
+        images_.push_back(std::move(image));
+        imagePaths_.push_back(std::move(canonical));
+        return ImageLoadResult{ static_cast<ImageId>(images_.size()), {} };
     }
 
     FontLoadResult RenderingSystem::LoadFont(const std::filesystem::path& path) {
