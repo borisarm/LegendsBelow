@@ -56,6 +56,19 @@ export namespace LB::Content {
         std::vector<String> appliedStatusIds;
         std::vector<String> scalingAttributes;
         String notes;
+        float projectileSpeed{0.0f};                  // tiles per second of a bolt; 0: not a missile
+
+        /// <summary>
+        /// A missile (projectileSpeed, flying `range` tiles; with a radius it bursts where it
+        /// lands) or a burst around the caster (no range, a radius)
+        /// </summary>
+        [[nodiscard]] bool IsMissile() const noexcept { return projectileSpeed > 0.0f && range > 0.0f; }
+        [[nodiscard]] bool IsBurstAroundCaster() const noexcept { return projectileSpeed <= 0.0f && range <= 0.0f && radius > 0.0f; }
+
+        /// <summary>
+        /// The game can cast it: a damaging missile or burst (the other kinds are not built yet)
+        /// </summary>
+        [[nodiscard]] bool IsCastable() const noexcept { return (IsMissile() || IsBurstAroundCaster()) && baseDamage > 0; }
 
         [[nodiscard]] bool HasCategory(SpellCategory category) const {
             return std::ranges::find(categories, category) != categories.end();
@@ -89,7 +102,7 @@ export namespace LB::Content {
         std::vector<String> specialProperties;
         std::int32_t affixSlots{0};
         String ammoType;                              // ranged weapons only
-        float range{0.0f};                            // tiles a shot flies (bows and crossbows); 0: melee
+        float range{0.0f};                            // tiles a shot flies (bows, crossbows, wands); 0: melee
         float projectileSpeed{0.0f};                  // tiles per second of the arrow or bolt
 
         [[nodiscard]] bool IsRanged() const noexcept { return range > 0.0f; }
@@ -148,6 +161,11 @@ export namespace LB::Content {
         std::map<WeaponType, std::int32_t> weaponAdjustments;
         std::vector<SpellSchool> spellSchools;        // class spell access; Generic spells are open to all
         std::vector<String> signatureAbilities;
+        std::vector<String> spellBar;                 // spell keys on the bar (keys 1-4), castable by the class
+        float manaRegenPerSecond{0.0f};               // mana recovered per second (design-spells-system.md 4.1)
+        std::int32_t spellPowerBase{0};               // SP_Base (design-character-system.md 4.2)
+        String startingWeapon;                        // weapon key, equipped at the start (empty: none)
+        std::vector<String> startingItems;            // item keys put in the bag at the start
         ClassProgression progression;                 // levels 1..ClassProgression::MaxLevel
 
         [[nodiscard]] std::int32_t GetWeaponAdjustment(WeaponType weapon) const {
@@ -211,6 +229,11 @@ export namespace LB::Content {
         String projectileModel;                       // the arrow or bolt drawn in flight
         float keepAwayRange{0.0f};                    // tiles; 0: holds its ground
 
+        // Casters (a spell key) cast that missile instead of shooting: its speed, damage type and
+        // statuses; its damage is the spell's base plus its coefficient times spellPower
+        String spell;
+        std::int32_t spellPower{0};
+
         // Movement and awareness
         float movementSpeed{3.0f};                    // tiles per second
         float aggroRange{8.0f};                       // tiles; notices the player within this distance
@@ -223,7 +246,8 @@ export namespace LB::Content {
         String offHandModel;                          // optional, held at the left hand slot
         float modelScale{0.5f};
 
-        [[nodiscard]] bool IsRanged() const noexcept { return projectileSpeed > 0.0f; }
+        [[nodiscard]] bool IsRanged() const noexcept { return projectileSpeed > 0.0f || !spell.empty(); }
+        [[nodiscard]] bool IsCaster() const noexcept { return !spell.empty(); }
 
         [[nodiscard]] float GetResistance(DamageType type) const {
             auto it = resistances.find(type);
@@ -281,13 +305,31 @@ export namespace LB::Content {
     };
 
     /// <summary>
+    /// A status effect (Assets/Data/statuses.json, design-character-system.md 6.1, a flat subset of
+    /// its effect lists): how long it lasts, how it hinders movement and actions, and the damage it
+    /// deals every tick
+    /// </summary>
+    struct StatusDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "status_slow_basic"
+        String displayName;
+        std::vector<String> categories;               // Buff, Debuff, Control, Elemental, ...
+        float durationSeconds{1.0f};
+        float tickIntervalSeconds{1.0f};
+        float movementMultiplier{1.0f};               // 0.5 slows to half speed, 0 roots
+        bool preventsActions{false};                  // no moving, attacking, or casting (frozen, charmed)
+        std::int32_t damagePerTick{0};
+        DamageType damageType{DamageType::None};
+    };
+
+    /// <summary>
     /// All loaded game content, with lookups by key and id
     /// </summary>
     class ContentDatabase {
     public:
         /// <summary>
-        /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json
-        /// and loot.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json,
+        /// loot.json, and statuses.json from a directory (UTF-8 path). On any error the database is left empty and
         /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
@@ -299,7 +341,8 @@ export namespace LB::Content {
         /// </summary>
         ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                        const String& classesJson = "[]", const String& enemiesJson = "[]",
-                                       const String& consumablesJson = "[]", const String& lootJson = "[]");
+                                       const String& consumablesJson = "[]", const String& lootJson = "[]",
+                                       const String& statusesJson = "[]");
 
         void Clear() {
             spells_.clear();
@@ -309,11 +352,12 @@ export namespace LB::Content {
             enemies_.clear();
             consumables_.clear();
             lootTables_.clear();
+            statuses_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
             return spells_.empty() && weapons_.empty() && armour_.empty() && classes_.empty() && enemies_.empty()
-                && consumables_.empty() && lootTables_.empty();
+                && consumables_.empty() && lootTables_.empty() && statuses_.empty();
         }
 
         [[nodiscard]] const std::vector<SpellDefinition>& GetSpells() const noexcept { return spells_; }
@@ -323,6 +367,7 @@ export namespace LB::Content {
         [[nodiscard]] const std::vector<EnemyDefinition>& GetEnemies() const noexcept { return enemies_; }
         [[nodiscard]] const std::vector<ConsumableDefinition>& GetConsumables() const noexcept { return consumables_; }
         [[nodiscard]] const std::vector<LootTableDefinition>& GetLootTables() const noexcept { return lootTables_; }
+        [[nodiscard]] const std::vector<StatusDefinition>& GetStatuses() const noexcept { return statuses_; }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
         [[nodiscard]] const SpellDefinition* FindSpell(std::string_view key) const { return FindByKey(spells_, key); }
@@ -336,6 +381,7 @@ export namespace LB::Content {
         [[nodiscard]] const ConsumableDefinition* FindConsumable(ContentId id) const { return FindById(consumables_, id); }
         [[nodiscard]] const ConsumableDefinition* FindConsumable(std::string_view key) const { return FindByKey(consumables_, key); }
         [[nodiscard]] const LootTableDefinition* FindLootTable(std::string_view key) const { return FindByKey(lootTables_, key); }
+        [[nodiscard]] const StatusDefinition* FindStatus(std::string_view key) const { return FindByKey(statuses_, key); }
         [[nodiscard]] const ClassDefinition* FindClass(CharacterClass characterClass) const {
             auto it = std::ranges::find(classes_, characterClass, &ClassDefinition::characterClass);
             return it != classes_.end() ? &*it : nullptr;
@@ -384,6 +430,7 @@ export namespace LB::Content {
         std::vector<EnemyDefinition> enemies_;
         std::vector<ConsumableDefinition> consumables_;
         std::vector<LootTableDefinition> lootTables_;
+        std::vector<StatusDefinition> statuses_;
     };
 
 } // namespace LB::Content

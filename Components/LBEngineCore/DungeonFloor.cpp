@@ -109,6 +109,7 @@ namespace LB::Engine {
             const auto* light = content_->FindEnemy(LightEnemy);
             const auto* heavy = content_->FindEnemy(HeavyEnemy);
             const auto* ranged = content_->FindEnemy(RangedEnemy);
+            const auto* caster = content_->FindEnemy(CasterEnemy);
             const auto raise = [&](const Content::EnemyDefinition* kind, std::int32_t count) {
                 if (!kind || count <= 0) return;
                 for (const auto id : session_->encounter.SpawnInRoom(*kind, count, here, session_->playerPosition, session_->depth)) room.enemies.push_back(id);
@@ -118,11 +119,13 @@ namespace LB::Engine {
                 raise(light, std::min(2 + session_->depth / 2, 4));
                 raise(heavy, session_->depth >= 2 ? std::min(1 + session_->depth / 4, 2) : 0);
                 raise(ranged, session_->depth >= 2 ? std::min(1 + session_->depth / 4, 2) : 0);   // shooters from the second floor
+                raise(caster, session_->depth >= 3 ? 1 : 0);                                       // casters from the third
                 break;
             case RoomType::Elite:
                 raise(heavy, 2);
                 raise(light, 1 + session_->depth / 3);
                 raise(ranged, 1);
+                raise(caster, session_->depth >= 2 ? 1 : 0);
                 break;
             case RoomType::Exit:
                 raise(light, 2);

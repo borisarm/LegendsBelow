@@ -147,5 +147,17 @@
       { "item": "armor_hands_leather_gloves_t1", "weight": 2 },
       { "item": "armor_feet_leather_boots_t1", "weight": 2 }
     ]
+  },
+  {
+    "id": "loot_skeleton_mage",
+    "goldChance": 0.8,
+    "gold": "1d10",
+    "itemChance": 0.35,
+    "items": [
+      { "item": "consumable_potion_healing_minor", "weight": 5 },
+      { "item": "weapon_wand_apprentices_wand_t1", "weight": 2 },
+      { "item": "weapon_staff_apprentices_staff_t1", "weight": 2 },
+      { "item": "armor_hands_leather_gloves_t1", "weight": 1 }
+    ]
   }
 ]

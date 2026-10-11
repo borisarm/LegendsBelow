@@ -1,0 +1,92 @@
+// Statuses.ixx - Status effects on a character (design-character-system.md 6): slowed, rooted,
+// frozen, burning; how long each lasts, how it hinders, and the damage it ticks
+export module LB.Engine:Statuses;
+
+import std;
+import LB.Content;
+import LB.CombatService;
+
+export namespace LB::Engine {
+
+    /// <summary>
+    /// One status on a character and the time it has left
+    /// </summary>
+    struct ActiveStatus {
+        const Content::StatusDefinition* definition{nullptr};   // into the content, which outlives it
+        float secondsLeft{0.0f};
+        float untilTick{0.0f};
+    };
+
+    /// <summary>
+    /// Damage a status dealt this step (before the target's defenses)
+    /// </summary>
+    struct StatusTick {
+        const Content::StatusDefinition* definition{nullptr};
+        std::int32_t damage{0};
+        Services::Combat::DamageType damageType{Services::Combat::DamageType::None};
+    };
+
+    /// <summary>
+    /// The statuses on one character. A status applied again starts over (no stacking); the
+    /// strongest hindrance wins (the lowest movement multiplier).
+    /// </summary>
+    class StatusSet {
+    public:
+        void Apply(const Content::StatusDefinition& status) {
+            const auto it = std::ranges::find(active_, &status, &ActiveStatus::definition);
+            if (it != active_.end()) {
+                it->secondsLeft = status.durationSeconds;
+                return;
+            }
+            active_.push_back({ &status, status.durationSeconds, status.tickIntervalSeconds });
+        }
+
+        /// <summary>
+        /// Age the statuses; returns the damage ticks of this step. Expired ones are removed.
+        /// </summary>
+        std::vector<StatusTick> Update(float elapsedSeconds) {
+            std::vector<StatusTick> ticks;
+            for (auto& status : active_) {
+                const auto& definition = *status.definition;
+                status.secondsLeft -= elapsedSeconds;
+                if (definition.damagePerTick <= 0) continue;
+                status.untilTick -= elapsedSeconds;
+                while (status.untilTick <= 0.0f && status.secondsLeft > -definition.tickIntervalSeconds) {
+                    ticks.push_back({ &definition, definition.damagePerTick, definition.damageType });
+                    status.untilTick += definition.tickIntervalSeconds;
+                }
+            }
+            std::erase_if(active_, [](const ActiveStatus& status) { return status.secondsLeft <= 0.0f; });
+            return ticks;
+        }
+
+        [[nodiscard]] float MovementMultiplier() const noexcept {
+            float multiplier = 1.0f;
+            for (const auto& status : active_) multiplier = std::min(multiplier, status.definition->movementMultiplier);
+            return multiplier;
+        }
+
+        [[nodiscard]] bool PreventsActions() const noexcept {
+            return std::ranges::any_of(active_, [](const ActiveStatus& status) { return status.definition->preventsActions; });
+        }
+
+        [[nodiscard]] bool Has(std::string_view key) const noexcept {
+            return std::ranges::any_of(active_, [key](const ActiveStatus& status) { return status.definition->key == key; });
+        }
+
+        // Damage over time of a type is on (for its look: burning)
+        [[nodiscard]] bool HasDamageOverTime(Services::Combat::DamageType type) const noexcept {
+            return std::ranges::any_of(active_, [type](const ActiveStatus& status) {
+                return status.definition->damagePerTick > 0 && status.definition->damageType == type;
+            });
+        }
+
+        [[nodiscard]] const std::vector<ActiveStatus>& Active() const noexcept { return active_; }
+
+        void Clear() noexcept { active_.clear(); }
+
+    private:
+        std::vector<ActiveStatus> active_;
+    };
+
+} // namespace LB::Engine

@@ -327,8 +327,11 @@ namespace LB::Content {
             reader.ReadStringArray("appliedStatusIds", spell.appliedStatusIds);
             reader.ReadStringArray("scalingAttributes", spell.scalingAttributes);
             reader.ReadString("notes", spell.notes, false);
+            reader.ReadFloat("projectileSpeed", spell.projectileSpeed, false);
 
             if (spell.level < 1) reader.Error("'level' must be at least 1");
+            if (spell.projectileSpeed < 0.0f) reader.Error("'projectileSpeed' must not be negative");
+            if (spell.projectileSpeed > 0.0f && spell.range <= 0.0f) reader.Error("a missile ('projectileSpeed') needs a 'range'");
             if (spell.manaCost < 0) reader.Error("'manaCost' must not be negative");
             if (spell.castTimeSeconds < 0.0f) reader.Error("'castTimeSeconds' must not be negative");
             return spell;
@@ -359,10 +362,10 @@ namespace LB::Content {
 
             if (weapon.attackTimeSeconds <= 0.0f) reader.Error("'attackTimeSeconds' must be positive");
             if (weapon.critMultiplier < 1.0f) reader.Error("'critMultiplier' must be at least 1");
-            // Bows and crossbows shoot: they need a range and a projectile speed; nothing else does
-            const bool shoots = weapon.category == WeaponType::Bow || weapon.category == WeaponType::Crossbow;
-            if (shoots && (weapon.range <= 0.0f || weapon.projectileSpeed <= 0.0f)) reader.Error("bows and crossbows need a positive 'range' and 'projectileSpeed'");
-            if (!shoots && (weapon.range != 0.0f || weapon.projectileSpeed != 0.0f)) reader.Error("only bows and crossbows have a 'range' or 'projectileSpeed'");
+            // Bows, crossbows, and wands shoot: they need a range and a projectile speed; nothing else does
+            const bool shoots = weapon.category == WeaponType::Bow || weapon.category == WeaponType::Crossbow || weapon.category == WeaponType::Wand;
+            if (shoots && (weapon.range <= 0.0f || weapon.projectileSpeed <= 0.0f)) reader.Error("bows, crossbows, and wands need a positive 'range' and 'projectileSpeed'");
+            if (!shoots && (weapon.range != 0.0f || weapon.projectileSpeed != 0.0f)) reader.Error("only bows, crossbows, and wands have a 'range' or 'projectileSpeed'");
             return weapon;
         }
 
@@ -401,6 +404,13 @@ namespace LB::Content {
             reader.ReadFloat("baseMovementSpeed", definition.baseMovementSpeed, true);
             reader.ReadEnumArray("spellSchools", definition.spellSchools, SpellSchools, false);
             reader.ReadStringArray("signatureAbilities", definition.signatureAbilities);
+            reader.ReadStringArray("spellBar", definition.spellBar);
+            reader.ReadFloat("manaRegenPerSecond", definition.manaRegenPerSecond, false);
+            reader.ReadInt("spellPowerBase", definition.spellPowerBase, false);
+            reader.ReadString("startingWeapon", definition.startingWeapon, false);
+            reader.ReadStringArray("startingItems", definition.startingItems);
+            if (definition.spellBar.size() > 4) reader.Error("'spellBar' holds at most 4 spells");
+            if (definition.manaRegenPerSecond < 0.0f) reader.Error("'manaRegenPerSecond' must not be negative");
 
             if (definition.resource != "Mana" && definition.resource != "Stamina") {
                 if (!definition.resource.empty()) reader.Error(std::format("'resource' must be Mana or Stamina, not '{}'", definition.resource));
@@ -552,6 +562,8 @@ namespace LB::Content {
             reader.ReadFloat("projectileSpeed", enemy.projectileSpeed, false);
             reader.ReadString("projectileModel", enemy.projectileModel, false);
             reader.ReadFloat("keepAwayRange", enemy.keepAwayRange, false);
+            reader.ReadString("spell", enemy.spell, false);
+            reader.ReadInt("spellPower", enemy.spellPower, false);
 
             reader.ReadString("lootTable", enemy.lootTable, false);
             reader.ReadString("model", enemy.model, true);
@@ -573,12 +585,34 @@ namespace LB::Content {
             if (enemy.aggroRange < 0.0f) reader.Error("'aggroRange' must not be negative");
             if (enemy.modelScale <= 0.0f) reader.Error("'modelScale' must be positive");
             if (enemy.projectileSpeed < 0.0f) reader.Error("'projectileSpeed' must not be negative");
-            if (enemy.IsRanged() && enemy.projectileModel.empty()) reader.Error("a ranged enemy ('projectileSpeed') needs a 'projectileModel'");
-            if (!enemy.IsRanged() && !enemy.projectileModel.empty()) reader.Error("'projectileModel' needs a 'projectileSpeed'");
+            if (enemy.projectileSpeed > 0.0f && enemy.projectileModel.empty()) reader.Error("a ranged enemy ('projectileSpeed') needs a 'projectileModel'");
+            if (enemy.projectileSpeed <= 0.0f && !enemy.projectileModel.empty()) reader.Error("'projectileModel' needs a 'projectileSpeed'");
+            if (enemy.IsCaster() && enemy.projectileSpeed > 0.0f) reader.Error("a caster ('spell') casts its spell's missile: no 'projectileSpeed'");
+            if (enemy.spellPower < 0) reader.Error("'spellPower' must not be negative");
             if (enemy.keepAwayRange < 0.0f || (enemy.keepAwayRange > 0.0f && enemy.keepAwayRange >= enemy.attackRange)) {
                 reader.Error("'keepAwayRange' must be between 0 and 'attackRange'");
             }
             return enemy;
+        }
+
+        StatusDefinition ReadStatus(EntryReader& reader) {
+            StatusDefinition status{};
+            reader.ReadString("id", status.key, true);
+            reader.ReadString("displayName", status.displayName, true);
+            reader.ReadStringArray("categories", status.categories);
+            reader.ReadFloat("durationSeconds", status.durationSeconds, true);
+            reader.ReadFloat("tickIntervalSeconds", status.tickIntervalSeconds, false);
+            reader.ReadFloat("movementMultiplier", status.movementMultiplier, false);
+            reader.ReadBool("preventsActions", status.preventsActions);
+            reader.ReadInt("damagePerTick", status.damagePerTick, false);
+            reader.ReadEnum("damageType", status.damageType, DamageTypes, false);
+
+            if (status.durationSeconds <= 0.0f) reader.Error("'durationSeconds' must be positive");
+            if (status.tickIntervalSeconds <= 0.0f) reader.Error("'tickIntervalSeconds' must be positive");
+            if (status.movementMultiplier < 0.0f || status.movementMultiplier > 1.0f) reader.Error("'movementMultiplier' must be between 0 and 1");
+            if (status.damagePerTick < 0) reader.Error("'damagePerTick' must not be negative");
+            if (status.damagePerTick > 0 && status.damageType == DamageType::None) reader.Error("'damagePerTick' needs a 'damageType'");
+            return status;
         }
 
         ConsumableDefinition ReadConsumable(EntryReader& reader) {
@@ -673,6 +707,50 @@ namespace LB::Content {
             }
         }
 
+        // Spells, classes, and enemies name statuses, spells, and items: each must exist, and what a
+        // class casts or starts with must suit it
+        void CheckReferences(const std::vector<SpellDefinition>& spells, const std::vector<StatusDefinition>& statuses,
+                             const std::vector<ClassDefinition>& classes, const std::vector<EnemyDefinition>& enemies,
+                             const std::vector<WeaponDefinition>& weapons, const std::vector<ArmorDefinition>& armour,
+                             const std::vector<ConsumableDefinition>& consumables, std::vector<String>& errors) {
+            const auto findSpell = [&](std::string_view key) {
+                const auto it = std::ranges::find(spells, key, &SpellDefinition::key);
+                return it != spells.end() ? &*it : nullptr;
+            };
+            for (const auto& spell : spells) {
+                for (const auto& status : spell.appliedStatusIds) {
+                    if (std::ranges::find(statuses, status, &StatusDefinition::key) == statuses.end()) {
+                        errors.push_back(std::format("spells.json: {}: unknown status '{}'", spell.key, status));
+                    }
+                }
+            }
+            for (const auto& definition : classes) {
+                for (const auto& key : definition.spellBar) {
+                    const auto* spell = findSpell(key);
+                    if (!spell) errors.push_back(std::format("classes.json: {}: 'spellBar' names unknown spell '{}'", definition.key, key));
+                    else if (!spell->IsCastable()) errors.push_back(std::format("classes.json: {}: '{}' is not a missile or burst the game can cast yet", definition.key, key));
+                    else if (!spell->CanBeCastBy(definition.characterClass)) errors.push_back(std::format("classes.json: {}: '{}' is for another class", definition.key, key));
+                }
+                if (!definition.startingWeapon.empty()) {
+                    const auto it = std::ranges::find(weapons, definition.startingWeapon, &WeaponDefinition::key);
+                    if (it == weapons.end()) errors.push_back(std::format("classes.json: {}: unknown starting weapon '{}'", definition.key, definition.startingWeapon));
+                    else if (!it->IsUsableBy(definition.characterClass)) errors.push_back(std::format("classes.json: {}: cannot wield its starting weapon '{}'", definition.key, definition.startingWeapon));
+                }
+                for (const auto& key : definition.startingItems) {
+                    const bool known = std::ranges::find(weapons, key, &WeaponDefinition::key) != weapons.end()
+                                    || std::ranges::find(armour, key, &ArmorDefinition::key) != armour.end()
+                                    || std::ranges::find(consumables, key, &ConsumableDefinition::key) != consumables.end();
+                    if (!known) errors.push_back(std::format("classes.json: {}: unknown starting item '{}'", definition.key, key));
+                }
+            }
+            for (const auto& enemy : enemies) {
+                if (!enemy.IsCaster()) continue;
+                const auto* spell = findSpell(enemy.spell);
+                if (!spell) errors.push_back(std::format("enemies.json: {}: unknown spell '{}'", enemy.key, enemy.spell));
+                else if (!spell->IsMissile() || !spell->IsCastable()) errors.push_back(std::format("enemies.json: {}: '{}' is not a missile", enemy.key, enemy.spell));
+            }
+        }
+
         // Parse one content file: a JSON array of objects. Assigns ids and checks key uniqueness.
         template<typename T, typename ReadFn>
         std::vector<T> ReadArray(const String& text, const std::string& source, ReadFn read, std::vector<String>& errors) {
@@ -724,9 +802,9 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[7];
-        constexpr const char* files[7] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json" };
-        for (int i = 0; i < 7; ++i) {
+        String texts[8];
+        constexpr const char* files[8] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json" };
+        for (int i = 0; i < 8; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -735,12 +813,12 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                                     const String& classesJson, const String& enemiesJson,
-                                                    const String& consumablesJson, const String& lootJson) {
+                                                    const String& consumablesJson, const String& lootJson, const String& statusesJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -750,8 +828,10 @@ namespace LB::Content {
         auto enemies = ReadArray<EnemyDefinition>(enemiesJson, "enemies.json", ReadEnemy, result.errors);
         auto consumables = ReadArray<ConsumableDefinition>(consumablesJson, "consumables.json", ReadConsumable, result.errors);
         auto lootTables = ReadArray<LootTableDefinition>(lootJson, "loot.json", ReadLootTable, result.errors);
+        auto statuses = ReadArray<StatusDefinition>(statusesJson, "statuses.json", ReadStatus, result.errors);
 
         CheckClassRules(classes, spells, result.errors);
+        CheckReferences(spells, statuses, classes, enemies, weapons, armour, consumables, result.errors);
         CheckLootRules(lootTables, enemies, weapons, armour, consumables, result.errors);
 
         if (!result.Succeeded()) {
@@ -766,6 +846,7 @@ namespace LB::Content {
         enemies_ = std::move(enemies);
         consumables_ = std::move(consumables);
         lootTables_ = std::move(lootTables);
+        statuses_ = std::move(statuses);
         return result;
     }
 

@@ -21,6 +21,19 @@ export namespace LB::Engine {
             std::int32_t gold{0};
             std::int32_t potions{0};
             bool pointsToSpend{false};
+            bool usesMana{false};             // a mana bar (Mage, Cleric, Rogue)
+            std::int32_t mana{0};
+            std::int32_t maxMana{0};
+            std::vector<std::string> statuses;   // "Slowed", "Burning"
+        };
+        // One slot of the spell bar
+        struct SpellSlot {
+            std::string key;                  // "1"
+            std::string name;
+            std::int32_t manaCost{0};
+            float cooldownFraction{0.0f};     // of the cooldown still to run
+            std::string blocker;              // why it cannot be cast ("level 5", "mana"), empty: ready
+            Systems::Rendering::Color accent{1.0f, 1.0f, 1.0f, 1.0f};   // the element's color (linear)
         };
         // A health bar over a hurt enemy
         struct EnemyBar {
@@ -31,11 +44,15 @@ export namespace LB::Engine {
         std::optional<Player> player;
         std::vector<EnemyBar> enemyBars;
         std::string banner;                   // "WAVE 2", "DEPTH 3" (top center); empty: none
+        std::vector<SpellSlot> spellBar;      // bottom right; empty: none
+        std::string castName;                 // the spell being cast (a bar under the hero)
+        std::optional<float> castFraction;
     };
 
     /// <summary>
-    /// Health and experience bars, level, gold and potions (bottom left), health bars over hurt
-    /// enemies, and the banner (top center)
+    /// Health, mana, and experience bars, level, gold and potions, statuses (bottom left), the
+    /// spell bar (bottom right), the cast bar, health bars over hurt enemies, and the banner (top
+    /// center)
     /// </summary>
     class Hud {
     public:
@@ -63,7 +80,20 @@ export namespace LB::Engine {
                 const auto& player = *hud.player;
                 bar(24, screenHeight - 44, 240, 18, player.healthFraction, display(0.80f, 0.14f, 0.12f));
                 label(std::format("HP {}/{}", player.hitPoints, player.maxHitPoints), 30, screenHeight - 42, 2.0f, display(1.0f, 1.0f, 1.0f));
-                bar(24, screenHeight - 20, 240, 5, player.experienceFraction, display(0.95f, 0.75f, 0.30f));
+                if (player.usesMana) {
+                    const float fraction = player.maxMana > 0 ? static_cast<float>(player.mana) / static_cast<float>(player.maxMana) : 0.0f;
+                    bar(24, screenHeight - 22, 240, 12, fraction, display(0.25f, 0.45f, 0.95f));
+                    label(std::format("MP {}/{}", player.mana, player.maxMana), 30, screenHeight - 22, 1.3f, display(1.0f, 1.0f, 1.0f));
+                    bar(24, screenHeight - 6, 240, 3, player.experienceFraction, display(0.95f, 0.75f, 0.30f));
+                }
+                else {
+                    bar(24, screenHeight - 20, 240, 5, player.experienceFraction, display(0.95f, 0.75f, 0.30f));
+                }
+                if (!player.statuses.empty()) {
+                    std::string text;
+                    for (const auto& status : player.statuses) text += (text.empty() ? "" : "  ") + status;
+                    label(text, 130, screenHeight - 68, 1.8f, display(0.60f, 0.85f, 1.0f));
+                }
                 label(std::format("LEVEL {}", player.level), 24, screenHeight - 70, 2.0f, display(0.95f, 0.75f, 0.30f));
                 label(std::format("GOLD {}", player.gold), 280, screenHeight - 42, 2.0f, display(0.95f, 0.80f, 0.35f));
                 label(std::format("POTIONS {}", player.potions), 280, screenHeight - 22, 2.0f, display(0.95f, 0.45f, 0.40f));
@@ -76,6 +106,59 @@ export namespace LB::Engine {
                 const auto point = renderer.WorldToUi(enemy.overHead);
                 if (!point.inFront) continue;
                 bar(static_cast<std::int32_t>(point.x) - 22, static_cast<std::int32_t>(point.y) - 8, 44, 5, enemy.fraction, display(0.85f, 0.20f, 0.15f));
+            }
+
+            // The spell bar: a slot per spell with its key, name, and cost; the cooldown still to
+            // run darkens it from the top, a blocked spell is dimmed with the reason
+            if (!hud.spellBar.empty()) {
+                constexpr std::int32_t size = 64;
+                constexpr std::int32_t gap = 8;
+                const auto count = static_cast<std::int32_t>(hud.spellBar.size());
+                const std::int32_t left = screenWidth - 24 - count * size - (count - 1) * gap;
+                const std::int32_t top = screenHeight - 24 - size;
+                for (std::int32_t i = 0; i < count; ++i) {
+                    const auto& slot = hud.spellBar[static_cast<std::size_t>(i)];
+                    const std::int32_t x = left + i * (size + gap);
+                    renderer.DrawRectangle(Rectangle{ x - 2, top - 2, size + 4, size + 4 }, display(0.05f, 0.04f, 0.04f), 10);
+                    renderer.DrawRectangle(Rectangle{ x, top, size, size }, display(0.10f, 0.09f, 0.12f), 11);
+                    renderer.DrawRectangle(Rectangle{ x, top + size - 5, size, 5 }, slot.accent, 12);
+                    label(slot.key, x + 4, top + 2, 1.6f, display(0.95f, 0.75f, 0.30f));
+                    // The name on up to two lines
+                    const auto space = slot.name.find(' ');
+                    const auto first = space == std::string::npos ? slot.name : slot.name.substr(0, space);
+                    const auto second = space == std::string::npos ? std::string{} : slot.name.substr(space + 1);
+                    const auto centered = [&](const std::string& text, std::int32_t y, float scale, Color color) {
+                        const auto width = renderer.MeasureText(text, scale).width;
+                        label(text, x + size / 2 - static_cast<std::int32_t>(width / 2.0f), y, scale, color);
+                    };
+                    centered(first, top + 18, 1.3f, display(0.92f, 0.90f, 0.85f));
+                    if (!second.empty()) centered(second, top + 31, 1.3f, display(0.92f, 0.90f, 0.85f));
+                    centered(std::format("{}", slot.manaCost), top + 44, 1.3f, display(0.55f, 0.70f, 1.0f));
+                    if (slot.cooldownFraction > 0.0f) {
+                        const auto shaded = static_cast<std::int32_t>(std::lround(static_cast<float>(size) * slot.cooldownFraction));
+                        renderer.DrawRectangle(Rectangle{ x, top, size, shaded }, Color{ 0.0f, 0.0f, 0.0f, 0.65f }, 14);
+                    }
+                    else if (!slot.blocker.empty()) {
+                        renderer.DrawRectangle(Rectangle{ x, top, size, size }, Color{ 0.0f, 0.0f, 0.0f, 0.55f }, 14);
+                        // Why, in the top right corner: the level it opens at, or too little mana
+                        const std::string reason = slot.blocker.starts_with("level") ? std::format("L{}", slot.blocker.substr(6)) : slot.blocker == "mana" ? "MP" : "";
+                        if (!reason.empty()) {
+                            const auto width = renderer.MeasureText(reason, 1.5f).width;
+                            renderer.DrawText(Systems::Rendering::TextRenderData{ reason, LB::Position{ x + size - 4 - static_cast<std::int32_t>(width), top + 2 }, {},
+                                display(0.95f, 0.45f, 0.40f), 1.5f, 15, true });
+                        }
+                    }
+                }
+            }
+
+            // The cast bar, under the hero (the middle of the screen)
+            if (hud.castFraction) {
+                constexpr std::int32_t width = 140;
+                const std::int32_t x = screenWidth / 2 - width / 2;
+                const std::int32_t y = screenHeight / 2 + 48;
+                bar(x, y, width, 7, *hud.castFraction, display(0.70f, 0.55f, 1.0f));
+                const auto size = renderer.MeasureText(hud.castName, 1.6f);
+                label(hud.castName, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), y + 10, 1.6f, display(0.85f, 0.80f, 1.0f));
             }
 
             if (!hud.banner.empty()) {

@@ -3,6 +3,7 @@
 export module LB.Engine:Projectiles;
 
 import std;
+import LB.Content;
 import LB.CombatService;
 import :World;
 
@@ -17,7 +18,24 @@ export namespace LB::Engine {
     };
 
     /// <summary>
-    /// An arrow or bolt. It carries the shooter's attack as it was when it left, and is resolved
+    /// A spell on its way: the spell and its raw damage, worked out when it was cast
+    /// </summary>
+    struct SpellPayload {
+        const Content::SpellDefinition* spell{nullptr};   // into the content, which outlives it
+        std::int32_t rawDamage{0};
+    };
+
+    /// <summary>
+    /// Where a spell burst (a fireball landing, a frost nova), how wide, and its element
+    /// </summary>
+    struct SpellBurst {
+        WorldPoint at{};
+        float radius{0.0f};
+        Services::Combat::DamageType damageType{Services::Combat::DamageType::None};
+    };
+
+    /// <summary>
+    /// An arrow, bolt, or spell missile. It carries the shooter's attack as it was when it left, and is resolved
     /// against whoever it reaches (design-combat-system.md 7.4: a wall in the way stops it).
     /// </summary>
     struct Projectile {
@@ -29,13 +47,19 @@ export namespace LB::Engine {
         float speed{10.0f};                            // tiles per second
         float rangeLeft{0.0f};                         // tiles it may still fly
         Services::Combat::WeaponAttackProfile attack{};
-        std::string model;                             // drawn in flight
+        std::string model;                             // drawn in flight (empty: a glowing orb of its element)
+        std::optional<SpellPayload> spell;             // a spell's missile: resolved as the spell, not the attack
         float stuckSeconds{-1.0f};                     // >= 0: stuck in a wall for this long
 
         [[nodiscard]] bool InFlight() const noexcept { return stuckSeconds < 0.0f; }
 
         // Its heading around the vertical axis (0 faces +Z, like the characters)
         [[nodiscard]] float Yaw() const noexcept { return std::atan2(direction.x, direction.y); }
+
+        // What it is made of, for its look: the spell's damage type, or the attack's
+        [[nodiscard]] Services::Combat::DamageType Element() const noexcept {
+            return spell && spell->spell ? spell->spell->damageType : attack.damageType;
+        }
     };
 
     /// <summary>
@@ -107,6 +131,7 @@ export namespace LB::Engine {
                     if (world && !world->IsOpen(next)) {
                         projectile.stuckSeconds = 0.0f;
                         impacts.push_back({ projectile, std::nullopt, projectile.position });
+                        if (projectile.model.empty()) gone.push_back(projectile.id);   // an orb: spent on the wall
                         done = true;
                         break;
                     }
@@ -129,6 +154,11 @@ export namespace LB::Engine {
         }
 
         [[nodiscard]] const std::vector<Projectile>& Get() const noexcept { return projectiles_; }
+
+        [[nodiscard]] Projectile* Find(std::uint32_t id) noexcept {
+            const auto it = std::ranges::find(projectiles_, id, &Projectile::id);
+            return it != projectiles_.end() ? &*it : nullptr;
+        }
 
         void Clear() noexcept { projectiles_.clear(); }
 

@@ -16,7 +16,8 @@ export namespace LB::Engine {
         Title,      // the main menu, at startup and after quitting a game
         Pause,      // during a game (the game is paused while any menu is open)
         Options,
-        Credits
+        Credits,
+        ChooseClass  // New Game: the hero's class
     };
 
     /// <summary>
@@ -35,7 +36,9 @@ export namespace LB::Engine {
         Back,
         MasterVolume,   // left/right change it
         MusicVolume,
-        EffectsVolume
+        EffectsVolume,
+        PlayWarrior,    // a new game as this class
+        PlayMage
     };
 
     /// <summary>

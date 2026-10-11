@@ -22,6 +22,9 @@ export namespace LB::Engine {
         Healing,        // a potion drunk
         LevelUp,        // a new level
         TrapdoorMist,   // the way down, open
+        SpellTrail,     // a spell missile's wake (colored by its element)
+        SpellBurst,     // a spell landing or bursting
+        SpellCharge,    // magic gathering in the caster's hands
     };
 
     /// <summary>

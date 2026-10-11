@@ -92,10 +92,15 @@ namespace LB::Engine {
 
     float GameEngine::PlayerTop() const {
         if (assets_.models.loaded) {
-            const auto* knight = renderingSystem_.GetModel(assets_.models.player);
-            return (knight->boundsMax.y - knight->boundsMin.y) * PlayerModelScale + 0.1f;
+            const auto* body = renderingSystem_.GetModel(PlayerBodyModel());
+            return (body->boundsMax.y - body->boundsMin.y) * PlayerModelScale + 0.1f;
         }
         return 1.6f;
+    }
+
+    // The hero's body: the knight, or the mage
+    Systems::Rendering::ModelId GameEngine::PlayerBodyModel() const {
+        return session_->playerClass == LB::Character::CharacterClass::Mage ? assets_.models.mage : assets_.models.player;
     }
 
     /// <summary>
@@ -109,6 +114,17 @@ namespace LB::Engine {
             const Systems::Rendering::Vector3 at{ projectile.position.x, ProjectileSet::FlightHeight, projectile.position.y };
             auto tint = shade(1.0f, 1.0f, 1.0f);
             tint.a = ProjectileSet::Opacity(projectile);
+
+            // A spell or a wand's shot: a glowing orb of its element that lights the room
+            if (projectile.model.empty()) {
+                const auto palette = ElementPalette(projectile.Element());
+                // The palette is linear already: only dimmed with the scene
+                const auto color = [&](const std::array<float, 3>& rgb, float a) { return Systems::Rendering::Color{ rgb[0] * shade.dim, rgb[1] * shade.dim, rgb[2] * shade.dim, a }; };
+                renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ at, 0.42f, color(palette.middle, 2.2f), true });
+                renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ at, 0.2f, color(palette.start, 3.0f), true });
+                renderingSystem_.DrawLight(Systems::Rendering::PointLight{ at, color(palette.middle, 1.0f), 3.5f, 1.4f });
+                continue;
+            }
 
             const auto model = assets_.models.loaded ? ModelOf(projectile.model) : Systems::Rendering::InvalidModelId;
             if (const auto* shape = model != Systems::Rendering::InvalidModelId ? renderingSystem_.GetModel(model) : nullptr) {
@@ -231,8 +247,10 @@ namespace LB::Engine {
         if (assets_.models.loaded) {
             // Feet on the floor, facing the walk direction (glTF characters face +Z)
             const Systems::Rendering::Vector3 position{ session_->playerPosition.x, 0.0f, session_->playerPosition.y };
-            const auto tint = HitTint(shade, session_->playerCombat.hitFlashSeconds);
-            Systems::Rendering::ModelRenderData body{ assets_.models.player, position, session_->playerFacingYaw, PlayerModelScale, tint };
+            const auto& statuses = session_->playerStatuses;
+            auto tint = HitTint(shade, session_->playerCombat.hitFlashSeconds);
+            if (statuses.MovementMultiplier() < 1.0f || statuses.PreventsActions()) tint = { tint.r * 0.65f, tint.g * 0.82f, tint.b, tint.a };   // icy
+            Systems::Rendering::ModelRenderData body{ PlayerBodyModel(), position, session_->playerFacingYaw, PlayerModelScale, tint };
             body.animation = session_->playerAnimator.GetState();
             renderingSystem_.DrawModel(body);
 
@@ -290,6 +308,7 @@ namespace LB::Engine {
         for (const auto& enemy : session_->encounter.GetEnemies()) {
             const auto& type = *enemy.definition;
             auto tint = HitTint(shade, enemy.hitFlashSeconds);
+            if (enemy.statuses.MovementMultiplier() < 1.0f || enemy.statuses.PreventsActions()) tint = { tint.r * 0.65f, tint.g * 0.82f, tint.b, tint.a };   // icy
             tint.a = Encounter::Opacity(enemy);
             const Systems::Rendering::Vector3 position{ enemy.position.x, 0.0f, enemy.position.y };
 
@@ -351,7 +370,34 @@ namespace LB::Engine {
                 player.potions = CountItem(HealingPotion);
                 const auto character = session_->characterService.GetCharacter(*session_->playerId);
                 player.pointsToSpend = character && character->get().GetUnspentAttributePoints() > 0;
+                const auto* classData = PlayerClassDefinition();
+                player.usesMana = classData && classData->resource == "Mana";
+                player.mana = status->currentManaPoints;
+                player.maxMana = status->maxManaPoints;
+                for (const auto& active : session_->playerStatuses.Active()) {
+                    if (std::ranges::find(player.statuses, active.definition->displayName) == player.statuses.end()) player.statuses.push_back(active.definition->displayName);
+                }
                 hud.player = player;
+
+                // The spell bar, and the cast in progress
+                const auto bar = GetSpellBar();
+                for (std::size_t slot = 0; slot < bar.size(); ++slot) {
+                    const auto& spell = *bar[slot];
+                    HudModel::SpellSlot entry;
+                    entry.key = std::format("{}", slot + 1);
+                    entry.name = spell.name;
+                    entry.manaCost = spell.manaCost;
+                    entry.cooldownFraction = spell.cooldownSeconds > 0.0f ? std::clamp(session_->spellCooldowns[slot] / spell.cooldownSeconds, 0.0f, 1.0f) : 0.0f;
+                    entry.blocker = SpellBlocker(slot);
+                    const auto palette = ElementPalette(spell.damageType);
+                    entry.accent = Systems::Rendering::Color{ palette.middle[0], palette.middle[1], palette.middle[2], 1.0f };
+                    hud.spellBar.push_back(std::move(entry));
+                }
+                if (session_->casting.active) {
+                    hud.castName = session_->casting.spell->name;
+                    hud.castFraction = session_->casting.spell->castTimeSeconds > 0.0f
+                        ? std::clamp(session_->casting.seconds / session_->casting.spell->castTimeSeconds, 0.0f, 1.0f) : 1.0f;
+                }
             }
         }
         for (const auto& enemy : session_->encounter.GetEnemies()) {

@@ -310,7 +310,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 7u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot
+    EXPECT_EQ(result.errors.size(), 8u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -625,7 +625,7 @@ namespace {
 }
 
 TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
-    ASSERT_EQ(content_.GetEnemies().size(), 3u);   // and the crossbowman (RangedWeaponsAndCrossbowmen)
+    ASSERT_EQ(content_.GetEnemies().size(), 4u);   // and the crossbowman and the mage (RangedWeaponsAndCrossbowmen, Casters)
 
     const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
     ASSERT_NE(minion, nullptr);
@@ -858,7 +858,7 @@ TEST(RangedContentTests, Bow_NeedsRangeAndSpeed_SwordHasNone) {
 
 TEST_F(ShippedContentTests, RangedWeaponsAndCrossbowmen) {
     for (const auto& weapon : content_.GetWeapons()) {
-        const bool shoots = weapon.category == WeaponType::Bow || weapon.category == WeaponType::Crossbow;
+        const bool shoots = weapon.category == WeaponType::Bow || weapon.category == WeaponType::Crossbow || weapon.category == WeaponType::Wand;
         EXPECT_EQ(weapon.IsRanged(), shoots) << weapon.key;
     }
     const auto* crossbowman = content_.FindEnemy("enemy_skeleton_rogue");
@@ -867,4 +867,106 @@ TEST_F(ShippedContentTests, RangedWeaponsAndCrossbowmen) {
     EXPECT_EQ(crossbowman->projectileModel, "Skeleton_Arrow.gltf");
     EXPECT_GT(crossbowman->keepAwayRange, 0.0f);
     EXPECT_LT(crossbowman->keepAwayRange, crossbowman->attackRange);
+}
+
+// ============================================================================
+// Spells, Statuses, and Casters
+// ============================================================================
+
+namespace {
+    constexpr const char* SlowStatus = R"({"id":"status_slow","displayName":"Slowed","durationSeconds":3.0,"movementMultiplier":0.5})";
+
+    std::string BoltSpell(std::string_view extra = {}) {
+        return std::format(R"({{"id":"spell_bolt","name":"Bolt","school":"Evocation","level":1,"categories":["Damage"],"manaCost":5,"castTimeSeconds":0.5,"range":10.0,"baseDamage":6,"powerCoefficient":0.5,"damageType":"Arcane","projectileSpeed":12.0{}}})", extra);
+    }
+
+    ContentLoadResult LoadSpellsAndStatuses(ContentDatabase& content, const std::string& spells, const std::string& statuses) {
+        return content.LoadFromJson(spells, "[]", "[]", "[]", "[]", "[]", "[]", statuses);
+    }
+}
+
+TEST(StatusContentTests, Status_LoadsWithDefaults) {
+    ContentDatabase content;
+    ASSERT_TRUE(LoadSpellsAndStatuses(content, "[]", Array(SlowStatus)).Succeeded());
+
+    const auto* slow = content.FindStatus("status_slow");
+    ASSERT_NE(slow, nullptr);
+    EXPECT_EQ(slow->displayName, "Slowed");
+    EXPECT_FLOAT_EQ(slow->movementMultiplier, 0.5f);
+    EXPECT_FLOAT_EQ(slow->tickIntervalSeconds, 1.0f);
+    EXPECT_FALSE(slow->preventsActions);
+    EXPECT_EQ(slow->damagePerTick, 0);
+}
+
+TEST(StatusContentTests, BadStatuses_Rejected) {
+    for (const char* status : {
+             R"({"id":"s","displayName":"S","durationSeconds":0})",
+             R"({"id":"s","displayName":"S","durationSeconds":1,"movementMultiplier":1.5})",
+             R"({"id":"s","displayName":"S","durationSeconds":1,"damagePerTick":2})",          // no damage type
+             R"({"id":"s","displayName":"S","durationSeconds":1,"tickIntervalSeconds":0})" }) {
+        ContentDatabase content;
+        EXPECT_FALSE(LoadSpellsAndStatuses(content, "[]", Array(status)).Succeeded()) << status;
+    }
+}
+
+TEST(StatusContentTests, SpellNamingAnUnknownStatus_Rejected) {
+    ContentDatabase content;
+    auto result = LoadSpellsAndStatuses(content, Array(BoltSpell(R"(,"appliedStatusIds":["status_missing"])")), Array(SlowStatus));
+
+    EXPECT_FALSE(result.Succeeded());
+    EXPECT_TRUE(AnyErrorContains(result, "unknown status 'status_missing'"));
+}
+
+TEST(SpellContentTests, MissilesAndBursts_AreCastable) {
+    ContentDatabase content;
+    const std::string nova = R"({"id":"spell_nova","name":"Nova","school":"Frost","level":1,"categories":["Control"],"manaCost":5,"castTimeSeconds":0.5,"radius":4.0,"baseDamage":6,"damageType":"Cold"})";
+    const std::string sight = R"({"id":"spell_sight","name":"Sight","school":"Utility","level":1,"categories":["Utility"],"manaCost":5,"castTimeSeconds":0.5})";
+    ASSERT_TRUE(content.LoadFromJson("[" + BoltSpell() + "," + nova + "," + sight + "]", "[]", "[]").Succeeded());
+
+    EXPECT_TRUE(content.FindSpell("spell_bolt")->IsMissile());
+    EXPECT_TRUE(content.FindSpell("spell_bolt")->IsCastable());
+    EXPECT_TRUE(content.FindSpell("spell_nova")->IsBurstAroundCaster());
+    EXPECT_TRUE(content.FindSpell("spell_nova")->IsCastable());
+    EXPECT_FALSE(content.FindSpell("spell_sight")->IsCastable());   // utility spells are not built yet
+}
+
+TEST(SpellContentTests, MissileWithoutRange_Rejected) {
+    ContentDatabase content;
+    std::string spell = BoltSpell();
+    spell.replace(spell.find(R"("range":10.0,)"), 13, "");
+    EXPECT_FALSE(content.LoadFromJson("[" + spell + "]", "[]", "[]").Succeeded());
+}
+
+TEST(EnemyValidationTests, Caster_NeedsAKnownMissileSpell) {
+    {
+        ContentDatabase content;
+        auto result = content.LoadFromJson(Array(BoltSpell()), "[]", "[]", "[]", Array(EnemyWith("spell", R"("spell_bolt")")));
+        ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
+        EXPECT_TRUE(content.GetEnemies().front().IsCaster());
+        EXPECT_TRUE(content.GetEnemies().front().IsRanged());
+    }
+    {
+        ContentDatabase content;
+        auto result = content.LoadFromJson("[]", "[]", "[]", "[]", Array(EnemyWith("spell", R"("spell_missing")")));
+        EXPECT_TRUE(AnyErrorContains(result, "unknown spell 'spell_missing'"));
+    }
+}
+
+TEST_F(ShippedContentTests, Mage_HasASpellBarManaRegenAndAKit) {
+    const auto* mage = content_.FindClass(CharacterClass::Mage);
+    ASSERT_NE(mage, nullptr);
+    ASSERT_EQ(mage->spellBar.size(), 4u);
+    for (const auto& key : mage->spellBar) {
+        const auto* spell = content_.FindSpell(key);
+        ASSERT_NE(spell, nullptr) << key;
+        EXPECT_TRUE(spell->IsCastable()) << key;
+    }
+    EXPECT_GT(mage->manaRegenPerSecond, 0.0f);
+    EXPECT_EQ(content_.FindWeapon(mage->startingWeapon)->category, WeaponType::Wand);
+    EXPECT_TRUE(content_.FindWeapon(mage->startingWeapon)->IsRanged());
+
+    const auto* warrior = content_.FindClass(CharacterClass::Warrior);
+    EXPECT_TRUE(warrior->spellBar.empty());
+    EXPECT_EQ(warrior->startingWeapon, "weapon_sword_rusted_shortsword_t1");
+    EXPECT_EQ(content_.GetStatuses().size(), 8u);
 }

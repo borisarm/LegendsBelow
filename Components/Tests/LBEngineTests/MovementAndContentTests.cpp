@@ -268,6 +268,7 @@ TEST(GameEngineContentTests, InvalidContent_FailsWithAllErrors) {
     std::ofstream(dir.path / "enemies.json") << "[]";
     std::ofstream(dir.path / "consumables.json") << "[]";
     std::ofstream(dir.path / "loot.json") << "[]";
+    std::ofstream(dir.path / "statuses.json") << "[]";
     GameEngine engine;
 
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() }));
@@ -312,7 +313,7 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
     TempSaveDir dir;
     std::filesystem::create_directories(dir.path);
     const std::filesystem::path source(std::u8string(shipped->begin(), shipped->end()));
-    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json" }) {
+    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json" }) {
         std::filesystem::copy_file(source / file, dir.path / file);
     }
 

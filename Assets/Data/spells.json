@@ -13,7 +13,8 @@
     "range": 12.0,
     "baseDamage": 8,
     "powerCoefficient": 0.8,
-    "damageType": "Arcane"
+    "damageType": "Arcane",
+    "projectileSpeed": 14.0
   },
   {
     "id": "spell_evocation_spark_l1",
@@ -30,7 +31,8 @@
     "baseDamage": 5,
     "powerCoefficient": 0.5,
     "damageType": "Lightning",
-    "appliedStatusIds": ["status_shocked_basic"]
+    "appliedStatusIds": ["status_shocked_basic"],
+    "projectileSpeed": 18.0
   },
   {
     "id": "spell_evocation_fireball_l2",
@@ -48,7 +50,8 @@
     "baseDamage": 25,
     "powerCoefficient": 1.1,
     "damageType": "Fire",
-    "appliedStatusIds": ["status_burning_basic"]
+    "appliedStatusIds": ["status_burning_basic"],
+    "projectileSpeed": 9.0
   },
   {
     "id": "spell_evocation_lightning_lance_l2",
@@ -64,7 +67,8 @@
     "range": 14.0,
     "baseDamage": 22,
     "powerCoefficient": 1.0,
-    "damageType": "Lightning"
+    "damageType": "Lightning",
+    "projectileSpeed": 20.0
   },
   {
     "id": "spell_evocation_chain_lightning_l3",
@@ -167,7 +171,8 @@
     "baseDamage": 6,
     "powerCoefficient": 0.7,
     "damageType": "Cold",
-    "appliedStatusIds": ["status_slow_basic"]
+    "appliedStatusIds": ["status_slow_basic"],
+    "projectileSpeed": 11.0
   },
   {
     "id": "spell_frost_ice_shards_l1",
@@ -183,7 +188,8 @@
     "range": 10.0,
     "baseDamage": 5,
     "powerCoefficient": 0.5,
-    "damageType": "Cold"
+    "damageType": "Cold",
+    "projectileSpeed": 12.0
   },
   {
     "id": "spell_frost_frost_nova_l2",

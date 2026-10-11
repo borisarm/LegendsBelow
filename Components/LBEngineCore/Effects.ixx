@@ -4,6 +4,7 @@
 export module LB.Engine:Effects;
 
 import std;
+import LB.Combat;
 import LB.RenderingSystem;
 import :Particles;
 
@@ -77,6 +78,20 @@ namespace LB::Engine::EffectDetail {
                 return { .radius = 0.3f, .height = 0.2f, .outwardMin = 1.2f, .outwardMax = 2.4f, .upwardMin = 1.5f, .upwardMax = 3.2f,
                          .buoyancy = -1.0f, .drag = 1.8f, .lifeMin = 1.0f, .lifeMax = 1.6f, .startSize = 0.11f, .endSize = 0.03f,
                          .start = { 1.0f, 0.95f, 0.7f }, .middle = Gold, .end = DeepGold, .brightness = 2.2f };
+            case ParticleEffect::SpellTrail:
+                return { .radius = 0.05f, .height = 0.05f, .outwardMin = 0.0f, .outwardMax = 0.15f, .upwardMin = -0.1f, .upwardMax = 0.2f,
+                         .buoyancy = 0.2f, .drag = 2.0f, .lifeMin = 0.25f, .lifeMax = 0.45f, .startSize = 0.14f, .endSize = 0.02f,
+                         .sizeJitter = 0.3f, .start = { 1.0f, 1.0f, 1.0f }, .middle = { 0.8f, 0.8f, 0.8f }, .end = { 0.4f, 0.4f, 0.4f },
+                         .brightness = 1.8f };
+            case ParticleEffect::SpellBurst:
+                return { .radius = 0.15f, .height = 0.2f, .outwardMin = 1.2f, .outwardMax = 3.2f, .upwardMin = 0.2f, .upwardMax = 1.4f,
+                         .buoyancy = -1.5f, .drag = 2.2f, .lifeMin = 0.3f, .lifeMax = 0.6f, .startSize = 0.16f, .endSize = 0.03f,
+                         .sizeJitter = 0.3f, .start = { 1.0f, 1.0f, 1.0f }, .middle = { 0.8f, 0.8f, 0.8f }, .end = { 0.4f, 0.4f, 0.4f },
+                         .brightness = 2.2f };
+            case ParticleEffect::SpellCharge:
+                return { .radius = 0.25f, .height = 0.3f, .outwardMin = -0.6f, .outwardMax = -0.3f, .upwardMin = 0.1f, .upwardMax = 0.4f,
+                         .buoyancy = 0.0f, .drag = 1.0f, .lifeMin = 0.25f, .lifeMax = 0.4f, .startSize = 0.07f, .endSize = 0.02f,
+                         .start = { 1.0f, 1.0f, 1.0f }, .middle = { 0.8f, 0.8f, 0.8f }, .end = { 0.4f, 0.4f, 0.4f }, .brightness = 1.8f };
             case ParticleEffect::TrapdoorMist:
                 return { .radius = 0.6f, .outwardMin = 0.0f, .outwardMax = 0.1f, .upwardMin = 0.2f, .upwardMax = 0.5f,
                          .buoyancy = 0.1f, .drag = 0.5f, .lifeMin = 1.2f, .lifeMax = 2.0f, .startSize = 0.2f, .endSize = 0.45f,
@@ -89,6 +104,31 @@ namespace LB::Engine::EffectDetail {
 
 export namespace LB::Engine {
 
+    /// <summary>
+    /// Colors an effect takes instead of its recipe's (start, middle, end; linear RGB): a spell's
+    /// element
+    /// </summary>
+    struct EffectPalette {
+        std::array<float, 3> start{};
+        std::array<float, 3> middle{};
+        std::array<float, 3> end{};
+    };
+
+    /// <summary>
+    /// The colors of a damage type's magic (missiles, bursts, their light)
+    /// </summary>
+    inline EffectPalette ElementPalette(LB::Combat::DamageType type) noexcept {
+        using LB::Combat::DamageType;
+        switch (type) {
+        case DamageType::Arcane: return { { 0.95f, 0.75f, 1.0f }, { 0.65f, 0.30f, 1.0f }, { 0.25f, 0.05f, 0.50f } };
+        case DamageType::Cold: return { { 0.85f, 0.97f, 1.0f }, { 0.40f, 0.75f, 1.0f }, { 0.10f, 0.30f, 0.70f } };
+        case DamageType::Fire: return { { 1.0f, 0.90f, 0.50f }, { 1.0f, 0.45f, 0.10f }, { 0.50f, 0.10f, 0.02f } };
+        case DamageType::Lightning: return { { 1.0f, 1.0f, 0.85f }, { 0.80f, 0.85f, 1.0f }, { 0.30f, 0.35f, 0.80f } };
+        case DamageType::Shadow: return { { 0.70f, 1.0f, 0.60f }, { 0.30f, 0.70f, 0.20f }, { 0.10f, 0.25f, 0.05f } };
+        default: return { { 1.0f, 1.0f, 0.95f }, { 0.85f, 0.85f, 0.80f }, { 0.40f, 0.40f, 0.40f } };
+        }
+    }
+
     class EffectsSystem {
     public:
         EffectsSystem() = default;
@@ -97,8 +137,14 @@ export namespace LB::Engine {
         /// <summary>
         /// `count` particles of an effect around a point, `strength` scaling their speed and size
         /// </summary>
-        void Emit(ParticleEffect effect, Systems::Rendering::Vector3 at, std::int32_t count, float strength = 1.0f) {
-            const auto spray = EffectDetail::SprayFor(effect);
+        void Emit(ParticleEffect effect, Systems::Rendering::Vector3 at, std::int32_t count, float strength = 1.0f,
+                  const EffectPalette* palette = nullptr) {
+            auto spray = EffectDetail::SprayFor(effect);
+            if (palette) {
+                spray.start = palette->start;
+                spray.middle = palette->middle;
+                spray.end = palette->end;
+            }
             constexpr float tau = 2.0f * std::numbers::pi_v<float>;
             for (std::int32_t i = 0; i < count; ++i) {
                 const float angle = Random(0.0f, tau);
@@ -126,9 +172,10 @@ export namespace LB::Engine {
         /// <summary>
         /// A steady stream: `perSecond` on average, whole particles each step
         /// </summary>
-        void Stream(ParticleEffect effect, Systems::Rendering::Vector3 at, float perSecond, float elapsedSeconds) {
+        void Stream(ParticleEffect effect, Systems::Rendering::Vector3 at, float perSecond, float elapsedSeconds,
+                    const EffectPalette* palette = nullptr) {
             const auto count = static_cast<std::int32_t>(std::floor(perSecond * elapsedSeconds + Random(0.0f, 1.0f)));
-            if (count > 0) Emit(effect, at, count);
+            if (count > 0) Emit(effect, at, count, 1.0f, palette);
         }
 
         void Update(float elapsedSeconds) { particles_.Update(elapsedSeconds); }

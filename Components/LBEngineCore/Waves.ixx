@@ -48,6 +48,13 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// Spellcasters joining a wave: one from the third wave, two from the sixth
+        /// </summary>
+        [[nodiscard]] static std::int32_t Casters(std::int32_t wave) noexcept {
+            return wave < 3 ? 0 : std::min(1 + (wave - 3) / 3, 2);
+        }
+
+        /// <summary>
         /// A random spot in the world's first room away from the player and the other enemies (the
         /// farthest candidate when none qualifies); the player's spot without a world
         /// </summary>

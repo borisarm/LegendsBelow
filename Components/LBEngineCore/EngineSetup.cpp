@@ -155,6 +155,14 @@ namespace LB::Engine {
         double playerY = 0.0;
         const bool hasPlayerPosition = ParseDouble(result.data, "player.x", playerX) && ParseDouble(result.data, "player.y", playerY);
 
+        // A save of another class: a run as that class first (its floor and progress follow)
+        if (const auto it = result.data.find("player.class"); it != result.data.end()) {
+            if (const auto* saved = content_->FindClass(std::string_view(it->second)); saved && saved->characterClass != session_->playerClass) {
+                options_.playerClass = saved->characterClass;
+                if (!StartRun()) return false;
+            }
+        }
+
         session_->gameTimeSeconds = gameTime;
         if (session_->playerId && session_->dungeonMode) {
             ReadFloor(result.data);      // the floor first: the position is on it
@@ -193,6 +201,7 @@ namespace LB::Engine {
         assets_.models.wall = load(WallModel);
         assets_.models.corner = load(CornerModel);
         assets_.models.player = load(PlayerModel);
+        assets_.models.mage = load(MageModel);
         assets_.models.playerWeapon = load(PlayerWeaponModel);
         assets_.characterModels.clear();
 
@@ -295,6 +304,8 @@ namespace LB::Engine {
         player.shoot = info("Ranged_1H_Shoot");
         player.hit = info("Hit_A");
         player.death = info("Death_A");
+        player.castLoop = info("Ranged_Magic_Spellcasting");
+        player.castRelease = info("Ranged_Magic_Shoot");
 
         assets_.enemyClips.attacks.clear();
         for (const auto& enemy : content_->GetEnemies()) {
@@ -341,7 +352,8 @@ namespace LB::Engine {
     bool GameEngine::SpawnPlayer() {
         ConfigureClassRules();
 
-        constexpr auto playerClass = LB::Character::CharacterClass::Warrior;
+        const auto playerClass = options_.playerClass;
+        session_->playerClass = playerClass;
         const auto* classData = content_->FindClass(playerClass);
         if (!classData) {
             return true;
@@ -433,6 +445,13 @@ namespace LB::Engine {
         RegisterKeyBinding(CharacterScreenAction, Systems::Input::Keys::FromChar('I'));
         RegisterKeyBinding(CharacterScreenAction, Systems::Input::Keys::FromChar('C'));
         RegisterGamepadBinding(CharacterScreenAction, Systems::Input::GamepadButton::Back);
+        constexpr Systems::Input::GamepadButton spellButtons[] = {
+            Systems::Input::GamepadButton::LeftShoulder, Systems::Input::GamepadButton::RightShoulder,
+            Systems::Input::GamepadButton::Y, Systems::Input::GamepadButton::B };
+        for (std::size_t slot = 0; slot < SpellSlots; ++slot) {
+            RegisterKeyBinding(SpellActions[slot], Systems::Input::Keys::FromChar(static_cast<char>('1' + slot)));
+            RegisterGamepadBinding(SpellActions[slot], spellButtons[slot]);
+        }
         RegisterKeyBinding(UsePotionAction, Systems::Input::Keys::FromChar('R'));
         RegisterGamepadBinding(UsePotionAction, Systems::Input::GamepadButton::X);
         RegisterKeyBinding(MenuUpAction, Systems::Input::Keys::FromChar('W'));

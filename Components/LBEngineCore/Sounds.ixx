@@ -34,6 +34,11 @@ export namespace LB::Engine {
         Equip,
         Shoot,          // a bow or crossbow loosing (the player's or an enemy's)
         ArrowHitsWall,  // an arrow or bolt striking stone
+        SpellCast,      // a spell begun (the player's) or cast (an enemy's)
+        SpellHit,       // a spell missile landing on someone
+        FireBurst,      // a fireball going off
+        FrostBurst,     // any other spell burst (a frost nova)
+        NoMana,         // a spell that cannot be cast
         Count
     };
 
@@ -135,6 +140,11 @@ export namespace LB::Engine {
         inline constexpr std::string_view MenuConfirm[] = { "bookPlace1" };
         inline constexpr std::string_view Equip[] = { "beltHandle1", "beltHandle2" };
         inline constexpr std::string_view Shoot[] = { "clothBelt", "clothBelt2" };
+        inline constexpr std::string_view SpellCast[] = { "impactGlass_light_000", "impactGlass_light_001", "impactGlass_light_002", "impactGlass_light_003", "impactGlass_light_004" };
+        inline constexpr std::string_view SpellHit[] = { "impactGlass_medium_000", "impactGlass_medium_001", "impactGlass_medium_002", "impactGlass_medium_003", "impactGlass_medium_004" };
+        inline constexpr std::string_view FireBurst[] = { "impactSoft_heavy_000", "impactSoft_heavy_001", "impactSoft_heavy_002", "impactSoft_heavy_003", "impactSoft_heavy_004" };
+        inline constexpr std::string_view FrostBurst[] = { "impactGlass_heavy_000", "impactGlass_heavy_001", "impactGlass_heavy_002", "impactGlass_heavy_003", "impactGlass_heavy_004" };
+        inline constexpr std::string_view NoMana[] = { "metalClick" };
         inline constexpr std::string_view ArrowHitsWall[] = { "impactWood_light_000", "impactWood_light_001", "impactWood_light_002", "impactWood_light_003", "impactWood_light_004" };
     }
 
@@ -163,6 +173,11 @@ export namespace LB::Engine {
         case GameSound::Equip: return { Equip, 0.7f, true };
         case GameSound::Shoot: return { Shoot, 0.8f };
         case GameSound::ArrowHitsWall: return { ArrowHitsWall, 0.6f };
+        case GameSound::SpellCast: return { SpellCast, 0.5f };
+        case GameSound::SpellHit: return { SpellHit, 0.7f };
+        case GameSound::FireBurst: return { FireBurst, 0.9f };
+        case GameSound::FrostBurst: return { FrostBurst, 0.8f };
+        case GameSound::NoMana: return { NoMana, 0.6f, true };
         default: return {};
         }
     }

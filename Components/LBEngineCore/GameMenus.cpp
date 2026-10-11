@@ -94,6 +94,12 @@ namespace LB::Engine {
             };
         case MenuPage::Credits:
             return { { "Back", MenuCommand::Back } };
+        case MenuPage::ChooseClass:
+            return {
+                { "Warrior", MenuCommand::PlayWarrior, true, "sword and bow" },
+                { "Mage", MenuCommand::PlayMage, true, "wand and spells" },
+                { "Back", MenuCommand::Back },
+            };
         default:
             return {};
         }
@@ -156,6 +162,11 @@ namespace LB::Engine {
         PlaySound(GameSound::MenuConfirm);
         switch (command) {
         case MenuCommand::NewGame:
+            menu_.Push(MenuPage::ChooseClass);
+            break;
+        case MenuCommand::PlayWarrior:
+        case MenuCommand::PlayMage:
+            options_.playerClass = command == MenuCommand::PlayMage ? LB::Character::CharacterClass::Mage : LB::Character::CharacterClass::Warrior;
             StartRun();
             CloseMenu();
             break;
@@ -205,7 +216,8 @@ namespace LB::Engine {
         if (!menu_.IsOpen()) return;
         MenuModel model;
         model.titlePage = menu_.Page() == MenuPage::Title;
-        model.heading = menu_.Page() == MenuPage::Pause ? "PAUSED" : menu_.Page() == MenuPage::Options ? "OPTIONS" : menu_.Page() == MenuPage::Credits ? "CREDITS" : "";
+        model.heading = menu_.Page() == MenuPage::Pause ? "PAUSED" : menu_.Page() == MenuPage::Options ? "OPTIONS"
+                      : menu_.Page() == MenuPage::Credits ? "CREDITS" : menu_.Page() == MenuPage::ChooseClass ? "CHOOSE YOUR HERO" : "";
         model.items = menu_.Items();
         model.cursor = menu_.Cursor();
         model.message = menu_.Message();

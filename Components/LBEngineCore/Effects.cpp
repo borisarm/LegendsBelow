@@ -38,6 +38,46 @@ namespace LB::Engine {
         }
     }
 
+    // Spells: missiles trail their element, bursts and hits flare, magic gathers in the hands of
+    // a caster, and burning things smoulder
+    void GameEngine::EmitSpellEffects(float elapsedSeconds) {
+        for (const auto& projectile : session_->encounter.GetProjectiles()) {
+            if (!projectile.InFlight() || !projectile.model.empty()) continue;
+            const auto palette = ElementPalette(projectile.Element());
+            session_->effects.Stream(ParticleEffect::SpellTrail, { projectile.position.x, ProjectileSet::FlightHeight, projectile.position.y }, 150.0f, elapsedSeconds, &palette);
+        }
+        for (const auto& burst : session_->encounter.GetBursts()) {
+            const auto palette = ElementPalette(burst.damageType);
+            session_->effects.Emit(ParticleEffect::SpellBurst, { burst.at.x, 0.35f, burst.at.y }, 20 + static_cast<std::int32_t>(burst.radius * 22.0f),
+                                   std::max(1.0f, burst.radius * 0.6f), &palette);
+        }
+        for (const auto& event : session_->combatEvents) {
+            if (!event.spell || event.spell->radius > 0.0f || !event.result.hit) continue;
+            const auto palette = ElementPalette(event.spell->damageType);
+            WorldPoint at = session_->playerPosition;
+            if (event.kind == CombatEventKind::PlayerAttack) {
+                const auto* enemy = session_->encounter.FindEnemy(event.enemyId);
+                if (!enemy) continue;
+                at = enemy->position;
+            }
+            session_->effects.Emit(ParticleEffect::SpellBurst, { at.x, ProjectileSet::FlightHeight, at.y }, 14, 0.7f, &palette);
+        }
+        if (session_->casting.active) {
+            const auto palette = ElementPalette(session_->casting.spell->damageType);
+            const auto forward = Forward(session_->playerFacingYaw);
+            session_->effects.Stream(ParticleEffect::SpellCharge, { session_->playerPosition.x + forward.x * 0.25f, 0.7f, session_->playerPosition.y + forward.y * 0.25f },
+                                     45.0f, elapsedSeconds, &palette);
+        }
+        for (const auto& enemy : session_->encounter.GetEnemies()) {
+            if (enemy.statuses.HasDamageOverTime(LB::Combat::DamageType::Fire)) {
+                session_->effects.Stream(ParticleEffect::TorchFlame, { enemy.position.x, 0.35f, enemy.position.y }, 30.0f, elapsedSeconds);
+            }
+        }
+        if (session_->playerStatuses.HasDamageOverTime(LB::Combat::DamageType::Fire)) {
+            session_->effects.Stream(ParticleEffect::TorchFlame, { session_->playerPosition.x, 0.35f, session_->playerPosition.y }, 30.0f, elapsedSeconds);
+        }
+    }
+
     void GameEngine::EmitHealingEffect() {
         session_->effects.Emit(ParticleEffect::Healing, { session_->playerPosition.x, 0.1f, session_->playerPosition.y }, 34);
     }

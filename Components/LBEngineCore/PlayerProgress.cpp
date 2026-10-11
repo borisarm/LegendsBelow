@@ -99,11 +99,15 @@ namespace LB::Engine {
     void GameEngine::GiveStartingKit() {
         session_->gold = 0;
         session_->groundItems.clear();
-        session_->playerWeapon = content_->FindWeapon(StartingWeapon);
+        // The class's kit (classes.json startingWeapon, startingItems); a potion for everyone
+        const auto* classData = content_->FindClass(session_->playerClass);
+        session_->playerWeapon = classData && !classData->startingWeapon.empty() ? content_->FindWeapon(classData->startingWeapon) : nullptr;
         if (!session_->playerId) return;
         session_->inventoryService.CreateInventory(*session_->playerId, BagCapacity);
         GiveItem(HealingPotion, StartingPotions);
-        GiveItem(StartingBow);
+        if (classData) {
+            for (const auto& key : classData->startingItems) GiveItem(key);
+        }
     }
 
     // Why the player cannot equip an item, or empty when they can
@@ -271,8 +275,10 @@ namespace LB::Engine {
 
         const auto* classDefinition = content_->FindClass(status.characterClass);
         heading(std::format("{} - level {} {}", status.name, status.level, classDefinition ? classDefinition->name : std::string{}));
+        const bool usesMana = classDefinition && classDefinition->resource == "Mana";
         info(std::format("Experience {} / {}", status.currentExperience, status.experienceToNextLevel),
-             std::format("HP {}/{}   Gold {}", status.currentHitPoints, status.maxHitPoints, session_->gold));
+             usesMana ? std::format("HP {}/{}   MP {}/{}   Gold {}", status.currentHitPoints, status.maxHitPoints, status.currentManaPoints, status.maxManaPoints, session_->gold)
+                      : std::format("HP {}/{}   Gold {}", status.currentHitPoints, status.maxHitPoints, session_->gold));
 
         // Attributes: with points to spend, each one below its cap can be raised
         const auto points = character.GetUnspentAttributePoints();
@@ -286,6 +292,18 @@ namespace LB::Engine {
                 row.attribute = attribute;
             }
             rows.push_back(std::move(row));
+        }
+
+        // Spells on the bar: their keys and costs, or the level they open at
+        const auto bar = GetSpellBar();
+        if (!bar.empty()) {
+            heading(std::format("Spells - spell power {}", GetPlayerSpellPower()));
+            for (std::size_t slot = 0; slot < bar.size(); ++slot) {
+                const auto& spell = *bar[slot];
+                info(std::format("{}: {}", slot + 1, spell.name),
+                     status.level < spell.requiredLevel ? std::format("from level {}", spell.requiredLevel)
+                                                        : std::format("{} MP   {} dmg", spell.manaCost, Encounter::SpellDamage(spell, GetPlayerSpellPower())));
+            }
         }
 
         // Equipment: the weapon, then each armour slot
@@ -452,8 +470,8 @@ namespace LB::Engine {
         case LB::Combat::WeaponType::Axe: return "axe_1handed.gltf";
         case LB::Combat::WeaponType::Dagger: return "dagger.gltf";
         case LB::Combat::WeaponType::Mace: return "Skeleton_Mace.gltf";
-        case LB::Combat::WeaponType::Staff:
-        case LB::Combat::WeaponType::Wand: return "staff.gltf";
+        case LB::Combat::WeaponType::Staff: return "staff.gltf";
+        case LB::Combat::WeaponType::Wand: return "wand.gltf";
         case LB::Combat::WeaponType::Bow: return "bow_withString.gltf";
         case LB::Combat::WeaponType::Crossbow: return "crossbow_1handed.gltf";
         default: return HeldSword;
@@ -504,6 +522,7 @@ namespace LB::Engine {
         if (!player) return;
         const auto& character = *player;
         const auto& a = character.GetAttributes();
+        if (const auto* classData = content_->FindClass(session_->playerClass)) data["player.class"] = classData->key;
         data["player.level"] = std::format("{}", character.GetLevel());
         data["player.experience"] = std::format("{}", character.GetExperience());
         data["player.attributes"] = std::format("{};{};{};{};{};{}", a.strength, a.dexterity, a.constitution, a.intelligence, a.wisdom, a.charisma);

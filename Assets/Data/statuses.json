@@ -1,0 +1,63 @@
+[
+  {
+    "id": "status_slow_basic",
+    "displayName": "Slowed",
+    "categories": ["Debuff", "Control"],
+    "durationSeconds": 3.0,
+    "movementMultiplier": 0.5
+  },
+  {
+    "id": "status_slow_strong",
+    "displayName": "Slowed",
+    "categories": ["Debuff", "Control"],
+    "durationSeconds": 4.0,
+    "movementMultiplier": 0.3
+  },
+  {
+    "id": "status_root_basic",
+    "displayName": "Rooted",
+    "categories": ["Control"],
+    "durationSeconds": 2.5,
+    "movementMultiplier": 0.0
+  },
+  {
+    "id": "status_freeze_major",
+    "displayName": "Frozen",
+    "categories": ["Control"],
+    "durationSeconds": 2.0,
+    "movementMultiplier": 0.0,
+    "preventsActions": true
+  },
+  {
+    "id": "status_burning_basic",
+    "displayName": "Burning",
+    "categories": ["Debuff", "Elemental"],
+    "durationSeconds": 3.0,
+    "tickIntervalSeconds": 1.0,
+    "damagePerTick": 2,
+    "damageType": "Fire"
+  },
+  {
+    "id": "status_burning_strong",
+    "displayName": "Burning",
+    "categories": ["Debuff", "Elemental"],
+    "durationSeconds": 4.0,
+    "tickIntervalSeconds": 1.0,
+    "damagePerTick": 4,
+    "damageType": "Fire"
+  },
+  {
+    "id": "status_shocked_basic",
+    "displayName": "Shocked",
+    "categories": ["Debuff", "Elemental"],
+    "durationSeconds": 1.5,
+    "movementMultiplier": 0.8
+  },
+  {
+    "id": "status_charmed",
+    "displayName": "Charmed",
+    "categories": ["Control"],
+    "durationSeconds": 4.0,
+    "preventsActions": true
+  }
+]

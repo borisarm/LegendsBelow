@@ -96,8 +96,10 @@ export namespace LB::Engine {
         /// resolves the strike or launches the shot.
         /// </summary>
         [[nodiscard]] EnemyAction Update(Enemy& enemy, float dt, const PlayerTarget& player) {
-            enemy.stateSeconds += dt;
             enemy.hitFlashSeconds = std::max(0.0f, enemy.hitFlashSeconds - dt);
+            // Frozen (or charmed): no acting, the pose held, until it wears off
+            if (enemy.statuses.PreventsActions() && !enemy.IsDead() && enemy.state != EnemyState::Spawning) return EnemyAction::None;
+            enemy.stateSeconds += dt;
             enemy.animator.Update(dt);
 
             const auto& type = *enemy.definition;
@@ -152,15 +154,18 @@ export namespace LB::Engine {
                 Enter(enemy, EnemyState::Chasing);
             }
 
+            // Slowed or rooted: slower, or not moving at all
+            const float speed = type.movementSpeed * enemy.statuses.MovementMultiplier();
+
             // Too close while reloading: a ranged enemy backs away, unless a wall is behind it
-            if (type.IsRanged() && distance < type.keepAwayRange && enemy.recoverySeconds > 0.0f && distance > 0.0f) {
-                const float step = type.movementSpeed * dt;
+            if (type.IsRanged() && distance < type.keepAwayRange && enemy.recoverySeconds > 0.0f && distance > 0.0f && speed > 0.0f) {
+                const float step = speed * dt;
                 const WorldPoint away{ -dx / distance * step, -dy / distance * step };
                 const auto before = enemy.position;
                 enemy.position = MoveBody(enemy.position, away);
                 if (Distance(before, enemy.position) >= step * BackAwayProgress) {
                     TurnToward(enemy, away.x, away.y, dt);
-                    enemy.animator.Play(clips_.walk, true, type.movementSpeed / WalkAnimationSpeed);
+                    enemy.animator.Play(clips_.walk, true, speed / WalkAnimationSpeed);
                     return EnemyAction::None;
                 }
                 enemy.position = before;   // cornered: stand and fight
@@ -179,10 +184,17 @@ export namespace LB::Engine {
                 return EnemyAction::None;
             }
 
+            // Rooted: turn to face the player, but stay put
+            if (speed <= 0.0f) {
+                TurnToward(enemy, dx, dy, dt);
+                enemy.animator.Play(clips_.idle, true);
+                return EnemyAction::None;
+            }
+
             // Close in: straight at the player when in sight (stopping a little inside reach), else
             // along the flow field around the walls
             float tx = dx, ty = dy;
-            float step = std::min(type.movementSpeed * dt, std::max(0.0f, distance - type.attackRange * 0.9f));
+            float step = std::min(speed * dt, std::max(0.0f, distance - type.attackRange * 0.9f));
             if (!inSight && world_) {
                 if (!flowFieldReady_) {
                     world_->BuildFlowField(player.position);
@@ -195,12 +207,12 @@ export namespace LB::Engine {
                 }
                 tx = waypoint->x - enemy.position.x;
                 ty = waypoint->y - enemy.position.y;
-                step = type.movementSpeed * dt;
+                step = speed * dt;
             }
             const float length = std::max(1e-4f, std::hypot(tx, ty));
             enemy.position = MoveBody(enemy.position, { tx / length * step, ty / length * step });
             TurnToward(enemy, tx, ty, dt);
-            enemy.animator.Play(clips_.walk, true, type.movementSpeed / WalkAnimationSpeed);
+            enemy.animator.Play(clips_.walk, true, speed / WalkAnimationSpeed);
             return EnemyAction::None;
         }
 

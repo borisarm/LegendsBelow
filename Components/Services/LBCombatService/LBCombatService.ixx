@@ -210,6 +210,19 @@ export namespace LB::Services::Combat {
         }
 
         /// <summary>
+        /// A spell that reached its target (design-spells-system.md 5.1): no attack roll (it had to
+        /// reach the target), its raw damage (base + coefficient x spell power, worked out when
+        /// cast) through the target's defenses
+        /// </summary>
+        static WeaponAttackResult ResolveSpellHit(std::int32_t rawDamage, DamageType type, const DefenseProfile& target) {
+            WeaponAttackResult result{};
+            result.hit = true;
+            result.rawDamage = std::max(0, rawDamage);
+            result.finalDamage = ApplyDefenses(result.rawDamage, type, target);
+            return result;
+        }
+
+        /// <summary>
         /// Resolve one weapon attack (design-combat-system.md 4.1-4.3): d20 + bonus against AC
         /// (natural 1 always misses, natural 20 always hits), crits on a hit within the crit
         /// range multiply the damage roll, then the target's defenses apply.

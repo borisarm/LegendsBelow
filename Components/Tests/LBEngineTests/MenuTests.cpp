@@ -111,11 +111,26 @@ TEST(GameEngineMenuTests, Title_EscapeDoesNotLeave) {
     EXPECT_TRUE(engine.IsPaused());
 }
 
+TEST(GameEngineMenuTests, NewGame_AsAMage) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+
+    Choose(engine, "New Game");
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::ChooseClass);
+    EXPECT_TRUE(Drawn(engine, "CHOOSE YOUR HERO"));
+    Choose(engine, "Mage");
+
+    EXPECT_FALSE(engine.GetMenu().IsOpen());
+    EXPECT_EQ(engine.GetPlayerClass(), LB::Character::CharacterClass::Mage);
+    EXPECT_EQ(engine.GetSpellBar().size(), 4u);
+}
+
 TEST(GameEngineMenuTests, NewGame_StartsPlaying) {
     GameEngine engine;
     InitializeWithTitle(engine);
 
     Choose(engine, "New Game");
+    Choose(engine, "Warrior");
 
     EXPECT_FALSE(engine.GetMenu().IsOpen());
     EXPECT_FALSE(engine.IsPaused());
@@ -188,6 +203,7 @@ TEST(GameEngineMenuTests, SaveFromPause_ThenContinueFromTheTitle) {
     GameEngine engine;
     InitializeWithTitle(engine);
     Choose(engine, "New Game");
+    Choose(engine, "Warrior");
     engine.GiveItem("armor_head_leather_cap_t1");
     Press(engine, Keys::Escape);
 

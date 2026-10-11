@@ -231,6 +231,8 @@
     "scaleFactor": 0.7,
     "isTwoHanded": false,
     "specialProperties": ["SpellFocus"],
-    "affixSlots": 1
+    "affixSlots": 1,
+    "range": 9.0,
+    "projectileSpeed": 14.0
   }
 ]

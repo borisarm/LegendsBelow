@@ -84,7 +84,9 @@
       { "level": 18, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
       { "level": 19, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
       { "level": 20, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
-    ]
+    ],
+    "startingWeapon": "weapon_sword_rusted_shortsword_t1",
+    "startingItems": ["weapon_bow_worn_shortbow_t1"]
   },
   {
     "id": "class_rogue",
@@ -263,7 +265,12 @@
       { "level": 18, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },
       { "level": 19, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
       { "level": 20, "hpGain": 5, "mpGain": 9, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 }
-    ]
+    ],
+    "spellBar": ["spell_evocation_arcane_bolt_l1", "spell_frost_frost_bolt_l1", "spell_evocation_fireball_l2", "spell_frost_frost_nova_l2"],
+    "manaRegenPerSecond": 2.5,
+    "spellPowerBase": 2,
+    "startingWeapon": "weapon_wand_apprentices_wand_t1",
+    "startingItems": ["weapon_staff_apprentices_staff_t1"]
   },
   {
     "id": "class_cleric",

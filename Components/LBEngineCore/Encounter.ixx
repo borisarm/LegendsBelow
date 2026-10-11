@@ -51,10 +51,11 @@ export namespace LB::Engine {
         /// encounter's use of it)
         /// </summary>
         void Configure(const Content::EnemyDefinition* light, const Content::EnemyDefinition* heavy, const WorldMap& world,
-                       const Content::EnemyDefinition* ranged = nullptr) {
+                       const Content::EnemyDefinition* ranged = nullptr, const Content::EnemyDefinition* caster = nullptr) {
             light_ = light;
             heavy_ = heavy;
             ranged_ = ranged;
+            caster_ = caster;
             world_ = &world;
             behavior_.SetWorld(&world);
         }
@@ -64,11 +65,18 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// The content spells and statuses are looked up in (kept by pointer: it must outlive the
+        /// encounter's use of it; null: casters cannot cast and spells apply no statuses)
+        /// </summary>
+        void SetContent(const Content::ContentDatabase* content) noexcept { content_ = content; }
+
+        /// <summary>
         /// Remove every enemy and stop the waves
         /// </summary>
         void Reset() {
             enemies_.clear();
             projectiles_.Clear();
+            bursts_.clear();
             wave_ = 0;
             waveTimerSeconds_ = 0.0f;
         }
@@ -78,6 +86,8 @@ export namespace LB::Engine {
         [[nodiscard]] static std::pair<std::int32_t, std::int32_t> WaveComposition(std::int32_t wave) noexcept { return Waves::Composition(wave); }
 
         [[nodiscard]] static std::int32_t WaveShooters(std::int32_t wave) noexcept { return Waves::Shooters(wave); }
+
+        [[nodiscard]] static std::int32_t WaveCasters(std::int32_t wave) noexcept { return Waves::Casters(wave); }
 
         /// <summary>
         /// Start a wave: its enemies rise at random spots at least MinimumSpawnDistance from the player
@@ -96,6 +106,9 @@ export namespace LB::Engine {
             for (std::int32_t i = 0; i < lightCount; ++i) spawnFacingPlayer(*light_);
             if (ranged_) {
                 for (std::int32_t i = 0; i < Waves::Shooters(wave); ++i) spawnFacingPlayer(*ranged_);
+            }
+            if (caster_) {
+                for (std::int32_t i = 0; i < Waves::Casters(wave); ++i) spawnFacingPlayer(*caster_);
             }
         }
 
@@ -128,14 +141,17 @@ export namespace LB::Engine {
             std::vector<CombatEvent> events;
             shots_.clear();
             wallHits_.clear();
+            bursts_.clear();
             behavior_.BeginStep();
             for (auto& enemy : enemies_) {
+                UpdateStatuses(enemy, elapsedSeconds, events);
                 switch (behavior_.Update(enemy, elapsedSeconds, player)) {
                 case EnemyAction::Strike:
                     events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), player.defense), false });
                     break;
                 case EnemyAction::Shoot:
-                    ShootAtPlayer(enemy, player.position);
+                    if (enemy.definition->IsCaster()) CastAtPlayer(enemy, player.position);
+                    else ShootAtPlayer(enemy, player.position);
                     break;
                 case EnemyAction::None:
                     break;
@@ -202,8 +218,37 @@ export namespace LB::Engine {
             if (!enemy || !enemy->IsTargetable() || Distance(from, enemy->position) > reach + AttackReachSlack) {
                 return std::nullopt;
             }
-            return Hit(*enemy, attack);
+            return Hit(*enemy, combat_.ResolveWeaponAttack(attack, DefenseOf(*enemy)));
         }
+
+        /// <summary>
+        /// The player's spell missile leaving `from` along `direction` (it starts just outside the
+        /// caster's body): it flies the spell's range at its speed and is resolved as the spell
+        /// where it lands, bursting there when the spell has a radius. Returns its id.
+        /// </summary>
+        std::uint32_t CastMissile(const SpellPayload& payload, WorldPoint from, WorldPoint direction, float bodyRadius) {
+            const auto& spell = *payload.spell;
+            Services::Combat::WeaponAttackProfile attack{};
+            attack.damageType = spell.damageType;
+            const auto id = Shoot(attack, from, direction, spell.projectileSpeed, spell.range, std::string{}, bodyRadius);
+            projectiles_.Find(id)->spell = payload;
+            return id;
+        }
+
+        /// <summary>
+        /// A spell bursting around a point (the player's frost nova): every enemy within its radius
+        /// takes it. Returns the hits.
+        /// </summary>
+        std::vector<CombatEvent> CastBurst(const SpellPayload& payload, WorldPoint at) {
+            std::vector<CombatEvent> events;
+            Burst(payload, at, events);
+            return events;
+        }
+
+        /// <summary>
+        /// Where spells burst in the last Update (and the last CastBurst)
+        /// </summary>
+        [[nodiscard]] const std::vector<SpellBurst>& GetBursts() const noexcept { return bursts_; }
 
         /// <summary>
         /// The player's shot: an arrow or bolt leaving `from` (it starts just outside the shooter's
@@ -237,15 +282,17 @@ export namespace LB::Engine {
         [[nodiscard]] const std::vector<WorldPoint>& GetWallHits() const noexcept { return wallHits_; }
 
     private:
-        // Resolve an attack that reached an enemy: a hit that does not kill staggers it unless it
-        // is mid-attack
-        CombatEvent Hit(Enemy& enemy, const Services::Combat::WeaponAttackProfile& attack) {
-            const auto id = enemy.id;
+        static Services::Combat::DefenseProfile DefenseOf(const Enemy& enemy) {
             const auto& type = *enemy.definition;
-            const Services::Combat::DefenseProfile defense{ type.armorClass, type.physicalArmor, type.resistances };
+            return { type.armorClass, type.physicalArmor, type.resistances };
+        }
 
-            CombatEvent event{ CombatEventKind::PlayerAttack, id, combat_.ResolveWeaponAttack(attack, defense), false };
+        // Apply a resolved attack (or spell) to an enemy: a hit that does not kill staggers it
+        // unless it is mid-attack; a spell's statuses take hold
+        CombatEvent Hit(Enemy& enemy, const Services::Combat::WeaponAttackResult& result, const Content::SpellDefinition* spell = nullptr) {
+            CombatEvent event{ CombatEventKind::PlayerAttack, enemy.id, result, false, spell };
             if (event.result.hit) {
+                ApplyStatuses(enemy.statuses, spell);
                 enemy.hitPoints = std::max(0, enemy.hitPoints - event.result.finalDamage);
                 enemy.hitFlashSeconds = HitFlashSeconds;
                 if (enemy.hitPoints == 0) {
@@ -323,13 +370,97 @@ export namespace LB::Engine {
                     wallHits_.push_back(impact.at);
                 }
                 else if (impact.projectile.side == ProjectileSide::Enemies) {
-                    events.push_back({ CombatEventKind::EnemyAttack, impact.projectile.shooter, combat_.ResolveWeaponAttack(impact.projectile.attack, player.defense), false });
+                    if (impact.projectile.spell) {
+                        const auto& payload = *impact.projectile.spell;
+                        events.push_back({ CombatEventKind::EnemyAttack, impact.projectile.shooter,
+                            Services::Combat::CombatService::ResolveSpellHit(payload.rawDamage, payload.spell->damageType, player.defense), false, payload.spell });
+                    }
+                    else {
+                        events.push_back({ CombatEventKind::EnemyAttack, impact.projectile.shooter, combat_.ResolveWeaponAttack(impact.projectile.attack, player.defense), false });
+                    }
                 }
                 else if (auto* enemy = Find(*impact.target)) {
-                    events.push_back(Hit(*enemy, impact.projectile.attack));
+                    if (!impact.projectile.spell) events.push_back(Hit(*enemy, combat_.ResolveWeaponAttack(impact.projectile.attack, DefenseOf(*enemy))));
+                    else if (impact.projectile.spell->spell->radius <= 0.0f) events.push_back(SpellHit(*enemy, *impact.projectile.spell));
+                }
+                // A spell with a radius bursts where it lands, against a body or a wall
+                if (impact.projectile.spell && impact.projectile.spell->spell->radius > 0.0f) {
+                    if (impact.projectile.side == ProjectileSide::Player) Burst(*impact.projectile.spell, impact.at, events);
+                    else bursts_.push_back({ impact.at, impact.projectile.spell->spell->radius, impact.projectile.spell->spell->damageType });
                 }
             }
         }
+
+        CombatEvent SpellHit(Enemy& enemy, const SpellPayload& payload) {
+            return Hit(enemy, Services::Combat::CombatService::ResolveSpellHit(payload.rawDamage, payload.spell->damageType, DefenseOf(enemy)), payload.spell);
+        }
+
+        // The player's spell bursting: every targetable enemy whose body is within the radius
+        void Burst(const SpellPayload& payload, WorldPoint at, std::vector<CombatEvent>& events) {
+            const auto& spell = *payload.spell;
+            bursts_.push_back({ at, spell.radius, spell.damageType });
+            for (auto& enemy : enemies_) {
+                if (enemy.IsTargetable() && Distance(enemy.position, at) <= spell.radius + CharacterRadius) events.push_back(SpellHit(enemy, payload));
+            }
+        }
+
+        // A caster's spell missile at where the player stands now: the spell's damage from the
+        // enemy's spell power
+        void CastAtPlayer(const Enemy& enemy, WorldPoint player) {
+            const auto* spell = content_ ? content_->FindSpell(enemy.definition->spell) : nullptr;
+            if (!spell) return;
+            WorldPoint direction{ player.x - enemy.position.x, player.y - enemy.position.y };
+            if (std::hypot(direction.x, direction.y) < 1e-4f) direction = Forward(enemy.facingYaw);
+            const float length = std::hypot(direction.x, direction.y);
+            const float offset = CharacterRadius + ProjectileSet::Radius;
+            Projectile shot{};
+            shot.side = ProjectileSide::Enemies;
+            shot.shooter = enemy.id;
+            shot.position = { enemy.position.x + direction.x / length * offset, enemy.position.y + direction.y / length * offset };
+            shot.direction = direction;
+            shot.speed = spell->projectileSpeed;
+            shot.rangeLeft = enemy.definition->attackRange * ShotOvershoot;
+            shot.attack.damageType = spell->damageType;
+            shot.spell = SpellPayload{ spell, SpellDamage(*spell, enemy.definition->spellPower) };
+            projectiles_.Launch(std::move(shot));
+            shots_.push_back(enemy.position);
+        }
+
+        // Burning and other damage over time; a status that kills counts as the player's (only the
+        // player's spells set them on enemies)
+        void UpdateStatuses(Enemy& enemy, float elapsedSeconds, std::vector<CombatEvent>& events) {
+            if (enemy.IsDead()) {
+                enemy.statuses.Clear();
+                return;
+            }
+            for (const auto& tick : enemy.statuses.Update(elapsedSeconds)) {
+                CombatEvent event{ CombatEventKind::PlayerAttack, enemy.id, Services::Combat::CombatService::ResolveSpellHit(tick.damage, tick.damageType, DefenseOf(enemy)), false };
+                enemy.hitPoints = std::max(0, enemy.hitPoints - event.result.finalDamage);
+                if (enemy.hitPoints == 0) {
+                    event.killed = true;
+                    behavior_.Enter(enemy, EnemyState::Dead);
+                }
+                events.push_back(event);
+                if (event.killed) break;
+            }
+        }
+
+        void ApplyStatuses(StatusSet& statuses, const Content::SpellDefinition* spell) const {
+            if (!spell || !content_) return;
+            for (const auto& key : spell->appliedStatusIds) {
+                if (const auto* status = content_->FindStatus(key)) statuses.Apply(*status);
+            }
+        }
+
+    public:
+        /// <summary>
+        /// A spell's raw damage (design-spells-system.md 5.1): base + coefficient x spell power
+        /// </summary>
+        [[nodiscard]] static std::int32_t SpellDamage(const Content::SpellDefinition& spell, std::int32_t spellPower) noexcept {
+            return std::max(0, static_cast<std::int32_t>(std::lround(static_cast<float>(spell.baseDamage) + spell.powerCoefficient * static_cast<float>(spellPower))));
+        }
+
+    private:
 
         Enemy* Find(std::uint32_t id) noexcept {
             const auto it = std::ranges::find(enemies_, id, &Enemy::id);
@@ -350,6 +481,9 @@ export namespace LB::Engine {
         const Content::EnemyDefinition* light_{nullptr};
         const Content::EnemyDefinition* heavy_{nullptr};
         const Content::EnemyDefinition* ranged_{nullptr};
+        const Content::EnemyDefinition* caster_{nullptr};
+        const Content::ContentDatabase* content_{nullptr};
+        std::vector<SpellBurst> bursts_;
         const WorldMap* world_{nullptr};
         std::vector<Enemy> enemies_;
         std::uint32_t nextId_{1};

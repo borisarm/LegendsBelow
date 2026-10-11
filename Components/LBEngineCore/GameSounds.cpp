@@ -119,10 +119,22 @@ namespace LB::Engine {
         }
     }
 
+    // This step's spells: bursts boom (fire) or shatter, missiles ring where they land
+    void GameEngine::PlaySpellSounds() {
+        for (const auto& burst : session_->encounter.GetBursts()) {
+            PlaySound(burst.damageType == LB::Combat::DamageType::Fire ? GameSound::FireBurst : GameSound::FrostBurst, burst.at);
+        }
+        for (const auto& event : session_->combatEvents) {
+            if (!event.spell || event.spell->radius > 0.0f) continue;
+            const auto* enemy = event.kind == CombatEventKind::PlayerAttack ? session_->encounter.FindEnemy(event.enemyId) : nullptr;
+            PlaySound(GameSound::SpellHit, enemy ? enemy->position : session_->playerPosition);
+        }
+    }
+
     // This step's shots: enemies loosing (the player's own are heard as they leave), and arrows and
     // bolts striking walls
     void GameEngine::PlayProjectileSounds() {
-        for (const auto at : session_->encounter.GetShots()) PlaySound(GameSound::Shoot, at);
+        for (const auto at : session_->encounter.GetShots()) PlaySound(GameSound::Shoot, at);   // casters' spells too
         for (const auto at : session_->encounter.GetWallHits()) PlaySound(GameSound::ArrowHitsWall, at);
     }
 

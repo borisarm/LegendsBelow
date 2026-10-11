@@ -13,6 +13,7 @@ export import :Animator;
 export import :Enemies;
 export import :EnemyBehavior;
 export import :Projectiles;
+export import :Statuses;
 export import :Waves;
 export import :Encounter;
 export import :Loot;

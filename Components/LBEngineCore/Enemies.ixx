@@ -7,6 +7,7 @@ import LB.Content;
 import LB.CombatService;
 import LB.RenderingSystem;
 import :Animator;
+import :Statuses;
 import :World;
 
 export namespace LB::Engine {
@@ -69,6 +70,7 @@ export namespace LB::Engine {
         float recoverySeconds{0.0f};        // until the next attack may start
         float hitFlashSeconds{0.0f};        // > 0 right after being hit
         Animator animator;
+        StatusSet statuses;                 // slowed, rooted, frozen, burning
 
         [[nodiscard]] bool IsDead() const noexcept { return state == EnemyState::Dead; }
 
@@ -95,6 +97,7 @@ export namespace LB::Engine {
         std::uint32_t enemyId{0};
         Services::Combat::WeaponAttackResult result{};
         bool killed{false};
+        const Content::SpellDefinition* spell{nullptr};   // a spell's hit (its statuses go to the target); null: an attack
     };
 
     /// <summary>

@@ -228,6 +228,7 @@ namespace EngineTests {
         shot.direction = direction;
         shot.speed = speed;
         shot.rangeLeft = range;
+        shot.model = "arrow_bow.gltf";   // an arrow sticks in walls (an orb is spent on them)
         return shot;
     }
 
@@ -287,6 +288,22 @@ namespace EngineTests {
         ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
             .contentDirectory = ShippedContentDirectory(), .spawnEnemies = waves, .randomSeed = CombatSeed }))
             << engine.GetInitializationError();
+    }
+
+    // A mage in the test arena, without waves
+    inline void InitializeMage(GameEngine& engine) {
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+            .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false, .randomSeed = CombatSeed,
+            .playerClass = LB::Character::CharacterClass::Mage }))
+            << engine.GetInitializationError();
+    }
+
+    inline std::int32_t PlayerMana(const GameEngine& engine) {
+        return engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get().GetCurrentManaPoints();
+    }
+
+    inline std::int32_t PlayerMaxMana(const GameEngine& engine) {
+        return engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get().GetMaxManaPoints();
     }
 
     inline std::int32_t PlayerHitPoints(const GameEngine& engine) {

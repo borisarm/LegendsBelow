@@ -25,6 +25,8 @@ import LB.RenderingSystem;
 import :StepTimer;
 import :World;
 import :Encounter;
+import :Projectiles;
+import :Statuses;
 import :Loot;
 import :Particles;
 import :Effects;
@@ -67,6 +69,8 @@ export namespace LB::Engine {
         // Generated dungeon floors (rooms, corridors, a trapdoor to the next floor); off: the
         // placeholder test arena with waves of enemies
         bool dungeon{false};
+        // The hero's class (classes.json): Warrior or Mage are playable; New Game asks
+        LB::Character::CharacterClass playerClass{LB::Character::CharacterClass::Warrior};
     };
 
     /// <summary>
@@ -108,6 +112,11 @@ export namespace LB::Engine {
         static constexpr std::string_view MapAction = "Map";
         static constexpr std::string_view MenuLeftAction = "MenuLeft";
         static constexpr std::string_view MenuRightAction = "MenuRight";
+        // The spell bar's slots (keys 1-4; gamepad LB, RB, Y, B)
+        static constexpr std::array<std::string_view, 4> SpellActions = { "Spell1", "Spell2", "Spell3", "Spell4" };
+        static constexpr std::size_t SpellSlots = SpellActions.size();
+        // A spell's release pose (Ranged_Magic_Shoot) plays this long after it leaves
+        static constexpr float SpellReleaseSeconds = 0.45f;
 
         // Right stick flicks past this deflection rotate (X) or zoom (Y) the camera
         static constexpr float CameraStickThreshold = 0.6f;
@@ -131,6 +140,7 @@ export namespace LB::Engine {
         // The player: the KayKit Adventurers knight on the Rig_Medium (the skeletons' rig and
         // clips), at the enemies' scale, holding the equipped weapon (and shield) in its hand slots
         static constexpr std::string_view PlayerModel = "Knight.glb";
+        static constexpr std::string_view MageModel = "Mage.glb";
         static constexpr float PlayerModelScale = 0.42f;
         // The sword lying on the floor as loot (the knight holds HeldModels)
         static constexpr std::string_view PlayerWeaponModel = "sword_common.glb";
@@ -140,8 +150,8 @@ export namespace LB::Engine {
         static constexpr std::string_view HeldShield = "shield_round.gltf";
         static constexpr std::string_view ArrowModel = "arrow_bow.gltf";
         static constexpr std::string_view BoltModel = "arrow_crossbow.gltf";
-        static constexpr std::array<std::string_view, 10> HeldModels = {
-            HeldSword, "axe_1handed.gltf", "dagger.gltf", "Skeleton_Mace.gltf", "staff.gltf", "bow_withString.gltf",
+        static constexpr std::array<std::string_view, 11> HeldModels = {
+            HeldSword, "axe_1handed.gltf", "dagger.gltf", "Skeleton_Mace.gltf", "staff.gltf", "wand.gltf", "bow_withString.gltf",
             "crossbow_1handed.gltf", HeldShield, ArrowModel, BoltModel };
         // Held like a pistol (see HeldTransform)
         static constexpr std::array<std::string_view, 2> PistolGripModels = { "crossbow_1handed.gltf", "Skeleton_Crossbow.gltf" };
@@ -164,11 +174,13 @@ export namespace LB::Engine {
         static constexpr std::string_view LightEnemy = "enemy_skeleton_minion";
         static constexpr std::string_view HeavyEnemy = "enemy_skeleton_warrior";
         static constexpr std::string_view RangedEnemy = "enemy_skeleton_rogue";
+        static constexpr std::string_view CasterEnemy = "enemy_skeleton_mage";
         static constexpr float PlayerReach = 1.4f;              // tiles between centers
         // A bow or crossbow shot leaves this far through the attack time (drawn, or aimed); the
         // player stands still until then
         static constexpr float ShotReleaseFraction = 0.5f;
-        // In the bag from the start, to switch to on the character screen
+        // The Warrior's starting bag holds this bow (classes.json startingItems), to switch to on the
+        // character screen
         static constexpr std::string_view StartingBow = "weapon_bow_worn_shortbow_t1";
         static constexpr float PlayerRespawnSeconds = 3.0f;     // after going down
 
@@ -537,6 +549,46 @@ export namespace LB::Engine {
         [[nodiscard]] std::int32_t CountItem(std::string_view key) const;
 
         /// <summary>
+        /// The hero's class this run
+        /// </summary>
+        [[nodiscard]] LB::Character::CharacterClass GetPlayerClass() const noexcept { return session_->playerClass; }
+
+        /// <summary>
+        /// The spells on the player's bar (classes.json spellBar), slot by slot; empty for classes
+        /// without spells
+        /// </summary>
+        [[nodiscard]] std::vector<const Content::SpellDefinition*> GetSpellBar() const;
+
+        /// <summary>
+        /// Why the spell in a slot cannot be cast now ("level 5", "mana", "cooldown", ...), or
+        /// empty when it can
+        /// </summary>
+        [[nodiscard]] std::string SpellBlocker(std::size_t slot) const;
+
+        /// <summary>
+        /// Seconds until a slot's spell can be cast again
+        /// </summary>
+        [[nodiscard]] float GetSpellCooldown(std::size_t slot) const noexcept {
+            return slot < SpellSlots ? session_->spellCooldowns[slot] : 0.0f;
+        }
+
+        /// <summary>
+        /// A spell is being cast (the player stands still; moving cancels it)
+        /// </summary>
+        [[nodiscard]] bool IsPlayerCasting() const noexcept { return session_->casting.active; }
+
+        /// <summary>
+        /// Slowed, rooted, burning, ... on the player
+        /// </summary>
+        [[nodiscard]] const StatusSet& GetPlayerStatuses() const noexcept { return session_->playerStatuses; }
+
+        /// <summary>
+        /// The player's spell power (design-character-system.md 4.2): SP_Base + caster modifier x
+        /// level (INT for the Mage, WIS for the Cleric, half INT for the Rogue)
+        /// </summary>
+        [[nodiscard]] std::int32_t GetPlayerSpellPower() const;
+
+        /// <summary>
         /// The weapon the player attacks with
         /// </summary>
         [[nodiscard]] const Content::WeaponDefinition* GetPlayerWeapon() const noexcept { return session_->playerWeapon; }
@@ -664,6 +716,13 @@ export namespace LB::Engine {
         void Update(double elapsedSeconds);
         void UpdateCameraControls();
         void UpdatePlayerCombat(float elapsedSeconds);
+        void UpdatePlayerCasting(float elapsedSeconds);
+        void StartCast(std::size_t slot);
+        void ReleaseCast();
+        void CancelCast();
+        void UpdatePlayerStatuses(float elapsedSeconds);
+        void ApplySpellStatusesToPlayer(const Content::SpellDefinition& spell);
+        const Content::ClassDefinition* PlayerClassDefinition() const;
         void StartPlayerAttack();
         void ReleasePlayerAttack();
         void AnimatePlayer(float elapsedSeconds, bool moving);
@@ -680,6 +739,7 @@ export namespace LB::Engine {
         void DrawPlayer(const Shade& shade);
         void DrawEnemies(const Shade& shade);
         void DrawProjectiles(const Shade& shade);
+        Systems::Rendering::ModelId PlayerBodyModel() const;
         void DrawHud();
         static Systems::Rendering::Color HitTint(const Shade& shade, float flashSeconds);
         float EnemyTop(const Enemy& enemy) const;
@@ -717,11 +777,13 @@ export namespace LB::Engine {
         void PlaySound(GameSound sound, std::optional<WorldPoint> at = std::nullopt);
         void PlayCombatSounds();
         void PlayProjectileSounds();
+        void PlaySpellSounds();
         void UpdateSounds(float elapsedSeconds, bool running);
 
         // When and where effects play (Effects.cpp)
         void EmitCombatEffects();
         void EmitProjectileEffects();
+        void EmitSpellEffects(float elapsedSeconds);
         void EmitHealingEffect();
         void EmitLevelUpEffect();
         void EmitChestEffect(WorldPoint chest);
@@ -776,7 +838,8 @@ export namespace LB::Engine {
             Systems::Rendering::ModelId floorVariant{};
             Systems::Rendering::ModelId wall{};
             Systems::Rendering::ModelId corner{};
-            Systems::Rendering::ModelId player{};
+            Systems::Rendering::ModelId player{};           // the knight (Warrior)
+            Systems::Rendering::ModelId mage{};
             Systems::Rendering::ModelId playerWeapon{};
         };
 
@@ -801,6 +864,8 @@ export namespace LB::Engine {
             ClipInfo shoot;         // a crossbow
             ClipInfo hit;
             ClipInfo death;
+            ClipInfo castLoop;      // a spell being cast
+            ClipInfo castRelease;   // the spell leaving (and a wand's shot)
         };
 
         struct Assets {
@@ -830,13 +895,28 @@ export namespace LB::Engine {
         /// its floor, enemies, loot, effects, and the clock. Shutdown replaces it with a fresh one,
         /// so state added later cannot leak from one run into the next.
         /// </summary>
+        // The spell the player is casting (design-spells-system.md 4.2-4.3)
+        struct PlayerCasting {
+            bool active{false};
+            std::size_t slot{0};
+            const Content::SpellDefinition* spell{nullptr};   // into content_, which outlives the session
+            float seconds{0.0f};
+            std::optional<std::uint32_t> target;
+            float releaseSeconds{0.0f};                       // the release pose still playing
+        };
+
         struct Session {
             Services::Character::CharacterService characterService;
             std::optional<LB::Character::CharacterId> playerId;
+            LB::Character::CharacterClass playerClass{LB::Character::CharacterClass::Warrior};
             WorldPoint playerPosition{};
             float playerFacingYaw{0.0f};             // radians around the vertical axis; 0 faces +Z (south)
             PlayerCombat playerCombat;
             Animator playerAnimator;
+            PlayerCasting casting;
+            std::array<float, SpellSlots> spellCooldowns{};
+            float manaCarry{0.0f};                   // regenerated mana not yet a whole point
+            StatusSet playerStatuses;
             const Content::WeaponDefinition* playerWeapon{nullptr};   // into content_, which outlives the session
             Services::Inventory::InventoryService inventoryService;
             std::int32_t gold{0};
