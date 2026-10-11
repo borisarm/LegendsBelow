@@ -1,7 +1,9 @@
 // RenderingSystem.cpp - LB.RenderingSystem implementation unit (Direct3D 12 backend wiring)
 module LB.RenderingSystem;
 
-import :DeviceResources;
+import :GpuRenderer;
+import :ModelPipeline;
+import :OverlayPipeline;
 import std;
 
 namespace LB::Systems::Rendering {

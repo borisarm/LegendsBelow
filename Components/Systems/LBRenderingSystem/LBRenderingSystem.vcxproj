@@ -166,6 +166,24 @@
     <ClCompile Include="DeviceResources.cpp">
       <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
     </ClCompile>
+    <ClCompile Include="GpuResources.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
+    <ClCompile Include="ModelPipeline.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
+    <ClCompile Include="PrimitivePipeline.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
+    <ClCompile Include="OverlayPipeline.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
+    <ClCompile Include="ParticlePipeline.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
+    <ClCompile Include="GpuRenderer.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
     <ClCompile Include="LB.RenderingSystem.ixx" />
     <ClCompile Include="RenderingSystem.cpp" />
     <!-- Plain C++ (not a module unit): includes the shader headers FXCompile writes to $(IntDir),
@@ -205,6 +223,7 @@
       <ShaderType>Pixel</ShaderType>
     </FxCompile>
     <ClInclude Include="ShaderBytecode.h" />
+    <ClInclude Include="Direct3D.h" />
   </ItemGroup>
   <ItemDefinitionGroup>
     <FxCompile>

@@ -147,6 +147,15 @@
     <ClCompile Include="Effects.cpp" />
     <ClCompile Include="Loot.ixx" />
     <ClCompile Include="Particles.ixx" />
+    <ClCompile Include="Effects.ixx" />
+    <ClCompile Include="Walls.ixx" />
+    <ClCompile Include="Torches.ixx" />
+    <ClCompile Include="Minimap.ixx" />
+    <ClCompile Include="CombatText.ixx" />
+    <ClCompile Include="Hud.ixx" />
+    <ClCompile Include="EngineSetup.cpp" />
+    <ClCompile Include="Simulation.cpp" />
+    <ClCompile Include="WorldView.cpp" />
     <ClCompile Include="CharacterScreen.ixx" />
     <ClCompile Include="PlayerProgress.cpp" />
     <ClCompile Include="GameEngine.ixx" />

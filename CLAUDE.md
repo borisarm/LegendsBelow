@@ -1,0 +1,58 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+LegendsBelow is an isometric, D&D-inspired dungeon crawler (real-time with tactical pause) for Xbox and Windows: C++20 modules, DirectX 12 via DirectXTK12, Microsoft GDK, MSVC/MSBuild only.
+
+## Build and test
+
+Visual Studio 2022 17.14+ (`.slnx` support), the GDK, and vcpkg with VS integration are required. vcpkg dependencies come from the root `vcpkg.json` and install on first build (`Directory.Build.targets` forces the install before C++ module dependency scanning, otherwise a fresh clone fails to find vcpkg headers). On this machine MSBuild is at `C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe`.
+
+```powershell
+# Restore GoogleTest NuGet packages for the test projects (packages.config)
+msbuild LegendsBelow.slnx -t:restore -p:RestorePackagesConfig=true
+
+# Build everything (only x64 Debug/Release are tested; Profile maps to Release for libraries)
+msbuild LegendsBelow.slnx -p:Configuration=Debug -p:Platform=x64 -m
+
+# Build one project (and its references)
+msbuild Components/LBEngineCore/LBEngineCore.vcxproj -p:Configuration=Debug -p:Platform=x64
+
+# Run a test project, or a single test, from the repo root
+x64\Debug\LBEngineTests.exe
+x64\Debug\LBEngineTests.exe --gtest_filter=GameEngineTests.Initialize_Headless_Succeeds
+```
+
+Every component has its own GoogleTest executable in `x64/<Config>/` (`LBEngineTests`, `LBCombatServiceTests`, `LBModel.Core.Tests`, ...). Engine tests locate the shipped `Assets/Data`, `Assets/Models`, and `Assets/Fonts` by walking up from the current directory, so run them from inside the repo. Test projects use headers and `pch.h`, not modules.
+
+## Architecture
+
+Layers (see `Documentation/architecture.md`, the source of truth, including known deviations):
+
+```
+LegendsBelow (Win32/GDK shell, Main.cpp)   imports LB.Engine only
+LBEngineCore (LB.Engine)                   the only place that composes Systems + Services
+Systems  (Rendering, Input, Audio, Asset, Persistence)   LB.Core only, no domain knowledge
+Services (Character, Combat, Inventory, Progression, Dungeon, AssetPersistence/Content)   LB.Core + domain
+Model    (LB.Core, LB.Character, LB.Combat, LB.Inventory, LB.Dungeon)
+```
+
+- **Shell**: `LegendsBelow/Main.cpp` owns the window and message loop and forwards input/window events to `LB::Engine::GameEngine`. No game code goes here.
+- **Engine** (`Components/LBEngineCore`): `LB.Engine.ixx` re-exports `LB.InputSystem`, `LB.RenderingSystem`, and partitions (`:World` collision/LOS/flow field, `:Encounter` enemies and AI, `:Loot`, `:Particles`/`:Effects` (simulation / `EffectsSystem` recipes), `:Walls`, `:Torches`, `:Minimap`, `:CombatText`, `:Hud`, `:CharacterScreen`, `:GameEngine`). `GameEngine` is declared in `GameEngine.ixx`; its members are implemented across `module LB.Engine;` implementation units split by concern: `EngineSetup.cpp` (init, content/models/fonts, save/load), `Simulation.cpp` (one fixed step), `WorldView.cpp` (render queues), `DungeonFloor.cpp`, `PlayerProgress.cpp`, `Effects.cpp`. All per-run state lives in `GameEngine::Session session_`; `Shutdown` replaces it wholesale, so new run state belongs in `Session` (loaded model handles in `Assets`). Self-contained features go in their own partition owning their state (like `TorchSet`, `Minimap`, `Hud` drawn from a `HudModel` snapshot), with `GameEngine` only coordinating; public tunables stay reachable as `GameEngine::` aliases.
+- **Loop**: `StepTimer` drives Tick → Update (fixed 60 Hz) → Render. Each step reads input and then calls `InputSystem::Update()`, which ends the input frame (clears transitions); query input before it. The tactical pause stops the simulation and game clock but not the loop (camera, fire, sparkles keep animating).
+- **Headless**: `Initialize(nullptr, ...)` runs without a device; tests drive the engine this way with `EngineOptions` (`contentDirectory`, `modelDirectory`, `fontDirectory`, `spawnEnemies`, `randomSeed`, `dungeon`). Without `dungeon` the game is the single-room test arena with enemy waves.
+- **Rendering** (`Components/Systems/LBRenderingSystem`): a draw-command API (`DrawModel`, `DrawMesh`, `DrawParticle`, `DrawLight`, `DrawRectangle`, `DrawText`) queued per frame and inspectable via `GetQueued*` in tests. D3D12 and DirectXTK12 types stay inside internal partitions (`.cpp` files that include `Direct3D.h` in their global module fragment): `:DeviceResources` (GDK device/swap chain template), `:GpuResources` (upload memory, texture heap, built-in textures, one-off command lists), `:ModelPipeline`, `:PrimitivePipeline`, `:OverlayPipeline`, `:ParticlePipeline`, and `:GpuRenderer`, the façade `RenderingSystem.cpp` drives. A new GPU feature gets its own pipeline partition composed by `GpuRenderer`. GameInput types stay inside `LB.InputSystem:GameInputBackend`. Native handles cross module boundaries as opaque `void*`. HLSL in `Shaders/` is compiled at build time by FXCompile.
+- **Content** is data-driven: `Assets/Data/*.json` loaded strictly by `LB.Content` (`ContentLoader.cpp`) at startup; any error stops startup with the full list. The build copies `Assets` next to the executable. Models are KayKit glTF (CC0) loaded with fastgltf.
+- Repository abstractions use Microsoft Proxy (duck-typed facades), not virtual inheritance.
+
+## Conventions
+
+The detailed rules and an error-to-fix table are in `.github/copilot-instructions.md`. The ones that most often break the build:
+
+- Everything except LBGameEditor and test projects is a C++20 module (`.ixx`, module names `LB.Xxx`). Module projects have no precompiled headers.
+- Partition files: `export module LB.Engine:Name;`, import siblings as `import :Name;`, re-export from the primary interface. Internal (non-exported) partitions must be `.cpp` files with `<CompileAs>CompileAsCppModuleInternalPartition</CompileAs>` (else C7622). New files must be added to the `.vcxproj` (and `.filters`).
+- Import `LB.Core`, not `LB.Common`. There is no `LB::Domain` namespace; use `LB::Character`, `LB::Combat`, `LB::Inventory`, `LB::Dungeon`. Never redefine domain types in services; `using` them.
+- Projects importing module libraries must match their `SDLCheck`, `FloatingPointModel`, and `ControlFlowGuard` settings (else C5050). Test projects reference both the component and `LBModel.Core`.
+- Gameplay rules follow `Documentation/design-*.md`; cite the section in comments for non-obvious formulas, and keep tunables in data files.
+- File headers are a one-line `// File.ixx - what it is` comment; types and public members get `/// <summary>` doc comments.
+- User-visible changes are recorded in `CHANGELOG.md` under `[Unreleased]` (detailed, naming the new APIs), and `README-LegendsBelow.md` / `Documentation/architecture.md` status tables are kept current.

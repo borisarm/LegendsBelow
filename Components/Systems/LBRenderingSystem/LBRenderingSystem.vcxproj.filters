@@ -16,6 +16,12 @@
     <ClCompile Include="Camera.ixx" />
     <ClCompile Include="LB.RenderingSystem.ixx" />
     <ClCompile Include="DeviceResources.cpp" />
+    <ClCompile Include="GpuResources.cpp" />
+    <ClCompile Include="ModelPipeline.cpp" />
+    <ClCompile Include="PrimitivePipeline.cpp" />
+    <ClCompile Include="OverlayPipeline.cpp" />
+    <ClCompile Include="ParticlePipeline.cpp" />
+    <ClCompile Include="GpuRenderer.cpp" />
     <ClCompile Include="RenderingSystem.cpp" />
   </ItemGroup>
 </Project>
