@@ -22,5 +22,6 @@ export import :Torches;
 export import :Minimap;
 export import :CombatText;
 export import :Hud;
+export import :Sounds;
 export import :CharacterScreen;
 export import :GameEngine;

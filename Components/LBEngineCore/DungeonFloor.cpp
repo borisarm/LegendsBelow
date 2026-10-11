@@ -91,6 +91,7 @@ namespace LB::Engine {
 
     void GameEngine::Descend() {
         if (!session_->dungeonMode || !session_->playerId) return;
+        PlaySound(GameSound::Descend);
         StartFloor(session_->depth + 1);
         session_->characterService.RestCharacter(*session_->playerId);   // a breather on the stairs down
         session_->combatText.Clear();
@@ -149,6 +150,7 @@ namespace LB::Engine {
             if (Encounter::Distance(chest, session_->playerPosition) <= InteractRadius) {
                 session_->rooms[i].chestOpened = true;
                 EmitChestEffect(chest);
+                PlaySound(GameSound::ChestOpen, chest);
                 DropLoot(ChestLootTable, chest);
             }
         }

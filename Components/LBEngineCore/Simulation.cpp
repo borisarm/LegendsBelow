@@ -54,6 +54,7 @@ namespace LB::Engine {
             UpdateGroundItems(static_cast<float>(elapsedSeconds));
             UpdateCombatTexts(static_cast<float>(elapsedSeconds));
             EmitCombatEffects();
+            PlayCombatSounds();
         }
 
         if (session_->playerId) {
@@ -65,6 +66,7 @@ namespace LB::Engine {
 
         // Fire keeps burning during the pause and on the character screen: it is only a look
         UpdateEffects(static_cast<float>(elapsedSeconds), running);
+        UpdateSounds(static_cast<float>(elapsedSeconds), running);
 
         // This step has consumed the input frame; presses are seen by exactly one step
         inputSystem_.Update();
@@ -122,6 +124,7 @@ namespace LB::Engine {
         if (!session_->playerCombat.swinging && (inputSystem_.IsActionTriggered(attack) || inputSystem_.IsActionDown(attack))) {
             session_->playerCombat.swinging = true;
             session_->playerCombat.swingSeconds = 0.0f;
+            PlaySound(GameSound::Swing, session_->playerPosition);
             session_->playerCombat.impactDone = false;
             session_->playerCombat.target = session_->encounter.FindTarget(session_->playerPosition, PlayerReach);
             if (const auto* target = session_->playerCombat.target ? session_->encounter.FindEnemy(*session_->playerCombat.target) : nullptr) {

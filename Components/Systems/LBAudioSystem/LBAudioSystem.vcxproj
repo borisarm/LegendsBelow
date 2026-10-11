@@ -24,6 +24,9 @@
     <ProjectGuid>{280d6694-757a-485e-b410-9b4a4301aac8}</ProjectGuid>
     <RootNamespace>LBAudioSystem</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgTriplet>x64-windows</VcpkgTriplet>
+    <VcpkgHostTriplet>x64-windows</VcpkgHostTriplet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -141,6 +144,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AudioSystem.cpp" />
+    <!-- stb_vorbis.c is compiled into this unit: its code generation warnings (possibly
+         uninitialized locals) come after the #pragma warning region, so they are off here -->
+    <ClCompile Include="VorbisDecoder.cpp">
+      <DisableSpecificWarnings>4701;4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
     <ClCompile Include="XAudio2Backend.cpp">
       <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
     </ClCompile>

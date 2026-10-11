@@ -6,8 +6,9 @@ import std;
 
 /// <summary>
 /// Audio system for LegendsBelow
-/// Handles sound effects, music playback, and audio mixing
-/// Supports spatial audio and volume control
+/// Loads sound clips (Ogg Vorbis), plays them on mixing channels with volume and stereo pan,
+/// and outputs through XAudio2 when a device is open. Without a device every source is still
+/// tracked and ends when its clip would (headless tools and tests behave the same).
 /// </summary>
 export namespace LB::Systems::Audio {
     using LB::String;
@@ -38,21 +39,55 @@ export namespace LB::Systems::Audio {
     using AudioSourceId = std::int32_t;
 
     /// <summary>
-    /// Audio clip information
+    /// A decoded sound: interleaved 16-bit PCM
+    /// </summary>
+    struct AudioClip {
+        std::uint32_t channels{1};
+        std::uint32_t sampleRate{44100};
+        std::vector<std::int16_t> samples;   // frames x channels
+
+        [[nodiscard]] float DurationSeconds() const noexcept {
+            const auto frames = channels > 0 ? samples.size() / channels : 0;
+            return sampleRate > 0 ? static_cast<float>(frames) / static_cast<float>(sampleRate) : 0.0f;
+        }
+    };
+
+    /// <summary>
+    /// Result of loading a clip: empty error on success
+    /// </summary>
+    struct ClipLoadResult {
+        std::string error;
+        [[nodiscard]] bool Succeeded() const noexcept { return error.empty(); }
+    };
+
+    /// <summary>
+    /// A playing (or paused) sound
     /// </summary>
     struct AudioClipInfo {
         String clipId;
         AudioChannel channel{AudioChannel::SoundEffects};
         float volume{1.0f};
+        float pan{0.0f};                     // -1 left .. 1 right
         bool looping{false};
         PlaybackState state{PlaybackState::Stopped};
+        float elapsedSeconds{0.0f};
+        float durationSeconds{0.0f};         // 0: no clip loaded under that name (silent)
+        bool onDevice{false};                // a device voice is playing it (heard)
     };
+
+    namespace Detail {
+        // Decode an Ogg Vorbis file in memory (VorbisDecoder.cpp)
+        std::optional<AudioClip> DecodeOggVorbis(std::span<const std::byte> encoded, std::string& error);
+    }
 
     /// <summary>
     /// Audio system for managing sound playback
     /// </summary>
     class AudioSystem {
     public:
+        // Sounds playing at once; past it the oldest non-looping sound makes room
+        static constexpr std::size_t MaxSources = 48;
+
         AudioSystem();
         ~AudioSystem();
 
@@ -71,12 +106,13 @@ export namespace LB::Systems::Audio {
             channelVolumes_[AudioChannel::SoundEffects] = 1.0f;
             channelVolumes_[AudioChannel::Ambient] = 0.5f;
             channelVolumes_[AudioChannel::Voice] = 1.0f;
+            ApplyDeviceVolumes();
 
             return true;
         }
 
         /// <summary>
-        /// Shutdown the audio system
+        /// Shutdown the audio system (loaded clips are kept for the next Initialize)
         /// </summary>
         void Shutdown() {
             StopAll();
@@ -118,78 +154,60 @@ export namespace LB::Systems::Audio {
         }
 
         /// <summary>
-        /// Play a sound effect
+        /// Decode an Ogg Vorbis file and keep it under a name for PlaySound. Loading a name again
+        /// replaces the clip.
         /// </summary>
-        AudioSourceId PlaySound(const String& clipId, AudioChannel channel = AudioChannel::SoundEffects, float volume = 1.0f, bool looping = false) {
-            if (!initialized_) return -1;
+        ClipLoadResult LoadClip(const String& clipId, const std::filesystem::path& path);
 
-            AudioSourceId sourceId = nextSourceId_++;
-
-            AudioClipInfo info{};
-            info.clipId = clipId;
-            info.channel = channel;
-            info.volume = volume;
-            info.looping = looping;
-            info.state = PlaybackState::Playing;
-
-            activeSources_[sourceId] = info;
-
-            // TODO: Implement actual audio playback
-            return sourceId;
+        /// <summary>
+        /// Keep an already decoded clip under a name (generated sounds, tests)
+        /// </summary>
+        void AddClip(const String& clipId, AudioClip clip) {
+            clips_[clipId] = std::make_shared<const AudioClip>(std::move(clip));
         }
+
+        [[nodiscard]] const AudioClip* FindClip(std::string_view clipId) const {
+            const auto it = clips_.find(clipId);
+            return it != clips_.end() ? it->second.get() : nullptr;
+        }
+
+        /// <summary>
+        /// Play a clip on a channel at a volume and stereo pan (-1 left, 1 right). A name with no
+        /// clip loaded plays silently and ends at the next Update.
+        /// </summary>
+        AudioSourceId PlaySound(const String& clipId, AudioChannel channel = AudioChannel::SoundEffects, float volume = 1.0f, bool looping = false, float pan = 0.0f);
 
         /// <summary>
         /// Stop a playing audio source
         /// </summary>
-        bool Stop(AudioSourceId sourceId) {
-            auto it = activeSources_.find(sourceId);
-            if (it == activeSources_.end()) return false;
-
-            it->second.state = PlaybackState::Stopped;
-            activeSources_.erase(it);
-            return true;
-        }
+        bool Stop(AudioSourceId sourceId);
 
         /// <summary>
         /// Pause a playing audio source
         /// </summary>
-        bool Pause(AudioSourceId sourceId) {
-            auto it = activeSources_.find(sourceId);
-            if (it == activeSources_.end()) return false;
-
-            it->second.state = PlaybackState::Paused;
-            return true;
-        }
+        bool Pause(AudioSourceId sourceId);
 
         /// <summary>
         /// Resume a paused audio source
         /// </summary>
-        bool Resume(AudioSourceId sourceId) {
-            auto it = activeSources_.find(sourceId);
-            if (it == activeSources_.end()) return false;
-
-            if (it->second.state == PlaybackState::Paused) {
-                it->second.state = PlaybackState::Playing;
-                return true;
-            }
-            return false;
-        }
+        bool Resume(AudioSourceId sourceId);
 
         /// <summary>
         /// Stop all audio sources
         /// </summary>
-        void StopAll() {
-            activeSources_.clear();
-        }
+        void StopAll();
+
+        /// <summary>
+        /// Advance playback: sounds that reached their clip's end are stopped and removed
+        /// </summary>
+        void Update(float elapsedSeconds);
 
         /// <summary>
         /// Set channel volume (0.0 to 1.0)
         /// </summary>
         void SetChannelVolume(AudioChannel channel, float volume) {
             channelVolumes_[channel] = std::clamp(volume, 0.0f, 1.0f);
-            if (channel == AudioChannel::Master) {
-                ApplyDeviceMasterVolume();
-            }
+            ApplyDeviceVolumes();
         }
 
         /// <summary>
@@ -218,24 +236,12 @@ export namespace LB::Systems::Audio {
         /// <summary>
         /// Pause every playing source on a channel (e.g. sound effects during the tactical pause)
         /// </summary>
-        void PauseChannel(AudioChannel channel) {
-            for (auto& [id, source] : activeSources_) {
-                if (source.channel == channel && source.state == PlaybackState::Playing) {
-                    source.state = PlaybackState::Paused;
-                }
-            }
-        }
+        void PauseChannel(AudioChannel channel);
 
         /// <summary>
         /// Resume every paused source on a channel
         /// </summary>
-        void ResumeChannel(AudioChannel channel) {
-            for (auto& [id, source] : activeSources_) {
-                if (source.channel == channel && source.state == PlaybackState::Paused) {
-                    source.state = PlaybackState::Playing;
-                }
-            }
-        }
+        void ResumeChannel(AudioChannel channel);
 
         /// <summary>
         /// Volume a source is heard at: master x channel x source volume (0 if not active)
@@ -244,8 +250,8 @@ export namespace LB::Systems::Audio {
             auto it = activeSources_.find(sourceId);
             if (it == activeSources_.end()) return 0.0f;
 
-            const float channelVolume = it->second.channel == AudioChannel::Master ? 1.0f : GetChannelVolume(it->second.channel);
-            return GetMasterVolume() * channelVolume * it->second.volume;
+            const float channelVolume = it->second.info.channel == AudioChannel::Master ? 1.0f : GetChannelVolume(it->second.info.channel);
+            return GetMasterVolume() * channelVolume * it->second.info.volume;
         }
 
         /// <summary>
@@ -254,7 +260,22 @@ export namespace LB::Systems::Audio {
         bool IsPlaying(AudioSourceId sourceId) const {
             auto it = activeSources_.find(sourceId);
             if (it == activeSources_.end()) return false;
-            return it->second.state == PlaybackState::Playing;
+            return it->second.info.state == PlaybackState::Playing;
+        }
+
+        /// <summary>
+        /// A source's state and settings, if it is active
+        /// </summary>
+        [[nodiscard]] const AudioClipInfo* GetSource(AudioSourceId sourceId) const {
+            auto it = activeSources_.find(sourceId);
+            return it != activeSources_.end() ? &it->second.info : nullptr;
+        }
+
+        /// <summary>
+        /// The clips started since the last call (oldest first): what the game asked to hear
+        /// </summary>
+        std::vector<String> TakePlayedClips() {
+            return std::exchange(playedClips_, {});
         }
 
         /// <summary>
@@ -272,7 +293,22 @@ export namespace LB::Systems::Audio {
         }
 
     private:
-        void ApplyDeviceMasterVolume();
+        struct StringHash {
+            using is_transparent = void;
+            [[nodiscard]] std::size_t operator()(std::string_view text) const noexcept { return std::hash<std::string_view>{}(text); }
+        };
+
+        // An active source: its settings, the clip it plays (kept alive while the device reads
+        // it), and the device voice (0 without a device)
+        struct Source {
+            AudioClipInfo info;
+            std::shared_ptr<const AudioClip> clip;
+            std::uint32_t voice{0};
+            std::uint64_t order{0};          // start order, for making room
+        };
+
+        void ApplyDeviceVolumes();
+        void ReleaseVoice(Source& source);
 
         // Platform output device (XAudio2), defined in AudioSystem.cpp; null when disabled
         struct DeviceBackend;
@@ -281,8 +317,11 @@ export namespace LB::Systems::Audio {
         bool suspended_{false};
         bool initialized_{false};
         AudioSourceId nextSourceId_{1};
-        std::unordered_map<AudioSourceId, AudioClipInfo> activeSources_;
+        std::uint64_t nextOrder_{1};
+        std::unordered_map<AudioSourceId, Source> activeSources_;
         std::unordered_map<AudioChannel, float> channelVolumes_;
+        std::unordered_map<std::string, std::shared_ptr<const AudioClip>, StringHash, std::equal_to<>> clips_;
+        std::vector<String> playedClips_;
     };
 
 } // namespace LB::Systems::Audio

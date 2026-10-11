@@ -34,7 +34,7 @@ namespace LB::Engine {
             return false;
         }
 
-        if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory)) {
+        if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory) || !LoadSounds(options.soundDirectory)) {
             renderingSystem_.Shutdown();
             return false;
         }

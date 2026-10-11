@@ -180,6 +180,7 @@ namespace LB::Engine {
             const auto healed = session_->characterService.HealCharacter(*session_->playerId, session_->lootRoller.RollDice(consumable->healing));
             session_->combatText.Add(std::format("+{}", healed), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.45f, 0.95f, 0.45f, 1.0f }, 3.0f);
             EmitHealingEffect();
+            PlaySound(GameSound::Potion, session_->playerPosition);
         }
         return true;
     }
@@ -202,6 +203,7 @@ namespace LB::Engine {
             if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, enemy.experience); progress && progress->levelIncreased) {
                 session_->combatText.Add("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
                 EmitLevelUpEffect();
+                PlaySound(GameSound::LevelUp, session_->playerPosition);
             }
         }
         if (!enemy.definition->lootTable.empty()) {
@@ -233,17 +235,20 @@ namespace LB::Engine {
             if (ground.IsGold()) {
                 session_->gold += ground.quantity;
                 session_->combatText.Add(std::format("+{} GOLD", ground.quantity), at, { 0.95f, 0.80f, 0.35f, 1.0f }, 2.0f);
+                PlaySound(GameSound::Gold, ground.position);
                 return true;
             }
 
             const auto [name, key] = DescribeItem(*content_, ground.item);
             if (GiveItem(key, ground.quantity) == ground.quantity) {
                 session_->combatText.Add(name, at, { 1.0f, 1.0f, 1.0f, 1.0f }, 2.0f);
+                PlaySound(GameSound::ItemPickup, ground.position);
                 return true;
             }
             if (!ground.fullWarningShown) {
                 ground.fullWarningShown = true;
                 session_->combatText.Add("BAG FULL", at, { 0.95f, 0.45f, 0.40f, 1.0f }, 2.0f);
+                PlaySound(GameSound::BagFull, ground.position);
             }
             return false;
         });
@@ -337,23 +342,33 @@ namespace LB::Engine {
             if (triggered(CharacterScreenAction)) {
                 session_->characterScreen.Open();
                 session_->characterScreen.SetRows(BuildScreenRows());
+                PlaySound(GameSound::ScreenOpen);
             }
             return;
         }
 
         if (triggered(CharacterScreenAction) || triggered(MenuBackAction)) {
             session_->characterScreen.Close();
+            PlaySound(GameSound::ScreenClose);
             return;
         }
 
         session_->characterScreen.SetRows(BuildScreenRows());
-        if (triggered(MenuUpAction)) session_->characterScreen.Step(-1);
-        if (triggered(MenuDownAction)) session_->characterScreen.Step(+1);
+        if (triggered(MenuUpAction)) {
+            session_->characterScreen.Step(-1);
+            PlaySound(GameSound::MenuMove);
+        }
+        if (triggered(MenuDownAction)) {
+            session_->characterScreen.Step(+1);
+            PlaySound(GameSound::MenuMove);
+        }
         if (!triggered(MenuConfirmAction)) return;
 
         const auto* row = session_->characterScreen.Selected();
         if (!row || !row->enabled) return;
         const auto key = DescribeItem(*content_, row->item).second;
+        if (row->action == ScreenAction::Equip || row->action == ScreenAction::Unequip) PlaySound(GameSound::Equip);
+        else if (row->action != ScreenAction::None && row->action != ScreenAction::Use) PlaySound(GameSound::MenuConfirm);
         switch (row->action) {
         case ScreenAction::SpendPoint: session_->characterService.SpendAttributePoint(*session_->playerId, row->attribute); break;
         case ScreenAction::Equip: EquipItem(key); break;

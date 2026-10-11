@@ -33,6 +33,7 @@ import :Torches;
 import :Minimap;
 import :CombatText;
 import :Hud;
+import :Sounds;
 import :CharacterScreen;
 
 export namespace LB::Engine {
@@ -49,6 +50,8 @@ export namespace LB::Engine {
         std::string modelDirectory;
         // TrueType fonts for text (UiFont); empty draws text in the built-in pixel font
         std::string fontDirectory;
+        // Sound effects (SoundBank's .ogg clips); empty: the game is silent
+        std::string soundDirectory;
         // Waves of enemies from enemies.json fight the player (needs content with a player)
         bool spawnEnemies{true};
         // Fixed seed for dice, spawn points, and dungeon floors (tests, replays); empty: random
@@ -624,6 +627,12 @@ export namespace LB::Engine {
         void WriteFloor(Systems::Persistence::SaveData& data) const;
         void ReadFloor(const Systems::Persistence::SaveData& data);
 
+        // Sounds (GameSounds.cpp): `at` places a sound in the world (heard from the player)
+        bool LoadSounds(const std::string& soundDirectory);
+        void PlaySound(GameSound sound, std::optional<WorldPoint> at = std::nullopt);
+        void PlayCombatSounds();
+        void UpdateSounds(float elapsedSeconds, bool running);
+
         // When and where effects play (Effects.cpp)
         void EmitCombatEffects();
         void EmitHealingEffect();
@@ -695,6 +704,7 @@ export namespace LB::Engine {
             WorldModels models;
             std::unordered_map<std::string, Systems::Rendering::ModelId, StringHash, std::equal_to<>> characterModels;   // enemy bodies, weapons, props by file
             EnemyClips enemyClips{};
+            bool soundsLoaded{false};
         };
 
         // The player's side of combat
@@ -741,6 +751,10 @@ export namespace LB::Engine {
             Minimap minimap;
 
             EffectsSystem effects;
+            SoundBank sounds;
+            WorldPoint soundPlayerPosition{};        // where the player was last step (footsteps)
+            float strideTiles{0.0f};                 // walked since the last footstep
+            std::unordered_map<std::uint32_t, EnemyState> enemyStatesHeard;   // last step's, for state sounds
             WorldPoint effectsPlayerPosition{};      // where the player was last step (footstep dust)
 
             Systems::Rendering::IsometricCamera camera;

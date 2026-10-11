@@ -326,3 +326,166 @@ TEST(AudioSystemTests, SetMasterVolume_WithoutDevice_StillTracked) {
 
     EXPECT_FLOAT_EQ(system.GetMasterVolume(), 0.3f);
 }
+
+// ============================================================================
+// Clip Loading and Playback Tests
+// ============================================================================
+
+namespace {
+    // Assets/Sounds of the repository, found by walking up from the working directory
+    std::filesystem::path ShippedSound(const char* file) {
+        for (auto directory = std::filesystem::current_path(); !directory.empty(); directory = directory.parent_path()) {
+            const auto candidate = directory / "Assets" / "Sounds" / file;
+            if (std::filesystem::exists(candidate)) return candidate;
+            if (directory == directory.parent_path()) break;
+        }
+        return {};
+    }
+
+    // A clip of `seconds` of silence (mono, 1 kHz) without a file
+    AudioClip SilentClip(float seconds) {
+        AudioClip clip;
+        clip.channels = 1;
+        clip.sampleRate = 1000;
+        clip.samples.assign(static_cast<std::size_t>(seconds * 1000.0f), 0);
+        return clip;
+    }
+}
+
+TEST(AudioClipTests, LoadClip_ShippedOgg_DecodesToPcm) {
+    AudioSystem system;
+    const auto path = ShippedSound("knifeSlice.ogg");
+    ASSERT_FALSE(path.empty());
+
+    const auto result = system.LoadClip("swing", path);
+
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    const auto* clip = system.FindClip("swing");
+    ASSERT_NE(clip, nullptr);
+    EXPECT_GE(clip->channels, 1u);
+    EXPECT_LE(clip->channels, 2u);
+    EXPECT_GT(clip->sampleRate, 8000u);
+    EXPECT_GT(clip->DurationSeconds(), 0.05f);
+    EXPECT_LT(clip->DurationSeconds(), 5.0f);
+}
+
+TEST(AudioClipTests, LoadClip_MissingOrInvalid_ReportsTheFile) {
+    AudioSystem system;
+    const auto missing = system.LoadClip("nope", "Z:/no/such/sound.ogg");
+    EXPECT_FALSE(missing.Succeeded());
+    EXPECT_NE(missing.error.find("sound.ogg"), std::string::npos);
+
+    const auto notOgg = ShippedSound("LICENSE-Kenney-RPGAudio.txt");
+    ASSERT_FALSE(notOgg.empty());
+    EXPECT_FALSE(system.LoadClip("text", notOgg).Succeeded());
+    EXPECT_EQ(system.FindClip("text"), nullptr);
+}
+
+TEST(AudioPlaybackTests, Sound_EndsWhenItsClipDoes) {
+    AudioSystem system;
+    system.Initialize();
+    system.AddClip("beep", SilentClip(0.5f));
+    const auto id = system.PlaySound("beep");
+
+    system.Update(0.3f);
+    EXPECT_TRUE(system.IsPlaying(id));
+    system.Update(0.3f);
+    EXPECT_FALSE(system.IsPlaying(id));
+    EXPECT_EQ(system.GetActiveSourceCount(), 0u);
+}
+
+TEST(AudioPlaybackTests, Looping_And_Paused_KeepGoing) {
+    AudioSystem system;
+    system.Initialize();
+    system.AddClip("beep", SilentClip(0.5f));
+    const auto loop = system.PlaySound("beep", AudioChannel::Ambient, 1.0f, true);
+    const auto paused = system.PlaySound("beep");
+    system.Pause(paused);
+
+    system.Update(5.0f);
+
+    EXPECT_TRUE(system.IsPlaying(loop));
+    ASSERT_NE(system.GetSource(paused), nullptr);
+    EXPECT_FLOAT_EQ(system.GetSource(paused)->elapsedSeconds, 0.0f);   // paused time does not count
+}
+
+TEST(AudioPlaybackTests, UnknownClip_SilentAndGoneAtTheNextUpdate) {
+    AudioSystem system;
+    system.Initialize();
+    const auto id = system.PlaySound("never_loaded");
+    EXPECT_TRUE(system.IsPlaying(id));
+
+    system.Update(0.01f);
+
+    EXPECT_FALSE(system.IsPlaying(id));
+}
+
+TEST(AudioPlaybackTests, PanAndVolume_Clamped) {
+    AudioSystem system;
+    system.Initialize();
+    system.AddClip("beep", SilentClip(1.0f));
+    const auto id = system.PlaySound("beep", AudioChannel::SoundEffects, 3.0f, false, -7.0f);
+
+    ASSERT_NE(system.GetSource(id), nullptr);
+    EXPECT_FLOAT_EQ(system.GetSource(id)->volume, 1.0f);
+    EXPECT_FLOAT_EQ(system.GetSource(id)->pan, -1.0f);
+}
+
+TEST(AudioPlaybackTests, TooManySounds_OldestMakesRoom_LoopsStay) {
+    AudioSystem system;
+    system.Initialize();
+    system.AddClip("beep", SilentClip(10.0f));
+    const auto loop = system.PlaySound("beep", AudioChannel::Ambient, 1.0f, true);
+    const auto first = system.PlaySound("beep");
+    for (std::size_t i = 0; i < AudioSystem::MaxSources; ++i) system.PlaySound("beep");
+
+    EXPECT_EQ(system.GetActiveSourceCount(), AudioSystem::MaxSources);
+    EXPECT_TRUE(system.IsPlaying(loop));
+    EXPECT_FALSE(system.IsPlaying(first));
+}
+
+TEST(AudioPlaybackTests, PlayedClips_RecordedInOrder) {
+    AudioSystem system;
+    system.Initialize();
+    system.PlaySound("a");
+    system.PlaySound("b");
+
+    const auto played = system.TakePlayedClips();
+
+    ASSERT_EQ(played.size(), 2u);
+    EXPECT_EQ(played[0], "a");
+    EXPECT_EQ(played[1], "b");
+    EXPECT_TRUE(system.TakePlayedClips().empty());
+}
+
+TEST(AudioPlaybackTests, Suspended_TimeStands) {
+    AudioSystem system;
+    system.Initialize();
+    system.AddClip("beep", SilentClip(0.5f));
+    const auto id = system.PlaySound("beep");
+    system.Suspend();
+
+    system.Update(5.0f);
+
+    EXPECT_TRUE(system.IsPlaying(id));
+}
+
+TEST(AudioDeviceTests, RealDevice_ShippedClip_PlaysOnAVoiceAndEnds) {
+    AudioSystem system;
+    system.Initialize();
+    if (!system.EnableDeviceOutput()) {
+        // GoogleTest 1.8.1 has no GTEST_SKIP: without a device (CI runners) there is nothing to check
+        std::printf("  (no audio output device: nothing to check)\n");
+        return;
+    }
+    ASSERT_TRUE(system.LoadClip("coins", ShippedSound("handleCoins.ogg")).Succeeded());
+    system.SetMasterVolume(0.0f);   // inaudible while testing
+
+    const auto id = system.PlaySound("coins", AudioChannel::SoundEffects, 1.0f, false, 0.5f);
+
+    ASSERT_NE(system.GetSource(id), nullptr);
+    EXPECT_TRUE(system.GetSource(id)->onDevice);
+    system.Update(system.FindClip("coins")->DurationSeconds() + 0.1f);
+    EXPECT_EQ(system.GetSource(id), nullptr);
+    system.Shutdown();
+}

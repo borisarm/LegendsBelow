@@ -9,6 +9,7 @@ import LB.Combat;
 import LB.Content;
 import LB.CombatService;
 import LB.Dungeon;
+import LB.AudioSystem;
 import std;
 using namespace LB::Engine;
 using namespace std::chrono_literals;
@@ -379,6 +380,34 @@ namespace EngineTests {
             if (rooms[i].type == type) return static_cast<std::int32_t>(i);
         }
         return -1;
+    }
+
+    // Assets/Sounds of the repository
+    inline std::string ShippedSoundDirectory() {
+        const auto content = ShippedContentDirectory();
+        if (content.empty()) return {};
+        const auto sounds = std::filesystem::path(std::u8string(content.begin(), content.end())).parent_path() / "Sounds";
+        const auto text = sounds.u8string();
+        return std::string(text.begin(), text.end());
+    }
+
+    // An engine with content and the shipped sounds (no models), in the arena or a dungeon
+    inline void InitializeWithSounds(GameEngine& engine, bool waves = false, bool dungeon = false) {
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+            .contentDirectory = ShippedContentDirectory(), .soundDirectory = ShippedSoundDirectory(),
+            .spawnEnemies = waves, .randomSeed = 7u, .dungeon = dungeon }))
+            << engine.GetInitializationError();
+    }
+
+    // Did any of a sound's clips play among these?
+    inline bool Played(const std::vector<std::string>& played, GameSound sound) {
+        const auto clips = SoundBank::RecipeFor(sound).clips;
+        return std::ranges::any_of(played, [&](const std::string& clip) { return std::ranges::find(clips, clip) != clips.end(); });
+    }
+
+    inline std::size_t CountPlayed(const std::vector<std::string>& played, GameSound sound) {
+        const auto clips = SoundBank::RecipeFor(sound).clips;
+        return static_cast<std::size_t>(std::ranges::count_if(played, [&](const std::string& clip) { return std::ranges::find(clips, clip) != clips.end(); }));
     }
 
 } // namespace EngineTests

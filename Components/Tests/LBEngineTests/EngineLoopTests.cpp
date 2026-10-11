@@ -386,6 +386,10 @@ TEST(GameEngineAudioTests, Headless_NoAudioDevice) {
 TEST(GameEngineAudioTests, Pause_PausesGameplaySoundsButNotMusic) {
     GameEngine engine;
     engine.Initialize(nullptr, 800, 600);
+    // Two seconds of silence: the sounds outlast these steps (a name with no clip ends at once)
+    for (const auto* clip : { "swing", "drip", "crypt_theme" }) {
+        engine.GetAudio().AddClip(clip, LB::Systems::Audio::AudioClip{ 1, 1000, std::vector<std::int16_t>(2000) });
+    }
     auto sfx = engine.GetAudio().PlaySound("swing", AudioChannel::SoundEffects);
     auto ambient = engine.GetAudio().PlaySound("drip", AudioChannel::Ambient, 1.0f, true);
     auto music = engine.GetAudio().PlaySound("crypt_theme", AudioChannel::Music, 1.0f, true);
@@ -401,6 +405,10 @@ TEST(GameEngineAudioTests, Pause_PausesGameplaySoundsButNotMusic) {
 TEST(GameEngineAudioTests, Unpause_ResumesGameplaySounds) {
     GameEngine engine;
     engine.Initialize(nullptr, 800, 600);
+    // Two seconds of silence: the sounds outlast these steps (a name with no clip ends at once)
+    for (const auto* clip : { "swing", "drip", "crypt_theme" }) {
+        engine.GetAudio().AddClip(clip, LB::Systems::Audio::AudioClip{ 1, 1000, std::vector<std::int16_t>(2000) });
+    }
     auto sfx = engine.GetAudio().PlaySound("swing", AudioChannel::SoundEffects);
     TapKey(engine, Keys::Escape);
     engine.Tick(OneSixtieth);

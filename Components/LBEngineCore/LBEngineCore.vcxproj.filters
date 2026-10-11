@@ -10,6 +10,8 @@
     <ClCompile Include="World.ixx" />
     <ClCompile Include="DungeonFloor.cpp" />
     <ClCompile Include="Effects.cpp" />
+    <ClCompile Include="GameSounds.cpp" />
+    <ClCompile Include="Sounds.ixx" />
     <ClCompile Include="Loot.ixx" />
     <ClCompile Include="Particles.ixx" />
     <ClCompile Include="Effects.ixx" />
