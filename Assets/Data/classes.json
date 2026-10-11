@@ -245,7 +245,7 @@
       "Spell Mastery"
     ],
     "progression": [
-      { "level": 1, "hpGain": 6, "mpGain": 10, "meleeAttackBonus": 0, "rangedAttackBonus": 2, "physicalSaveBonus": 0, "mentalSaveBonus": 2 },
+      { "level": 1, "hpGain": 10, "mpGain": 10, "meleeAttackBonus": 0, "rangedAttackBonus": 2, "physicalSaveBonus": 0, "mentalSaveBonus": 2 },
       { "level": 2, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
       { "level": 3, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
       { "level": 4, "hpGain": 4, "mpGain": 8, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 0, "mentalSaveBonus": 1 },

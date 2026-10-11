@@ -22,6 +22,7 @@ All notable changes to LegendsBelow. Dates are commit dates.
 - The player is the animated KayKit Adventurers knight (`Knight.glb`, at the skeletons' scale on the same Rig_Medium) instead of the rigid Dungeon Pack knight: it idles, runs, slashes (one-handed, two-handed, or stabs with a dagger), draws and releases a bow or shoots a crossbow (the CombatRanged animation set is loaded), flinches when hit, and falls. The equipped weapon is drawn in its hand slot (KayKit Adventurers sword, axe, dagger, staff, bow, and crossbow; the skeletons' mace), a worn shield on its left arm, and crossbows turned to a pistol grip (`GameEngine::PistolGripModels`).
 
 ### Changed
+- The Mage starts with 10 hit points (classes.json level 1 `hpGain` 6 -> 10): with 6, two skeleton minions brought a new mage down in seconds.
 - The camera looks down at 32 degrees (from 40): the KayKit characters' short legs were hidden under their heads and bodies.
 
 ### Build

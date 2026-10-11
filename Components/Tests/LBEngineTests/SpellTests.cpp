@@ -160,6 +160,7 @@ TEST(GameEngineMageTests, Mage_StartsWithWandStaffSpellsAndFullMana) {
     EXPECT_GT(PlayerMaxMana(engine), 0);
     EXPECT_EQ(PlayerMana(engine), PlayerMaxMana(engine));
     EXPECT_GT(engine.GetPlayerSpellPower(), 0);
+    EXPECT_EQ(PlayerHitPoints(engine), 10);   // level 1 hpGain 10, CON 10 (no modifier)
 }
 
 TEST(GameEngineMageTests, Warrior_HasNoSpellBar) {
