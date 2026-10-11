@@ -43,7 +43,7 @@ export namespace LB::Systems::Asset {
         String path;
         AssetType type{AssetType::Unknown};
         AssetStatus status{AssetStatus::Unloaded};
-        size_t sizeBytes{0};
+        std::size_t sizeBytes{0};
 
         [[nodiscard]] bool IsLoaded() const noexcept {
             return status == AssetStatus::Loaded;
@@ -133,8 +133,8 @@ export namespace LB::Systems::Asset {
         /// <summary>
         /// Get total memory usage of loaded assets
         /// </summary>
-        size_t GetTotalMemoryUsage() const {
-            size_t total = 0;
+        std::size_t GetTotalMemoryUsage() const {
+            std::size_t total = 0;
             for (const auto& [id, info] : assets_) {
                 if (info.IsLoaded()) {
                     total += info.sizeBytes;

@@ -19,10 +19,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="LB.Common.ixx" />
+    <ClCompile Include="Common.ixx" />
     <ClCompile Include="LB.Core.ixx" />
-    <ClCompile Include="LB.CoreValueObjects.ixx" />
-    <ClCompile Include="LB.Entity.ixx" />
+    <ClCompile Include="ValueObjects.ixx" />
+    <ClCompile Include="Entity.ixx" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

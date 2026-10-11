@@ -9,7 +9,6 @@ import LB.Character;
 import LB.Combat;
 import std;
 
-using namespace std;
 
 export namespace LB::Content {
     using LB::String;
@@ -39,17 +38,17 @@ export namespace LB::Content {
         String key;                                   // e.g. "spell_evocation_arcane_bolt_l1"
         String name;
         SpellSchool school{SpellSchool::None};
-        int32_t level{1};
+        std::int32_t level{1};
         std::vector<SpellCategory> categories;
         std::optional<CharacterClass> requiredClass;  // empty: usable by any class
-        int32_t requiredLevel{1};
-        int32_t manaCost{0};
+        std::int32_t requiredLevel{1};
+        std::int32_t manaCost{0};
         float castTimeSeconds{0.0f};
         float cooldownSeconds{0.0f};
         float range{0.0f};
         float radius{0.0f};
-        int32_t baseDamage{0};
-        int32_t baseHeal{0};
+        std::int32_t baseDamage{0};
+        std::int32_t baseHeal{0};
         float powerCoefficient{0.0f};
         DamageType damageType{DamageType::None};
         float durationSeconds{0.0f};
@@ -76,19 +75,19 @@ export namespace LB::Content {
         String name;
         WeaponType category{WeaponType::None};
         EquipmentSlot slot{EquipmentSlot::MainHand};
-        int32_t requiredLevel{1};
+        std::int32_t requiredLevel{1};
         std::vector<CharacterClass> allowedClasses;
         LB::Dice damageDice{};
-        int32_t damageBonus{0};
+        std::int32_t damageBonus{0};
         std::vector<DamageType> damageTypes;
         float attackTimeSeconds{1.0f};
-        int32_t critRangeMin{20};                     // "19-20" -> 19
+        std::int32_t critRangeMin{20};                     // "19-20" -> 19
         float critMultiplier{2.0f};
         String attributeScale;                        // "STR", "DEX", "INT", ...
         float scaleFactor{1.0f};
         bool isTwoHanded{false};
         std::vector<String> specialProperties;
-        int32_t affixSlots{0};
+        std::int32_t affixSlots{0};
         String ammoType;                              // ranged weapons only
 
         [[nodiscard]] bool IsUsableBy(CharacterClass characterClass) const {
@@ -105,18 +104,18 @@ export namespace LB::Content {
         String name;
         EquipmentSlot slot{EquipmentSlot::None};
         ArmorCategory category{ArmorCategory::None};
-        int32_t requiredLevel{1};
+        std::int32_t requiredLevel{1};
         std::vector<CharacterClass> allowedClasses;
-        int32_t physicalAR{0};
-        std::map<DamageType, int32_t> elementalAR;    // Fire, Cold, Lightning, Acid
-        std::map<DamageType, int32_t> spiritualAR;    // Holy (radiant), Shadow (necrotic), Psychic
-        int32_t armorBonus{0};                        // shields
+        std::int32_t physicalAR{0};
+        std::map<DamageType, std::int32_t> elementalAR;    // Fire, Cold, Lightning, Acid
+        std::map<DamageType, std::int32_t> spiritualAR;    // Holy (radiant), Shadow (necrotic), Psychic
+        std::int32_t armorBonus{0};                        // shields
         float blockChance{0.0f};                      // shields; percent (design-armour-system.md, 7)
-        int32_t blockValue{0};                        // shields
+        std::int32_t blockValue{0};                        // shields
         float weight{0.0f};
         float movementPenalty{0.0f};                  // fraction of speed, e.g. 0.10
         float castPenalty{0.0f};
-        int32_t affixSlots{0};
+        std::int32_t affixSlots{0};
 
         [[nodiscard]] bool IsUsableBy(CharacterClass characterClass) const {
             return std::ranges::find(allowedClasses, characterClass) != allowedClasses.end();
@@ -142,12 +141,12 @@ export namespace LB::Content {
         std::map<ArmorCategory, ArmorAdjustment> armorAdjustments;
         // Attack roll adjustment per weapon category for this class: +3 signature, +1 trained,
         // -1 untrained, -5 restricted. Every category has a value.
-        std::map<WeaponType, int32_t> weaponAdjustments;
+        std::map<WeaponType, std::int32_t> weaponAdjustments;
         std::vector<SpellSchool> spellSchools;        // class spell access; Generic spells are open to all
         std::vector<String> signatureAbilities;
         ClassProgression progression;                 // levels 1..ClassProgression::MaxLevel
 
-        [[nodiscard]] int32_t GetWeaponAdjustment(WeaponType weapon) const {
+        [[nodiscard]] std::int32_t GetWeaponAdjustment(WeaponType weapon) const {
             auto it = weaponAdjustments.find(weapon);
             return it != weaponAdjustments.end() ? it->second : 0;
         }
@@ -168,7 +167,7 @@ export namespace LB::Content {
         /// <summary>
         /// Progression totals at a level, clamped to [1, ClassProgression::MaxLevel]
         /// </summary>
-        [[nodiscard]] ClassLevelTotals TotalsAt(int32_t level) const {
+        [[nodiscard]] ClassLevelTotals TotalsAt(std::int32_t level) const {
             return progression.TotalsAt(level);
         }
     };
@@ -181,19 +180,19 @@ export namespace LB::Content {
         ContentId id{0};
         String key;                                   // e.g. "enemy_skeleton_minion"
         String name;
-        int32_t level{1};
-        int32_t hitPoints{1};
-        int32_t armorClass{10};                       // d20 attack rolls must reach this to hit
-        int32_t physicalArmor{0};                     // flat reduction of physical damage (5.2)
+        std::int32_t level{1};
+        std::int32_t hitPoints{1};
+        std::int32_t armorClass{10};                       // d20 attack rolls must reach this to hit
+        std::int32_t physicalArmor{0};                     // flat reduction of physical damage (5.2)
         std::map<DamageType, float> resistances;      // fraction removed (0.25), negative: vulnerable
-        int32_t experience{0};
+        std::int32_t experience{0};
 
         // Basic attack (a melee weapon profile)
-        int32_t attackBonus{0};
+        std::int32_t attackBonus{0};
         LB::Dice damageDice{};
-        int32_t damageBonus{0};
+        std::int32_t damageBonus{0};
         DamageType damageType{DamageType::Slashing};
-        int32_t critRangeMin{20};
+        std::int32_t critRangeMin{20};
         float critMultiplier{1.5f};
         float attackTimeSeconds{1.0f};                // wind-up and swing
         float attackRecoverySeconds{0.0f};            // pause before the next attack
@@ -228,7 +227,7 @@ export namespace LB::Content {
         String key;                                   // e.g. "consumable_potion_healing_minor"
         String name;
         LB::Dice healing{};                           // hit points restored (0d0: none)
-        int32_t maxStack{10};
+        std::int32_t maxStack{10};
         String model;                                 // how it lies on the floor
     };
 
@@ -237,7 +236,7 @@ export namespace LB::Content {
     /// </summary>
     struct LootEntry {
         String item;                                  // weapon, armour, or consumable key
-        int32_t weight{1};
+        std::int32_t weight{1};
     };
 
     /// <summary>
@@ -252,8 +251,8 @@ export namespace LB::Content {
         float itemChance{0.0f};                       // 0..1
         std::vector<LootEntry> items;
 
-        [[nodiscard]] int32_t TotalWeight() const noexcept {
-            int32_t total = 0;
+        [[nodiscard]] std::int32_t TotalWeight() const noexcept {
+            std::int32_t total = 0;
             for (const auto& entry : items) total += entry.weight;
             return total;
         }
@@ -332,7 +331,7 @@ export namespace LB::Content {
         /// <summary>
         /// Weapons a class may wield at a given character level
         /// </summary>
-        [[nodiscard]] std::vector<const WeaponDefinition*> GetWeaponsFor(CharacterClass characterClass, int32_t characterLevel) const {
+        [[nodiscard]] std::vector<const WeaponDefinition*> GetWeaponsFor(CharacterClass characterClass, std::int32_t characterLevel) const {
             std::vector<const WeaponDefinition*> result;
             for (const auto& weapon : weapons_) {
                 if (weapon.IsUsableBy(characterClass) && weapon.requiredLevel <= characterLevel) result.push_back(&weapon);

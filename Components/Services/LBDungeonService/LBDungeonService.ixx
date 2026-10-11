@@ -6,7 +6,6 @@ import LB.Core;
 import LB.Character;
 import LB.Dungeon;
 import std;
-using namespace std;
 
 /// <summary>
 /// Dungeon service for LegendsBelow
@@ -43,56 +42,56 @@ export namespace LB::Services::Dungeon {
         /// </summary>
         [[nodiscard]] FloorLayout GenerateFloor(const FloorGenerationParams& params, std::uint32_t seed) const {
             std::mt19937 rng(seed);
-            const int32_t pathLength = std::max(2, params.criticalPathRooms);
-            const int32_t slotSize = std::max(params.maxRoomSize + 2, params.slotSize);
-            constexpr std::array<std::pair<int32_t, int32_t>, 4> steps{ { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } } };
+            const std::int32_t pathLength = std::max(2, params.criticalPathRooms);
+            const std::int32_t slotSize = std::max(params.maxRoomSize + 2, params.slotSize);
+            constexpr std::array<std::pair<std::int32_t, std::int32_t>, 4> steps{ { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } } };
 
             // Room slots: the critical path as a self-avoiding walk, restarted when it boxes itself in
-            std::vector<std::pair<int32_t, int32_t>> slots;
-            std::vector<std::pair<int32_t, int32_t>> edges;   // room index pairs
-            const auto taken = [&](std::pair<int32_t, int32_t> slot) { return std::ranges::find(slots, slot) != slots.end(); };
-            const auto freeNeighbors = [&](std::pair<int32_t, int32_t> slot) {
-                std::vector<std::pair<int32_t, int32_t>> options;
+            std::vector<std::pair<std::int32_t, std::int32_t>> slots;
+            std::vector<std::pair<std::int32_t, std::int32_t>> edges;   // room index pairs
+            const auto taken = [&](std::pair<std::int32_t, std::int32_t> slot) { return std::ranges::find(slots, slot) != slots.end(); };
+            const auto freeNeighbors = [&](std::pair<std::int32_t, std::int32_t> slot) {
+                std::vector<std::pair<std::int32_t, std::int32_t>> options;
                 for (const auto& [dx, dy] : steps) {
-                    const std::pair<int32_t, int32_t> next{ slot.first + dx, slot.second + dy };
+                    const std::pair<std::int32_t, std::int32_t> next{ slot.first + dx, slot.second + dy };
                     if (!taken(next)) options.push_back(next);
                 }
                 return options;
             };
-            const auto pick = [&](const std::vector<std::pair<int32_t, int32_t>>& options) {
+            const auto pick = [&](const std::vector<std::pair<std::int32_t, std::int32_t>>& options) {
                 return options[std::uniform_int_distribution<std::size_t>(0, options.size() - 1)(rng)];
             };
-            for (int attempt = 0; attempt < 100 && static_cast<int32_t>(slots.size()) < pathLength; ++attempt) {
+            for (int attempt = 0; attempt < 100 && static_cast<std::int32_t>(slots.size()) < pathLength; ++attempt) {
                 slots = { { 0, 0 } };
                 edges.clear();
-                while (static_cast<int32_t>(slots.size()) < pathLength) {
+                while (static_cast<std::int32_t>(slots.size()) < pathLength) {
                     const auto options = freeNeighbors(slots.back());
                     if (options.empty()) break;
                     slots.push_back(pick(options));
-                    edges.emplace_back(static_cast<int32_t>(slots.size()) - 2, static_cast<int32_t>(slots.size()) - 1);
+                    edges.emplace_back(static_cast<std::int32_t>(slots.size()) - 2, static_cast<std::int32_t>(slots.size()) - 1);
                 }
             }
-            const auto criticalCount = static_cast<int32_t>(slots.size());
+            const auto criticalCount = static_cast<std::int32_t>(slots.size());
 
             // Side branches off the rooms between the entrance and the exit
             std::vector<bool> critical(slots.size(), true);
             std::uniform_real_distribution<float> chance(0.0f, 1.0f);
-            for (int32_t i = 1; i + 1 < criticalCount; ++i) {
+            for (std::int32_t i = 1; i + 1 < criticalCount; ++i) {
                 if (chance(rng) >= params.branchChance) continue;
-                const int32_t length = std::uniform_int_distribution<int32_t>(1, std::max(1, params.maxBranchLength))(rng);
-                int32_t from = i;
-                for (int32_t k = 0; k < length; ++k) {
+                const std::int32_t length = std::uniform_int_distribution<std::int32_t>(1, std::max(1, params.maxBranchLength))(rng);
+                std::int32_t from = i;
+                for (std::int32_t k = 0; k < length; ++k) {
                     const auto options = freeNeighbors(slots[static_cast<std::size_t>(from)]);
                     if (options.empty()) break;
                     slots.push_back(pick(options));
                     critical.push_back(false);
-                    edges.emplace_back(from, static_cast<int32_t>(slots.size()) - 1);
-                    from = static_cast<int32_t>(slots.size()) - 1;
+                    edges.emplace_back(from, static_cast<std::int32_t>(slots.size()) - 1);
+                    from = static_cast<std::int32_t>(slots.size()) - 1;
                 }
             }
 
             // Slots to cells, with a solid border cell all around
-            int32_t minX = 0, minY = 0, maxX = 0, maxY = 0;
+            std::int32_t minX = 0, minY = 0, maxX = 0, maxY = 0;
             for (const auto& [x, y] : slots) {
                 minX = std::min(minX, x); minY = std::min(minY, y);
                 maxX = std::max(maxX, x); maxY = std::max(maxY, y);
@@ -103,30 +102,30 @@ export namespace LB::Services::Dungeon {
             layout.cells.assign(static_cast<std::size_t>(layout.width * layout.height), 0);
 
             // Rooms: a random size, placed at random inside the slot with at least a cell of margin
-            const int32_t largest = std::max(params.minRoomSize, std::min(params.maxRoomSize, slotSize - 2));
-            std::uniform_int_distribution<int32_t> size(std::max(1, std::min(params.minRoomSize, largest)), largest);
-            const int32_t totalWeight = std::max(1, params.treasureWeight + params.eliteWeight + params.safeWeight);
+            const std::int32_t largest = std::max(params.minRoomSize, std::min(params.maxRoomSize, slotSize - 2));
+            std::uniform_int_distribution<std::int32_t> size(std::max(1, std::min(params.minRoomSize, largest)), largest);
+            const std::int32_t totalWeight = std::max(1, params.treasureWeight + params.eliteWeight + params.safeWeight);
             for (std::size_t i = 0; i < slots.size(); ++i) {
-                const int32_t width = size(rng);
-                const int32_t height = size(rng);
-                const int32_t slotLeft = (slots[i].first - minX) * slotSize + 1;
-                const int32_t slotTop = (slots[i].second - minY) * slotSize + 1;
-                const int32_t left = slotLeft + std::uniform_int_distribution<int32_t>(1, slotSize - 1 - width)(rng);
-                const int32_t top = slotTop + std::uniform_int_distribution<int32_t>(1, slotSize - 1 - height)(rng);
+                const std::int32_t width = size(rng);
+                const std::int32_t height = size(rng);
+                const std::int32_t slotLeft = (slots[i].first - minX) * slotSize + 1;
+                const std::int32_t slotTop = (slots[i].second - minY) * slotSize + 1;
+                const std::int32_t left = slotLeft + std::uniform_int_distribution<std::int32_t>(1, slotSize - 1 - width)(rng);
+                const std::int32_t top = slotTop + std::uniform_int_distribution<std::int32_t>(1, slotSize - 1 - height)(rng);
 
                 LayoutRoom room;
                 room.area = CellRect{ left, top, width, height };
                 room.onCriticalPath = critical[i];
                 if (i == 0) room.type = RoomType::Entrance;
-                else if (static_cast<int32_t>(i) == criticalCount - 1) room.type = RoomType::Exit;
+                else if (static_cast<std::int32_t>(i) == criticalCount - 1) room.type = RoomType::Exit;
                 else if (critical[i]) room.type = RoomType::Combat;
                 else {
-                    const int32_t roll = std::uniform_int_distribution<int32_t>(1, totalWeight)(rng);
+                    const std::int32_t roll = std::uniform_int_distribution<std::int32_t>(1, totalWeight)(rng);
                     room.type = roll <= params.treasureWeight ? RoomType::Treasure
                               : roll <= params.treasureWeight + params.eliteWeight ? RoomType::Elite : RoomType::Safe;
                 }
-                for (int32_t y = top; y < top + height; ++y) {
-                    for (int32_t x = left; x < left + width; ++x) layout.SetFloor(x, y);
+                for (std::int32_t y = top; y < top + height; ++y) {
+                    for (std::int32_t x = left; x < left + width; ++x) layout.SetFloor(x, y);
                 }
                 layout.rooms.push_back(std::move(room));
             }
@@ -141,16 +140,16 @@ export namespace LB::Services::Dungeon {
                 auto& to = layout.rooms[static_cast<std::size_t>(b)];
                 from.connections.push_back(b);
                 to.connections.push_back(a);
-                const int32_t x0 = from.area.CenterX(), y0 = from.area.CenterY();
-                const int32_t x1 = to.area.CenterX(), y1 = to.area.CenterY();
+                const std::int32_t x0 = from.area.CenterX(), y0 = from.area.CenterY();
+                const std::int32_t x1 = to.area.CenterX(), y1 = to.area.CenterY();
                 const bool horizontal = slots[static_cast<std::size_t>(a)].second == slots[static_cast<std::size_t>(b)].second;
                 if (horizontal) {
-                    for (int32_t x = std::min(x0, x1); x <= std::max(x0, x1); ++x) layout.SetFloor(x, y0);
-                    for (int32_t y = std::min(y0, y1); y <= std::max(y0, y1); ++y) layout.SetFloor(x1, y);
+                    for (std::int32_t x = std::min(x0, x1); x <= std::max(x0, x1); ++x) layout.SetFloor(x, y0);
+                    for (std::int32_t y = std::min(y0, y1); y <= std::max(y0, y1); ++y) layout.SetFloor(x1, y);
                 }
                 else {
-                    for (int32_t y = std::min(y0, y1); y <= std::max(y0, y1); ++y) layout.SetFloor(x0, y);
-                    for (int32_t x = std::min(x0, x1); x <= std::max(x0, x1); ++x) layout.SetFloor(x, y1);
+                    for (std::int32_t y = std::min(y0, y1); y <= std::max(y0, y1); ++y) layout.SetFloor(x0, y);
+                    for (std::int32_t x = std::min(x0, x1); x <= std::max(x0, x1); ++x) layout.SetFloor(x, y1);
                 }
             }
             return layout;
@@ -166,7 +165,7 @@ export namespace LB::Services::Dungeon {
             dungeon.recommendedLevel = params.recommendedLevel;
 
             // Determine room count
-            int32_t roomCount = rollRoomCount(params.minRooms, params.maxRooms);
+            std::int32_t roomCount = rollRoomCount(params.minRooms, params.maxRooms);
             dungeon.depth = roomCount;
 
             // Generate rooms
@@ -241,17 +240,17 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Generate encounter for a combat room
         /// </summary>
-        [[nodiscard]] Encounter GenerateEncounter(RoomDifficulty difficulty, int32_t partyLevel) const {
+        [[nodiscard]] Encounter GenerateEncounter(RoomDifficulty difficulty, std::int32_t partyLevel) const {
             Encounter encounter{};
             encounter.encounterId = generateNextEncounterId();
             encounter.difficulty = difficulty;
             encounter.recommendedLevel = partyLevel;
 
             // Determine enemy count based on difficulty
-            int32_t enemyCount = getEnemyCount(difficulty);
+            std::int32_t enemyCount = getEnemyCount(difficulty);
 
             // Generate enemy IDs (placeholder - would integrate with enemy system)
-            for (int32_t i = 0; i < enemyCount; ++i) {
+            for (std::int32_t i = 0; i < enemyCount; ++i) {
                 encounter.enemies.push_back(generateNextEnemyId());
             }
 
@@ -314,10 +313,10 @@ export namespace LB::Services::Dungeon {
             auto dungeon = GetDungeon(dungeonId);
             if (!dungeon.has_value()) return 0.0f;
 
-            int32_t totalRooms = dungeon->GetRoomCount();
+            std::int32_t totalRooms = dungeon->GetRoomCount();
             if (totalRooms == 0) return 0.0f;
 
-            int32_t clearedRooms = dungeon->GetClearedRoomCount();
+            std::int32_t clearedRooms = dungeon->GetClearedRoomCount();
             return static_cast<float>(clearedRooms) / static_cast<float>(totalRooms);
         }
 
@@ -343,7 +342,7 @@ export namespace LB::Services::Dungeon {
         /// <summary>
         /// Get dungeon count
         /// </summary>
-        [[nodiscard]] size_t GetDungeonCount() const {
+        [[nodiscard]] std::size_t GetDungeonCount() const {
             return dungeons_.size();
         }
 
@@ -370,14 +369,14 @@ export namespace LB::Services::Dungeon {
             return nextEnemyId_++;
         }
 
-        [[nodiscard]] int32_t rollRoomCount(int32_t min, int32_t max) const {
+        [[nodiscard]] std::int32_t rollRoomCount(std::int32_t min, std::int32_t max) const {
             static thread_local std::mt19937 gen{std::random_device{}()};
-            std::uniform_int_distribution<int32_t> dist(min, max);
+            std::uniform_int_distribution<std::int32_t> dist(min, max);
             return dist(gen);
         }
 
-        void generateRooms(Dungeon& dungeon, int32_t roomCount, const DungeonGenerationParams& params) {
-            for (int32_t i = 0; i < roomCount; ++i) {
+        void generateRooms(Dungeon& dungeon, std::int32_t roomCount, const DungeonGenerationParams& params) {
+            for (std::int32_t i = 0; i < roomCount; ++i) {
                 DungeonRoom room{};
                 room.roomId = generateNextRoomId();
                 room.name = "Room " + std::to_string(room.roomId);
@@ -448,7 +447,7 @@ export namespace LB::Services::Dungeon {
             }
         }
 
-        [[nodiscard]] int32_t getEnemyCount(RoomDifficulty difficulty) const {
+        [[nodiscard]] std::int32_t getEnemyCount(RoomDifficulty difficulty) const {
             switch (difficulty) {
                 case RoomDifficulty::Easy: return 1;
                 case RoomDifficulty::Normal: return 2;
@@ -459,7 +458,7 @@ export namespace LB::Services::Dungeon {
             }
         }
 
-        [[nodiscard]] float calculateEncounterCR(RoomDifficulty difficulty, int32_t partyLevel) const {
+        [[nodiscard]] float calculateEncounterCR(RoomDifficulty difficulty, std::int32_t partyLevel) const {
             float baseCR = static_cast<float>(partyLevel);
 
             switch (difficulty) {

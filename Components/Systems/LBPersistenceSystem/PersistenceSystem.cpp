@@ -13,7 +13,7 @@ namespace LB::Systems::Persistence {
         using Json = nlohmann::json;
 
         // Bump when the save layout changes; older files are still read field by field
-        constexpr int32_t SaveFormatVersion = 1;
+        constexpr std::int32_t SaveFormatVersion = 1;
 
         std::filesystem::path FromUtf8(const String& path) {
             return std::filesystem::path(std::u8string(path.begin(), path.end()));
@@ -137,7 +137,7 @@ namespace LB::Systems::Persistence {
             }
 
             // Discover existing saves; unreadable files are skipped rather than failing startup
-            for (int32_t slot = 0; slot < maxSaveSlots_; ++slot) {
+            for (std::int32_t slot = 0; slot < maxSaveSlots_; ++slot) {
                 if (auto json = ReadJsonFile(GetSaveFilePath(slot))) {
                     SaveSlotInfo info = SlotInfoFromJson(*json);
                     info.slotIndex = slot;
@@ -154,7 +154,7 @@ namespace LB::Systems::Persistence {
         return true;
     }
 
-    SaveResult PersistenceSystem::SaveGame(int32_t slotIndex, const SaveSlotInfo& metadata, const SaveData& data) {
+    SaveResult PersistenceSystem::SaveGame(std::int32_t slotIndex, const SaveSlotInfo& metadata, const SaveData& data) {
         SaveResult result{};
 
         if (!initialized_) {
@@ -189,7 +189,7 @@ namespace LB::Systems::Persistence {
         return result;
     }
 
-    LoadResult PersistenceSystem::LoadGame(int32_t slotIndex) {
+    LoadResult PersistenceSystem::LoadGame(std::int32_t slotIndex) {
         LoadResult result{};
 
         if (!initialized_) {
@@ -226,7 +226,7 @@ namespace LB::Systems::Persistence {
         return result;
     }
 
-    bool PersistenceSystem::DeleteSave(int32_t slotIndex) {
+    bool PersistenceSystem::DeleteSave(std::int32_t slotIndex) {
         if (!initialized_) return false;
 
         auto it = saveSlots_.find(slotIndex);
@@ -254,7 +254,7 @@ namespace LB::Systems::Persistence {
         return true;
     }
 
-    std::filesystem::path PersistenceSystem::GetSaveFilePath(int32_t slotIndex) const {
+    std::filesystem::path PersistenceSystem::GetSaveFilePath(std::int32_t slotIndex) const {
         return saveDirectory_ / std::format("save_{}.json", slotIndex);
     }
 

@@ -7,7 +7,6 @@ import LB.Character;
 import LB.Combat;
 import std;
 
-using namespace std;
 
 /// <summary>
 /// Combat service for LegendsBelow
@@ -30,9 +29,9 @@ export namespace LB::Services::Combat {
         bool criticalHit{false};
         bool criticalMiss{false};
         
-        int32_t attackRoll{0};
-        int32_t targetArmorClass{0};
-        int32_t attackBonus{0};
+        std::int32_t attackRoll{0};
+        std::int32_t targetArmorClass{0};
+        std::int32_t attackBonus{0};
     };
 
     /// <summary>
@@ -40,10 +39,10 @@ export namespace LB::Services::Combat {
     /// Contains actual damage dealt and type information
     /// </summary>
     struct DamageResult {
-        int32_t totalDamage{0};
-        int32_t baseDamage{0};
-        int32_t bonusDamage{0};
-        int32_t mitigatedDamage{0};
+        std::int32_t totalDamage{0};
+        std::int32_t baseDamage{0};
+        std::int32_t bonusDamage{0};
+        std::int32_t mitigatedDamage{0};
         DamageType damageType{DamageType::None};
         bool wasCritical{false};
         float damageReduction{0.0f};
@@ -57,7 +56,7 @@ export namespace LB::Services::Combat {
         bool success{false};
         AttackRollResult attackResult{};
         DamageResult damageResult{};
-        int32_t targetRemainingHitPoints{0};
+        std::int32_t targetRemainingHitPoints{0};
         bool targetDefeated{false};
     };
 
@@ -69,9 +68,9 @@ export namespace LB::Services::Combat {
         bool success{false};
         bool insufficientMana{false};
         bool invalidTarget{false};
-        int32_t manaCost{0};
+        std::int32_t manaCost{0};
         DamageResult damageResult{};
-        int32_t healingAmount{0};
+        std::int32_t healingAmount{0};
         std::vector<CharacterId> affectedTargets{};
     };
 
@@ -82,8 +81,8 @@ export namespace LB::Services::Combat {
         CharacterId attackerId;
         CharacterId targetId;
         DamageType damageType{DamageType::Slashing};
-        int32_t baseDamage{0};
-        int32_t bonusDamage{0};
+        std::int32_t baseDamage{0};
+        std::int32_t bonusDamage{0};
         bool advantageOnRoll{false};
         bool disadvantageOnRoll{false};
     };
@@ -93,11 +92,11 @@ export namespace LB::Services::Combat {
     /// roll bonus and the weapon's damage profile
     /// </summary>
     struct WeaponAttackProfile {
-        int32_t attackBonus{0};
+        std::int32_t attackBonus{0};
         LB::Dice damageDice{1, 4, 0};
-        int32_t damageBonus{0};                    // attribute and flat bonuses added to the roll
+        std::int32_t damageBonus{0};                    // attribute and flat bonuses added to the roll
         DamageType damageType{DamageType::Slashing};
-        int32_t critRangeMin{20};                  // natural rolls from this up to 20 crit (when they hit)
+        std::int32_t critRangeMin{20};                  // natural rolls from this up to 20 crit (when they hit)
         float critMultiplier{1.5f};
     };
 
@@ -105,8 +104,8 @@ export namespace LB::Services::Combat {
     /// How a target defends (design-combat-system.md 4.1 and 5.2)
     /// </summary>
     struct DefenseProfile {
-        int32_t armorClass{10};
-        int32_t physicalArmor{0};                  // flat reduction of physical damage
+        std::int32_t armorClass{10};
+        std::int32_t physicalArmor{0};                  // flat reduction of physical damage
         std::map<DamageType, float> resistances;   // fraction removed; negative values are vulnerabilities
     };
 
@@ -116,10 +115,10 @@ export namespace LB::Services::Combat {
     struct WeaponAttackResult {
         bool hit{false};
         bool critical{false};
-        int32_t naturalRoll{0};                    // the d20
-        int32_t totalRoll{0};                      // d20 + attack bonus
-        int32_t rawDamage{0};                      // dice + bonus (x crit multiplier), before defenses
-        int32_t finalDamage{0};                    // after armour and resistance; 0 on a miss
+        std::int32_t naturalRoll{0};                    // the d20
+        std::int32_t totalRoll{0};                      // d20 + attack bonus
+        std::int32_t rawDamage{0};                      // dice + bonus (x crit multiplier), before defenses
+        std::int32_t finalDamage{0};                    // after armour and resistance; 0 on a miss
     };
 
     /// <summary>
@@ -143,8 +142,8 @@ export namespace LB::Services::Combat {
         /// Uses D&D-style attack roll vs armor class
         /// </summary>
         AttackRollResult RollAttack(
-            int32_t attackBonus,
-            int32_t targetArmorClass,
+            std::int32_t attackBonus,
+            std::int32_t targetArmorClass,
             bool advantage = false,
             bool disadvantage = false) const {
 
@@ -153,7 +152,7 @@ export namespace LB::Services::Combat {
             result.targetArmorClass = targetArmorClass;
 
             // Roll d20 (1-20)
-            int32_t roll = rollD20(advantage, disadvantage);
+            std::int32_t roll = rollD20(advantage, disadvantage);
             result.attackRoll = roll;
 
             // Natural 20 is always a critical hit
@@ -171,7 +170,7 @@ export namespace LB::Services::Combat {
             }
 
             // Normal hit check
-            int32_t totalAttackRoll = roll + attackBonus;
+            std::int32_t totalAttackRoll = roll + attackBonus;
             result.hit = totalAttackRoll >= targetArmorClass;
 
             return result;
@@ -180,10 +179,10 @@ export namespace LB::Services::Combat {
         /// <summary>
         /// Roll dice: count x d(sides) + bonus
         /// </summary>
-        int32_t RollDice(const LB::Dice& dice) const {
-            std::uniform_int_distribution<int32_t> die(1, std::max(1, dice.sides));
-            int32_t total = dice.bonus;
-            for (int32_t i = 0; i < dice.count; ++i) {
+        std::int32_t RollDice(const LB::Dice& dice) const {
+            std::uniform_int_distribution<std::int32_t> die(1, std::max(1, dice.sides));
+            std::int32_t total = dice.bonus;
+            for (std::int32_t i = 0; i < dice.count; ++i) {
                 total += die(rng_);
             }
             return total;
@@ -195,18 +194,18 @@ export namespace LB::Services::Combat {
         /// resistance adds damage). Damage that gets through deals at least 1, unless the target
         /// is immune (resistance 1) or the armour absorbs it all.
         /// </summary>
-        static int32_t ApplyDefenses(int32_t rawDamage, DamageType type, const DefenseProfile& target) {
+        static std::int32_t ApplyDefenses(std::int32_t rawDamage, DamageType type, const DefenseProfile& target) {
             if (rawDamage <= 0) return 0;
 
             const bool physical = type == DamageType::Slashing || type == DamageType::Piercing || type == DamageType::Bludgeoning;
-            const int32_t afterArmor = physical ? std::max(0, rawDamage - std::max(0, target.physicalArmor)) : rawDamage;
+            const std::int32_t afterArmor = physical ? std::max(0, rawDamage - std::max(0, target.physicalArmor)) : rawDamage;
             if (afterArmor == 0) return 0;
 
             const auto it = target.resistances.find(type);
             const float resist = std::clamp(it != target.resistances.end() ? it->second : 0.0f, -1.0f, 1.0f);
             if (resist >= 1.0f) return 0;
 
-            const auto scaled = static_cast<int32_t>(std::lround(static_cast<float>(afterArmor) * (1.0f - resist)));
+            const auto scaled = static_cast<std::int32_t>(std::lround(static_cast<float>(afterArmor) * (1.0f - resist)));
             return std::max(1, scaled);
         }
 
@@ -223,9 +222,9 @@ export namespace LB::Services::Combat {
             if (!result.hit) return result;
 
             result.critical = result.naturalRoll >= std::clamp(attack.critRangeMin, 2, 20);
-            int32_t damage = std::max(0, RollDice(attack.damageDice) + attack.damageBonus);
+            std::int32_t damage = std::max(0, RollDice(attack.damageDice) + attack.damageBonus);
             if (result.critical) {
-                damage = static_cast<int32_t>(std::lround(static_cast<float>(damage) * std::max(1.0f, attack.critMultiplier)));
+                damage = static_cast<std::int32_t>(std::lround(static_cast<float>(damage) * std::max(1.0f, attack.critMultiplier)));
             }
             result.rawDamage = damage;
             result.finalDamage = ApplyDefenses(damage, attack.damageType, target);
@@ -236,8 +235,8 @@ export namespace LB::Services::Combat {
         /// Calculate damage with type-specific modifiers
         /// </summary>
         DamageResult CalculateDamage(
-            int32_t baseDamage,
-            int32_t bonusDamage,
+            std::int32_t baseDamage,
+            std::int32_t bonusDamage,
             DamageType damageType,
             bool isCritical,
             float damageReduction = 0.0f) const {
@@ -250,13 +249,13 @@ export namespace LB::Services::Combat {
             result.damageReduction = std::clamp(damageReduction, 0.0f, 0.99f);
 
             // Critical hits double the base damage dice
-            int32_t effectiveBaseDamage = isCritical ? (baseDamage * 2) : baseDamage;
+            std::int32_t effectiveBaseDamage = isCritical ? (baseDamage * 2) : baseDamage;
 
             // Calculate total before mitigation
-            int32_t totalBeforeMitigation = effectiveBaseDamage + bonusDamage;
+            std::int32_t totalBeforeMitigation = effectiveBaseDamage + bonusDamage;
 
             // Apply damage reduction
-            result.mitigatedDamage = static_cast<int32_t>(totalBeforeMitigation * result.damageReduction);
+            result.mitigatedDamage = static_cast<std::int32_t>(totalBeforeMitigation * result.damageReduction);
             result.totalDamage = std::max(0, totalBeforeMitigation - result.mitigatedDamage);
 
             return result;
@@ -267,7 +266,7 @@ export namespace LB::Services::Combat {
         /// Physical damage types are more affected by armor
         /// </summary>
         float CalculateDamageReduction(
-            int32_t armorClass,
+            std::int32_t armorClass,
             DamageType damageType) const {
 
             // Base armor effectiveness (10 AC = 0%, 20 AC = 50%, 30 AC = 75%)
@@ -303,12 +302,12 @@ export namespace LB::Services::Combat {
         /// <summary>
         /// Calculate weapon damage based on strength/dexterity
         /// </summary>
-        int32_t CalculateWeaponDamage(
-            int32_t baseDamage,
+        std::int32_t CalculateWeaponDamage(
+            std::int32_t baseDamage,
             const Attributes& attributes,
             bool useStrength = true) const {
 
-            int32_t modifier = useStrength ?
+            std::int32_t modifier = useStrength ?
                 attributes.GetStrengthModifier() :
                 attributes.GetDexterityModifier();
 
@@ -318,12 +317,12 @@ export namespace LB::Services::Combat {
         /// <summary>
         /// Calculate spell damage with intelligence/wisdom bonus
         /// </summary>
-        int32_t CalculateSpellDamage(
-            int32_t baseDamage,
+        std::int32_t CalculateSpellDamage(
+            std::int32_t baseDamage,
             const Attributes& attributes,
             CharacterClass casterClass) const {
 
-            int32_t spellBonus = 0;
+            std::int32_t spellBonus = 0;
 
             switch (casterClass) {
                 case CharacterClass::Mage:
@@ -347,10 +346,10 @@ export namespace LB::Services::Combat {
         /// Check if a spell hits the target (for attack spells)
         /// </summary>
         bool SpellAttackHits(
-            int32_t spellAttackBonus,
-            int32_t targetArmorClass) const {
+            std::int32_t spellAttackBonus,
+            std::int32_t targetArmorClass) const {
 
-            int32_t roll = rollD20();
+            std::int32_t roll = rollD20();
             return (roll + spellAttackBonus) >= targetArmorClass;
         }
 
@@ -359,24 +358,24 @@ export namespace LB::Services::Combat {
         /// Used for spells and abilities that allow saves
         /// </summary>
         bool MakesSavingThrow(
-            int32_t saveDC,
-            int32_t saveBonus,
+            std::int32_t saveDC,
+            std::int32_t saveBonus,
             bool advantage = false) const {
 
-            int32_t roll = rollD20(advantage, false);
+            std::int32_t roll = rollD20(advantage, false);
             return (roll + saveBonus) >= saveDC;
         }
 
         /// <summary>
         /// Calculate spell save DC for a caster
         /// </summary>
-        int32_t CalculateSpellSaveDC(
-            int32_t casterLevel,
+        std::int32_t CalculateSpellSaveDC(
+            std::int32_t casterLevel,
             const Attributes& attributes,
             CharacterClass casterClass) const {
 
-            int32_t baseDC = 8 + (casterLevel / 2);
-            int32_t abilityBonus = 0;
+            std::int32_t baseDC = 8 + (casterLevel / 2);
+            std::int32_t abilityBonus = 0;
 
             switch (casterClass) {
                 case CharacterClass::Mage:
@@ -411,10 +410,10 @@ export namespace LB::Services::Combat {
         /// Calculate area of effect damage for multi-target spells
         /// </summary>
         std::vector<DamageResult> CalculateAreaDamage(
-            int32_t baseDamage,
-            int32_t spellBonus,
+            std::int32_t baseDamage,
+            std::int32_t spellBonus,
             DamageType damageType,
-            const std::vector<int32_t>& targetArmorClasses) const {
+            const std::vector<std::int32_t>& targetArmorClasses) const {
 
             std::vector<DamageResult> results;
             results.reserve(targetArmorClasses.size());
@@ -437,11 +436,11 @@ export namespace LB::Services::Combat {
         /// <summary>
         /// Calculate healing amount with wisdom bonus
         /// </summary>
-        int32_t CalculateHealing(
-            int32_t baseHealing,
+        std::int32_t CalculateHealing(
+            std::int32_t baseHealing,
             const Attributes& attributes) const {
 
-            int32_t wisdomBonus = attributes.GetWisdomModifier();
+            std::int32_t wisdomBonus = attributes.GetWisdomModifier();
             return std::max(1, baseHealing + wisdomBonus);
         }
 
@@ -486,7 +485,7 @@ export namespace LB::Services::Combat {
         /// Calculate critical hit chance
         /// Base is 5% (natural 20), some classes get higher
         /// </summary>
-        int32_t GetCriticalHitThreshold(CharacterClass attackerClass) const {
+        std::int32_t GetCriticalHitThreshold(CharacterClass attackerClass) const {
             switch (attackerClass) {
                 case CharacterClass::Rogue:
                     return 19; // Crits on 19-20 (10% chance)
@@ -501,9 +500,9 @@ export namespace LB::Services::Combat {
         /// <summary>
         /// Roll a d20 with optional advantage or disadvantage
         /// </summary>
-        int32_t rollD20(bool advantage = false, bool disadvantage = false) const {
+        std::int32_t rollD20(bool advantage = false, bool disadvantage = false) const {
             auto& gen = rng_;
-            std::uniform_int_distribution<int32_t> dist(1, 20);
+            std::uniform_int_distribution<std::int32_t> dist(1, 20);
 
             if (advantage && !disadvantage) {
                 // Roll twice, take higher

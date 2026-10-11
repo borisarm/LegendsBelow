@@ -1,13 +1,14 @@
-// LB.Entity.ixx - Base entity class for all domain entities
-export module LB.Entity;
+// Entity.ixx - LB.Core partition: the base class of domain entities
+export module LB.Core:Entity;
 
-import LB.Common;
+import :Common;
 import std;
 
 export namespace LB {
 	/// <summary>
-	/// Base class for all game entities
-	/// Provides common identity and naming functionality
+	/// Base class for all game entities: identity and name. A plain value type, not a polymorphic
+	/// base (no virtual functions, never deleted through an Entity pointer), so it has no vtable
+	/// and copying a derived entity into an Entity only keeps its identity and name.
 	/// </summary>
 	export class Entity {
 	protected:
@@ -21,9 +22,6 @@ export namespace LB {
 		Entity(Id id, String name) noexcept
 			: id_(id), name_(std::move(name)) {
 		}
-
-		// Virtual destructor for polymorphism
-		virtual ~Entity() = default;
 
 		// Copy and move constructors
 		Entity(const Entity&) = default;
@@ -41,10 +39,6 @@ export namespace LB {
 		// Equality based on ID
 		[[nodiscard]] bool operator==(const Entity& other) const noexcept {
 			return id_ == other.id_;
-		}
-
-		[[nodiscard]] bool operator!=(const Entity& other) const noexcept {
-			return !(*this == other);
 		}
 	};
 

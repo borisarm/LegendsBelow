@@ -4,7 +4,6 @@ export module LB.ProgressionService.StatGrowthConfig;
 import LB.Core;
 import std;
 
-using namespace std;
 export namespace LB::Services::Progression {
 
     /// <summary>
@@ -12,17 +11,17 @@ export namespace LB::Services::Progression {
     /// Defines how attributes scale with levels
     /// </summary>
     export struct StatGrowthConfig {
-        int32_t strengthPerLevel{0};
-        int32_t dexterityPerLevel{0};
-        int32_t constitutionPerLevel{0};
-        int32_t intelligencePerLevel{0};
-        int32_t wisdomPerLevel{0};
-        int32_t charismaPerLevel{0};
+        std::int32_t strengthPerLevel{0};
+        std::int32_t dexterityPerLevel{0};
+        std::int32_t constitutionPerLevel{0};
+        std::int32_t intelligencePerLevel{0};
+        std::int32_t wisdomPerLevel{0};
+        std::int32_t charismaPerLevel{0};
 
         /// <summary>
         /// Calculate total stat gains for multiple levels
         /// </summary>
-        [[nodiscard]] LB::Attributes CalculateGains(int32_t levels) const noexcept {
+        [[nodiscard]] LB::Attributes CalculateGains(std::int32_t levels) const noexcept {
             return LB::Attributes{
                 strengthPerLevel * levels,
                 dexterityPerLevel * levels,

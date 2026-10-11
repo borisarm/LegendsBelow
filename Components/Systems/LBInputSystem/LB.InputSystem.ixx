@@ -6,7 +6,6 @@ export import :GamepadTypes;
 import LB.Core;
 import std;
 
-using namespace std;
 /// <summary>
 /// Input system for LegendsBelow
 /// Handles keyboard, mouse, and gamepad input
@@ -50,35 +49,35 @@ export namespace LB::Systems::Input {
     /// Letters and digits use their uppercase ASCII value (see FromChar).
     /// </summary>
     namespace Keys {
-        inline constexpr int32_t Backspace = 0x08;
-        inline constexpr int32_t Tab = 0x09;
-        inline constexpr int32_t Enter = 0x0D;
-        inline constexpr int32_t Shift = 0x10;
-        inline constexpr int32_t Control = 0x11;
-        inline constexpr int32_t Alt = 0x12;
-        inline constexpr int32_t Escape = 0x1B;
-        inline constexpr int32_t Space = 0x20;
-        inline constexpr int32_t Left = 0x25;
-        inline constexpr int32_t Up = 0x26;
-        inline constexpr int32_t Right = 0x27;
-        inline constexpr int32_t Down = 0x28;
-        inline constexpr int32_t F1 = 0x70;
-        inline constexpr int32_t F2 = 0x71;
-        inline constexpr int32_t F3 = 0x72;
-        inline constexpr int32_t F4 = 0x73;
-        inline constexpr int32_t F5 = 0x74;
-        inline constexpr int32_t F6 = 0x75;
-        inline constexpr int32_t F7 = 0x76;
-        inline constexpr int32_t F8 = 0x77;
-        inline constexpr int32_t F9 = 0x78;
-        inline constexpr int32_t F10 = 0x79;
-        inline constexpr int32_t F11 = 0x7A;
-        inline constexpr int32_t F12 = 0x7B;
+        inline constexpr std::int32_t Backspace = 0x08;
+        inline constexpr std::int32_t Tab = 0x09;
+        inline constexpr std::int32_t Enter = 0x0D;
+        inline constexpr std::int32_t Shift = 0x10;
+        inline constexpr std::int32_t Control = 0x11;
+        inline constexpr std::int32_t Alt = 0x12;
+        inline constexpr std::int32_t Escape = 0x1B;
+        inline constexpr std::int32_t Space = 0x20;
+        inline constexpr std::int32_t Left = 0x25;
+        inline constexpr std::int32_t Up = 0x26;
+        inline constexpr std::int32_t Right = 0x27;
+        inline constexpr std::int32_t Down = 0x28;
+        inline constexpr std::int32_t F1 = 0x70;
+        inline constexpr std::int32_t F2 = 0x71;
+        inline constexpr std::int32_t F3 = 0x72;
+        inline constexpr std::int32_t F4 = 0x73;
+        inline constexpr std::int32_t F5 = 0x74;
+        inline constexpr std::int32_t F6 = 0x75;
+        inline constexpr std::int32_t F7 = 0x76;
+        inline constexpr std::int32_t F8 = 0x77;
+        inline constexpr std::int32_t F9 = 0x78;
+        inline constexpr std::int32_t F10 = 0x79;
+        inline constexpr std::int32_t F11 = 0x7A;
+        inline constexpr std::int32_t F12 = 0x7B;
 
         /// <summary>
         /// Key code for a letter ('a'-'z', 'A'-'Z') or digit ('0'-'9'); -1 for anything else
         /// </summary>
-        constexpr int32_t FromChar(char c) noexcept {
+        constexpr std::int32_t FromChar(char c) noexcept {
             if (c >= 'a' && c <= 'z') return c - 'a' + 'A';
             if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return c;
             return -1;
@@ -89,11 +88,11 @@ export namespace LB::Systems::Input {
     /// Mouse state information
     /// </summary>
     struct MouseState {
-        int32_t x{0};
-        int32_t y{0};
-        int32_t deltaX{0};
-        int32_t deltaY{0};
-        int32_t wheelDelta{0};
+        std::int32_t x{0};
+        std::int32_t y{0};
+        std::int32_t deltaX{0};
+        std::int32_t deltaY{0};
+        std::int32_t wheelDelta{0};
         bool leftButton{false};
         bool rightButton{false};
         bool middleButton{false};
@@ -104,7 +103,7 @@ export namespace LB::Systems::Input {
     /// </summary>
     struct InputAction {
         String name;
-        int32_t keyCode{-1};
+        std::int32_t keyCode{-1};
         MouseButton mouseButton{MouseButton::Left};
         GamepadButton gamepadButton{GamepadButton::A};
         InputDevice deviceType{InputDevice::Keyboard};
@@ -192,7 +191,7 @@ export namespace LB::Systems::Input {
         /// <summary>
         /// Check if a key is currently pressed
         /// </summary>
-        bool IsKeyDown(int32_t keyCode) const {
+        bool IsKeyDown(std::int32_t keyCode) const {
             auto it = keyStates_.find(keyCode);
             if (it == keyStates_.end()) return false;
             return it->second == KeyState::Pressed || it->second == KeyState::Held;
@@ -203,14 +202,14 @@ export namespace LB::Systems::Input {
         /// happen, so a press is reported even if the key was released again before the frame
         /// was read (a quick tap between two simulation steps).
         /// </summary>
-        bool IsKeyPressed(int32_t keyCode) const {
+        bool IsKeyPressed(std::int32_t keyCode) const {
             return pressedSinceUpdate_.contains(keyCode);
         }
 
         /// <summary>
         /// Check if a key went up during this input frame
         /// </summary>
-        bool IsKeyReleased(int32_t keyCode) const {
+        bool IsKeyReleased(std::int32_t keyCode) const {
             return releasedSinceUpdate_.contains(keyCode);
         }
 
@@ -224,7 +223,7 @@ export namespace LB::Systems::Input {
         /// <summary>
         /// Get current gamepad state
         /// </summary>
-        const GamepadState& GetGamepadState(int32_t gamepadIndex = 0) const {
+        const GamepadState& GetGamepadState(std::int32_t gamepadIndex = 0) const {
             auto it = gamepadStates_.find(gamepadIndex);
             if (it == gamepadStates_.end()) {
                 static GamepadState emptyState{};
@@ -255,14 +254,14 @@ export namespace LB::Systems::Input {
         /// <summary>
         /// Check if a gamepad button is currently held
         /// </summary>
-        bool IsGamepadButtonDown(GamepadButton button, int32_t gamepadIndex = 0) const {
+        bool IsGamepadButtonDown(GamepadButton button, std::int32_t gamepadIndex = 0) const {
             return (GetGamepadState(gamepadIndex).buttons & ButtonMask(button)) != 0;
         }
 
         /// <summary>
         /// Check if a gamepad button went down during this input frame
         /// </summary>
-        bool IsGamepadButtonPressed(GamepadButton button, int32_t gamepadIndex = 0) const {
+        bool IsGamepadButtonPressed(GamepadButton button, std::int32_t gamepadIndex = 0) const {
             auto it = gamepadPressedSinceUpdate_.find(gamepadIndex);
             return it != gamepadPressedSinceUpdate_.end() && (it->second & ButtonMask(button)) != 0;
         }
@@ -271,7 +270,7 @@ export namespace LB::Systems::Input {
         /// Set a gamepad's state (device backend, host input events, or tests).
         /// Buttons that go down are recorded as presses for this input frame.
         /// </summary>
-        void SetGamepadState(int32_t gamepadIndex, const GamepadState& state) {
+        void SetGamepadState(std::int32_t gamepadIndex, const GamepadState& state) {
             auto& current = gamepadStates_[gamepadIndex];
             const std::uint32_t newlyPressed = state.buttons & ~current.buttons;
             if (newlyPressed != 0) {
@@ -333,7 +332,7 @@ export namespace LB::Systems::Input {
         /// <summary>
         /// Set key state (host input events, tests, or external input injection)
         /// </summary>
-        void SetKeyState(int32_t keyCode, KeyState state) {
+        void SetKeyState(std::int32_t keyCode, KeyState state) {
             auto& current = keyStates_[keyCode];
             const bool wasDown = current != KeyState::Released;
             const bool isDown = state != KeyState::Released;
@@ -348,7 +347,7 @@ export namespace LB::Systems::Input {
         /// Set the cursor position in client coordinates; the delta accumulates
         /// relative to the previous input frame
         /// </summary>
-        void SetMousePosition(int32_t x, int32_t y) {
+        void SetMousePosition(std::int32_t x, std::int32_t y) {
             currentMouseState_.x = x;
             currentMouseState_.y = y;
             currentMouseState_.deltaX = x - previousMouseState_.x;
@@ -374,7 +373,7 @@ export namespace LB::Systems::Input {
         /// <summary>
         /// Accumulate wheel movement for this input frame (positive = away from the user)
         /// </summary>
-        void AddMouseWheel(int32_t delta) {
+        void AddMouseWheel(std::int32_t delta) {
             currentMouseState_.wheelDelta += delta;
         }
 
@@ -408,15 +407,15 @@ export namespace LB::Systems::Input {
         std::unique_ptr<DeviceBackend> devices_;
 
         bool initialized_{false};
-        std::unordered_map<int32_t, KeyState> keyStates_;
+        std::unordered_map<std::int32_t, KeyState> keyStates_;
         // Transitions since the last Update(), so taps shorter than a frame are not lost
-        std::unordered_set<int32_t> pressedSinceUpdate_;
-        std::unordered_set<int32_t> releasedSinceUpdate_;
+        std::unordered_set<std::int32_t> pressedSinceUpdate_;
+        std::unordered_set<std::int32_t> releasedSinceUpdate_;
         std::unordered_set<MouseButton> mouseButtonsPressedSinceUpdate_;
         MouseState currentMouseState_{};
         MouseState previousMouseState_{};
-        std::unordered_map<int32_t, GamepadState> gamepadStates_;
-        std::unordered_map<int32_t, std::uint32_t> gamepadPressedSinceUpdate_;
+        std::unordered_map<std::int32_t, GamepadState> gamepadStates_;
+        std::unordered_map<std::int32_t, std::uint32_t> gamepadPressedSinceUpdate_;
         std::unordered_map<String, std::vector<InputAction>> actions_;
     };
 

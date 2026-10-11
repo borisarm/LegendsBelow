@@ -4,7 +4,6 @@ export module LB.AudioSystem;
 import LB.Core;
 import std;
 
-using namespace std;
 /// <summary>
 /// Audio system for LegendsBelow
 /// Handles sound effects, music playback, and audio mixing
@@ -36,7 +35,7 @@ export namespace LB::Systems::Audio {
     /// <summary>
     /// Audio source identifier
     /// </summary>
-    using AudioSourceId = int32_t;
+    using AudioSourceId = std::int32_t;
 
     /// <summary>
     /// Audio clip information
@@ -261,7 +260,7 @@ export namespace LB::Systems::Audio {
         /// <summary>
         /// Get number of active audio sources
         /// </summary>
-        size_t GetActiveSourceCount() const {
+        std::size_t GetActiveSourceCount() const {
             return activeSources_.size();
         }
 

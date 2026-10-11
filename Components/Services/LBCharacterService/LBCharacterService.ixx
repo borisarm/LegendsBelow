@@ -34,7 +34,7 @@ export namespace LB::Services::Character {
     struct ClassRules {
         float baseMovementSpeed{4.0f};                       // tiles per second before DEX and armour
         ClassProgression progression;                        // HP/MP gains, attack and save bonuses
-        std::map<WeaponType, int32_t> weaponAdjustments;     // e.g. Sword: +3 Warrior, -5 Cleric
+        std::map<WeaponType, std::int32_t> weaponAdjustments;     // e.g. Sword: +3 Warrior, -5 Cleric
         std::vector<AttributeType> primaryAttributes;        // receive the automatic level-up points
         AttributeGrowth attributeGrowth;                     // points per level and attribute caps
         std::map<ArmorCategory, ArmorAdjustment> armorAdjustments;  // scales armour penalties
@@ -75,11 +75,11 @@ export namespace LB::Services::Character {
     /// </summary>
     struct CharacterProgressionResult {
         bool levelIncreased{false};
-        int32_t newLevel{1};
+        std::int32_t newLevel{1};
         Attributes attributeGains{0, 0, 0, 0, 0, 0};  // automatic class points applied (Attributes default to 10)
-        int32_t attributePointsGained{0};     // free points to assign (SpendAttributePoint)
-        int32_t hitPointIncrease{0};
-        int32_t manaPointIncrease{0};
+        std::int32_t attributePointsGained{0};     // free points to assign (SpendAttributePoint)
+        std::int32_t hitPointIncrease{0};
+        std::int32_t manaPointIncrease{0};
         std::vector<LB::String> unlockedAbilities;
 
         bool HasChanges() const {
@@ -95,14 +95,14 @@ export namespace LB::Services::Character {
         CharacterId id;
         LB::String name;
         CharacterClass characterClass;
-        int32_t level;
-        int32_t currentExperience;
-        int32_t experienceToNextLevel;
+        std::int32_t level;
+        std::int32_t currentExperience;
+        std::int32_t experienceToNextLevel;
         Attributes currentAttributes;
-        int32_t currentHitPoints;
-        int32_t maxHitPoints;
-        int32_t currentManaPoints;
-        int32_t maxManaPoints;
+        std::int32_t currentHitPoints;
+        std::int32_t maxHitPoints;
+        std::int32_t currentManaPoints;
+        std::int32_t maxManaPoints;
         Position position;
         bool isAlive;
 
@@ -212,7 +212,7 @@ export namespace LB::Services::Character {
         /// Award experience points and handle potential level-up
         /// Returns progression information if character levels up
         /// </summary>
-        std::optional<CharacterProgressionResult> AwardExperience(CharacterId id, int32_t experiencePoints) {
+        std::optional<CharacterProgressionResult> AwardExperience(CharacterId id, std::int32_t experiencePoints) {
             auto it = characters_.find(id);
             if (it == characters_.end() || experiencePoints <= 0) {
                 return std::nullopt;
@@ -236,9 +236,9 @@ export namespace LB::Services::Character {
                 // Attribute growth: automatic class points into the primary attributes, free points
                 // for the player (design-character-system.md 5.2)
                 auto newAttributes = character.GetAttributes();
-                int32_t freePoints = 0;
-                for (int32_t level = oldLevel + 1; level <= newLevel; ++level) {
-                    for (int32_t point = 0; point < rules.attributeGrowth.autoPointsPerLevel; ++point) {
+                std::int32_t freePoints = 0;
+                for (std::int32_t level = oldLevel + 1; level <= newLevel; ++level) {
+                    for (std::int32_t point = 0; point < rules.attributeGrowth.autoPointsPerLevel; ++point) {
                         if (!grantAutoPoint(rules, level + point, newAttributes, result.attributeGains)) {
                             ++freePoints;  // every primary at its cap: the point becomes a free one
                         }
@@ -299,7 +299,7 @@ export namespace LB::Services::Character {
         /// Apply damage to character
         /// Handles damage reduction and death state
         /// </summary>
-        bool DamageCharacter(CharacterId id, int32_t damage, float damageReduction = 0.0f) {
+        bool DamageCharacter(CharacterId id, std::int32_t damage, float damageReduction = 0.0f) {
             auto it = characters_.find(id);
             if (it == characters_.end() || damage <= 0) {
                 return false;
@@ -311,7 +311,7 @@ export namespace LB::Services::Character {
             }
 
             // Apply damage reduction
-            auto actualDamage = static_cast<int32_t>(damage * (1.0f - std::clamp(damageReduction, 0.0f, 0.99f)));
+            auto actualDamage = static_cast<std::int32_t>(damage * (1.0f - std::clamp(damageReduction, 0.0f, 0.99f)));
 
             // Apply damage
             auto newHP = std::max(0, character.GetCurrentHitPoints() - actualDamage);
@@ -324,7 +324,7 @@ export namespace LB::Services::Character {
         /// Heal character by specified amount
         /// Cannot exceed maximum hit points
         /// </summary>
-        int32_t HealCharacter(CharacterId id, int32_t healAmount) {
+        std::int32_t HealCharacter(CharacterId id, std::int32_t healAmount) {
             auto it = characters_.find(id);
             if (it == characters_.end() || healAmount <= 0) {
                 return 0;
@@ -443,7 +443,7 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Highest value an attribute can reach for this character's class
         /// </summary>
-        std::optional<int32_t> GetAttributeCap(CharacterId id, AttributeType attribute) const {
+        std::optional<std::int32_t> GetAttributeCap(CharacterId id, AttributeType attribute) const {
             const auto* rules = GetRulesFor(id);
             if (!rules) {
                 return std::nullopt;
@@ -486,7 +486,7 @@ export namespace LB::Services::Character {
         /// for an unknown character or values outside the class rules (level 1..MaxLevel,
         /// attributes within the class caps, no negative experience or points).
         /// </summary>
-        bool RestoreProgress(CharacterId id, int32_t level, int32_t experience, const Attributes& attributes, int32_t unspentPoints) {
+        bool RestoreProgress(CharacterId id, std::int32_t level, std::int32_t experience, const Attributes& attributes, std::int32_t unspentPoints) {
             auto it = characters_.find(id);
             const auto* rules = GetRulesFor(id);
             if (it == characters_.end() || !rules) {
@@ -510,7 +510,7 @@ export namespace LB::Services::Character {
 
             const auto maxHP = calculateMaxHitPoints(*rules, level, attributes);
             const auto maxMP = calculateMaxManaPoints(character.GetClass(), *rules, level, attributes);
-            character.SetHitPoints(std::clamp(static_cast<int32_t>(std::lround(health * maxHP)), character.IsAlive() ? 1 : 0, maxHP), maxHP);
+            character.SetHitPoints(std::clamp(static_cast<std::int32_t>(std::lround(health * maxHP)), character.IsAlive() ? 1 : 0, maxHP), maxHP);
             character.SetManaPoints(maxMP, maxMP);
             return true;
         }
@@ -518,14 +518,14 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Total experience a character needs to reach a level (level 1: 0)
         /// </summary>
-        int32_t GetExperienceForLevel(int32_t level) const {
+        std::int32_t GetExperienceForLevel(std::int32_t level) const {
             return calculateExperienceForLevel(level);
         }
 
         /// <summary>
         /// Class adjustment for attacking with a weapon category (classes.json weaponAdjustments)
         /// </summary>
-        std::optional<int32_t> GetWeaponAdjustment(CharacterId id, WeaponType weapon) const {
+        std::optional<std::int32_t> GetWeaponAdjustment(CharacterId id, WeaponType weapon) const {
             const auto* rules = GetRulesFor(id);
             if (!rules) {
                 return std::nullopt;
@@ -540,7 +540,7 @@ export namespace LB::Services::Character {
         /// melee = class melee bonus + STR_mod, ranged (bows, crossbows) = class ranged bonus + DEX_mod,
         /// then + the class adjustment for that weapon category
         /// </summary>
-        std::optional<int32_t> GetAttackBonus(CharacterId id, WeaponType weapon) const {
+        std::optional<std::int32_t> GetAttackBonus(CharacterId id, WeaponType weapon) const {
             auto it = characters_.find(id);
             const auto* rules = GetRulesFor(id);
             if (it == characters_.end() || !rules) {
@@ -550,8 +550,8 @@ export namespace LB::Services::Character {
             const auto& character = it->second;
             const auto totals = rules->progression.TotalsAt(character.GetLevel());
             const bool ranged = weapon == WeaponType::Bow || weapon == WeaponType::Crossbow;
-            const int32_t classBonus = ranged ? totals.rangedAttackBonus : totals.meleeAttackBonus;
-            const int32_t attributeBonus = ranged
+            const std::int32_t classBonus = ranged ? totals.rangedAttackBonus : totals.meleeAttackBonus;
+            const std::int32_t attributeBonus = ranged
                 ? character.GetAttributes().GetDexterityModifier()
                 : character.GetAttributes().GetStrengthModifier();
 
@@ -625,7 +625,7 @@ export namespace LB::Services::Character {
         /// Consume mana for spell casting or abilities
         /// Returns true if character had sufficient mana
         /// </summary>
-        bool ConsumeMana(CharacterId id, int32_t manaCost) {
+        bool ConsumeMana(CharacterId id, std::int32_t manaCost) {
             auto it = characters_.find(id);
             if (it == characters_.end() || manaCost <= 0) {
                 return false;
@@ -646,7 +646,7 @@ export namespace LB::Services::Character {
         /// Restore mana to character
         /// Returns actual amount restored
         /// </summary>
-        int32_t RestoreMana(CharacterId id, int32_t manaAmount) {
+        std::int32_t RestoreMana(CharacterId id, std::int32_t manaAmount) {
             auto it = characters_.find(id);
             if (it == characters_.end() || manaAmount <= 0) {
                 return 0;
@@ -683,7 +683,7 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Get count of managed characters
         /// </summary>
-        size_t GetCharacterCount() const noexcept {
+        std::size_t GetCharacterCount() const noexcept {
             return characters_.size();
         }
 
@@ -720,7 +720,7 @@ export namespace LB::Services::Character {
         /// <summary>
         /// Get all characters in a level range
         /// </summary>
-        std::vector<CharacterId> GetCharactersByLevelRange(int32_t minLevel, int32_t maxLevel) const {
+        std::vector<CharacterId> GetCharactersByLevelRange(std::int32_t minLevel, std::int32_t maxLevel) const {
             std::vector<CharacterId> ids;
 
             for (const auto& [id, character] : characters_) {
@@ -778,7 +778,7 @@ export namespace LB::Services::Character {
             }
 
             // Revive character with specified HP percentage
-            auto healAmount = static_cast<int32_t>(character.GetMaxHitPoints() * std::clamp(healthPercentage, 0.0f, 1.0f));
+            auto healAmount = static_cast<std::int32_t>(character.GetMaxHitPoints() * std::clamp(healthPercentage, 0.0f, 1.0f));
             character.SetHitPoints(healAmount, character.GetMaxHitPoints());
 
             return true;
@@ -804,14 +804,14 @@ export namespace LB::Services::Character {
             return nextId_++;
         }
 
-        int32_t calculateExperienceForLevel(int32_t level) const {
+        std::int32_t calculateExperienceForLevel(std::int32_t level) const {
             // Simple exponential XP curve
             if (level <= 1) return 0;
-            return static_cast<int32_t>(100 * std::pow(level - 1, 1.5));
+            return static_cast<std::int32_t>(100 * std::pow(level - 1, 1.5));
         }
 
-        int32_t calculateLevelForExperience(int32_t experience) const {
-            int32_t level = 1;
+        std::int32_t calculateLevelForExperience(std::int32_t experience) const {
+            std::int32_t level = 1;
             while (calculateExperienceForLevel(level + 1) <= experience) {
                 level++;
                 if (level >= 100) break; // Cap at level 100
@@ -839,7 +839,7 @@ export namespace LB::Services::Character {
             return std::ranges::find(rules.primaryAttributes, attribute) != rules.primaryAttributes.end();
         }
 
-        static int32_t attributeCap(const ClassRules& rules, AttributeType attribute) {
+        static std::int32_t attributeCap(const ClassRules& rules, AttributeType attribute) {
             return isPrimary(rules, attribute) ? rules.attributeGrowth.primaryAttributeCap : rules.attributeGrowth.otherAttributeCap;
         }
 
@@ -854,9 +854,9 @@ export namespace LB::Services::Character {
         // Give one automatic point to a primary attribute, rotating through the primaries by
         // slot (level 2 -> first primary, level 3 -> second, ...). Primaries at their cap are
         // skipped. Returns false when every primary is capped.
-        static bool grantAutoPoint(const ClassRules& rules, int32_t slot, Attributes& attributes, Attributes& gains) {
-            const auto count = static_cast<int32_t>(rules.primaryAttributes.size());
-            for (int32_t offset = 0; offset < count; ++offset) {
+        static bool grantAutoPoint(const ClassRules& rules, std::int32_t slot, Attributes& attributes, Attributes& gains) {
+            const auto count = static_cast<std::int32_t>(rules.primaryAttributes.size());
+            for (std::int32_t offset = 0; offset < count; ++offset) {
                 const auto attribute = rules.primaryAttributes[static_cast<std::size_t>((slot - 2 + offset) % count)];
                 if (attributes.Get(attribute) < attributeCap(rules, attribute)) {
                     attributes.Set(attribute, attributes.Get(attribute) + 1);
@@ -873,24 +873,24 @@ export namespace LB::Services::Character {
         }
 
         // design-character-system.md 4.2: MaxHP = class table HP + CON_mod * level
-        static int32_t calculateMaxHitPoints(const ClassRules& rules, int32_t level, const Attributes& attributes) {
+        static std::int32_t calculateMaxHitPoints(const ClassRules& rules, std::int32_t level, const Attributes& attributes) {
             const auto totals = rules.progression.TotalsAt(level);
             return std::max(1, totals.maxHitPoints + attributes.GetConstitutionModifier() * level);
         }
 
         // design-character-system.md 4.2: MaxMP = class table MP + CasterPrimaryMod * level,
         // CasterPrimaryMod = INT_mod (Mage), WIS_mod (Cleric), 0 for others
-        static int32_t calculateMaxManaPoints(CharacterClass charClass, const ClassRules& rules, int32_t level, const Attributes& attributes) {
+        static std::int32_t calculateMaxManaPoints(CharacterClass charClass, const ClassRules& rules, std::int32_t level, const Attributes& attributes) {
             const auto totals = rules.progression.TotalsAt(level);
-            int32_t casterModifier = 0;
+            std::int32_t casterModifier = 0;
             if (charClass == CharacterClass::Mage) casterModifier = attributes.GetIntelligenceModifier();
             if (charClass == CharacterClass::Cleric) casterModifier = attributes.GetWisdomModifier();
             return std::max(0, totals.maxManaPoints + casterModifier * level);
         }
 
-        int32_t getMaxMoveDistance(CharacterClass charClass, const Attributes& attributes) const {
-            int32_t baseMoveDistance = 5;
-            int32_t dexterityBonus = attributes.GetDexterityModifier();
+        std::int32_t getMaxMoveDistance(CharacterClass charClass, const Attributes& attributes) const {
+            std::int32_t baseMoveDistance = 5;
+            std::int32_t dexterityBonus = attributes.GetDexterityModifier();
 
             switch (charClass) {
                 case CharacterClass::Warrior: baseMoveDistance = 4; break;
@@ -903,7 +903,7 @@ export namespace LB::Services::Character {
             return std::max(1, baseMoveDistance + dexterityBonus);
         }
 
-        std::vector<LB::String> getAbilitiesUnlockedAtLevel(CharacterClass charClass, int32_t level) const {
+        std::vector<LB::String> getAbilitiesUnlockedAtLevel(CharacterClass charClass, std::int32_t level) const {
             std::vector<LB::String> abilities;
 
             // Simplified ability unlocking system

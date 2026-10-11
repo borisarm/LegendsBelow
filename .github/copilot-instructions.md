@@ -98,7 +98,7 @@ Partition files declare themselves as part of a parent module using the `:Partit
 // Entity.ixx - Partition file
 export module LB.Entities:Entity;  // Note the colon syntax
 
-import LB.Common;
+import LB.Core;
 import LB.Enums;
 import :OtherPartition;  // Import sibling partition with relative syntax
 
@@ -116,7 +116,7 @@ Within partition files, reference sibling partitions using **relative import** s
 // Character.ixx - Partition file that depends on Entity
 export module LB.Entities:Character;
 
-import LB.Common;
+import LB.Core;
 import :Entity;  // Relative import of Entity partition (NO module name prefix)
 
 export namespace LB {  // Use LB namespace for core types
@@ -133,7 +133,7 @@ The primary module interface re-exports all partitions:
 // LB.Entities.ixx - Primary module interface
 export module LB.Entities;
 
-import LB.Common;  // Import dependencies
+import LB.Core;  // Import dependencies
 import LB.Enums;
 import LB.ValueObjects;
 import std;
@@ -223,13 +223,10 @@ export import :Character;  // Export Character
 ### ⚠️ Module Import Rules (IMPORTANT)
 **Problem**: Systems fail to compile with "Position not found" errors
 
-**Rule**: Systems and Services must import `LB.Core`, NOT `LB.Common`
+**Rule**: Import `LB.Core` for the core types. Its parts (`:Common`, `:ValueObjects`, `:Entity`) are partitions of `LB.Core`, so they cannot be imported on their own.
 ```cpp
 // ✅ CORRECT - LB.Core provides all core types
 import LB.Core;  // Exports: LB::String, LB::Position, LB::Id, LB::Attributes, LB::Entity
-
-// ❌ WRONG - LB.Common is too limited
-import LB.Common;  // Only exports: LB::String, LB::Id (missing Position!)
 ```
 
 ### ⚠️ No LB::Domain Namespace (IMPORTANT)
@@ -312,9 +309,9 @@ Every new project MUST have these in `.vcxproj`:
 
 ```
 LB::                                    # Root namespace
-├── String, Id, InvalidId               # from LB.Common
-├── Position, Dice, Attributes          # from LB.CoreValueObjects
-├── Entity                              # from LB.Entity
+├── String, Id, InvalidId               # LB.Core:Common
+├── Position, Dice, Attributes          # LB.Core:ValueObjects
+├── Entity                              # LB.Core:Entity
 │
 ├── Character::                         # Character domain (LB.Character)
 │   ├── CharacterClass
@@ -366,9 +363,8 @@ Tests        →  Component under test + LB.Core
 | Error Message | Solution |
 |---------------|----------|
 | `'LB::Domain': namespace does not exist` | Replace `LB::Domain::` with `LB::Character::`, `LB::Combat::`, etc. |
-| `'Position': is not a member of 'LB'` | Change `import LB.Common;` to `import LB.Core;` |
 | `'InventoryItem' cannot be defined` | Remove duplicate struct, use `using LB::Inventory::InventoryItem;` |
-| `could not find module 'LB.Common'` | Add LBModel.Core project reference to `.vcxproj` |
+| `could not find module 'LB.Core'` | Add LBModel.Core project reference to `.vcxproj` |
 | `IsKeyPressed`/`IsKeyReleased` test fails | Query before `Update()`; it clears the frame's transitions |
 | `C7622` module interface extension incompatible with `/internalPartition` | Internal partitions (`module X:Part;`) must be `.cpp` files with `<CompileAs>CompileAsCppModuleInternalPartition</CompileAs>` |
 | `C5050` possible incompatible environment importing module | Importer and module libraries must agree on `/sdl` (`SDLCheck`), `/fp` (`FloatingPointModel`), and `/guard:cf` (`ControlFlowGuard`) |
@@ -389,7 +385,7 @@ Tests        →  Component under test + LB.Core
 
 ### Pre-Commit Checklist
 
-- [ ] Correct module imports (`LB.Core` not `LB.Common`)
+- [ ] Correct module imports (`LB.Core` for the core types)
 - [ ] Correct namespaces (no `LB::Domain::`)
 - [ ] No duplicate type definitions
 - [ ] Project references in `.vcxproj`

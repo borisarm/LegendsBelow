@@ -112,7 +112,7 @@ namespace LB::Systems::Rendering {
         Shutdown();
     }
 
-    bool RenderingSystem::Initialize(void* nativeWindow, int32_t screenWidth, int32_t screenHeight) {
+    bool RenderingSystem::Initialize(void* nativeWindow, std::int32_t screenWidth, std::int32_t screenHeight) {
         if (nativeWindow == nullptr) {
             return Initialize(screenWidth, screenHeight);
         }
@@ -236,7 +236,7 @@ namespace LB::Systems::Rendering {
 
             // 2D overlay: rectangles and text back to front by layer (submission order within a
             // layer, rectangles first), alpha-blended in one draw
-            struct OverlayItem { int32_t layer; bool text; std::size_t index; };
+            struct OverlayItem { std::int32_t layer; bool text; std::size_t index; };
             std::vector<OverlayItem> items;
             items.reserve(rectangleQueue_.size() + textQueue_.size());
             for (std::size_t i = 0; i < rectangleQueue_.size(); ++i) items.push_back({ rectangleQueue_[i].layerDepth, false, i });
@@ -256,13 +256,13 @@ namespace LB::Systems::Rendering {
             gpu_->renderer.DrawOverlay(overlay.vertices.data(), overlay.batches);
         }
 
-        stats_.meshesRendered = static_cast<uint32_t>(meshQueue_.size());
+        stats_.meshesRendered = static_cast<std::uint32_t>(meshQueue_.size());
         stats_.drawCalls += std::ranges::any_of(particleQueue_, &ParticleRenderData::glowing) ? 1 : 0;
         stats_.drawCalls += std::ranges::any_of(particleQueue_, [](const ParticleRenderData& p) { return !p.glowing; }) ? 1 : 0;
         stats_.drawCalls += stats_.meshesRendered;
-        stats_.modelsRendered = static_cast<uint32_t>(modelQueue_.size());
+        stats_.modelsRendered = static_cast<std::uint32_t>(modelQueue_.size());
         for (std::size_t i = 0; i < models_.size(); ++i) {
-            const auto parts = static_cast<uint32_t>(models_[i]->parts.size());
+            const auto parts = static_cast<std::uint32_t>(models_[i]->parts.size());
             if (!opaqueInstances_[i].empty()) stats_.drawCalls += parts;
             if (!fadedInstances_[i].empty()) stats_.drawCalls += 2 * parts;   // depth, then blend
         }
@@ -381,7 +381,7 @@ namespace LB::Systems::Rendering {
         return offset;
     }
 
-    void RenderingSystem::OnWindowSizeChanged(int32_t width, int32_t height) {
+    void RenderingSystem::OnWindowSizeChanged(std::int32_t width, std::int32_t height) {
         screenWidth_ = width;
         screenHeight_ = height;
         viewport_ = Rectangle{0, 0, width, height};

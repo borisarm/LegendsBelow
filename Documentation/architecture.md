@@ -66,14 +66,14 @@ All libraries are static libraries (`.lib`); every module project targets x64 wi
 
 | Project | Primary module | Sub-modules | Namespace |
 |---------|----------------|-------------|-----------|
-| LBModel.Core | `LB.Core` | `LB.Common`, `LB.CoreValueObjects`, `LB.Entity` | `LB` |
+| LBModel.Core | `LB.Core` | partitions `:Common`, `:ValueObjects`, `:Entity` | `LB` |
 | LBModel.Character | `LB.Character` | `.Entities`, `.Enums` | `LB::Character` |
 | LBModel.Combat | `LB.Combat` | `.Enums` | `LB::Combat` |
 | LBModel.Inventory | `LB.Inventory` | `.Entities`, `.Enums`, `.ValueObjects` | `LB::Inventory` |
 | LBModel.Dungeon | `LB.Dungeon` | `.Entities`, `.Enums`, `.ValueObjects` | `LB::Dungeon` |
 | LBModel.Progression | *(stub, not in solution)* | | |
 
-`LB.Core` provides `String`, `Id`, `Position`, `Dice`, `Attributes`, and `Entity`. Import `LB.Core`, not `LB.Common`.
+`LB.Core` provides `String`, `Id`, `Position`, `Dice`, `Attributes`, and `Entity`. Its parts are partitions of `LB.Core`, so `import LB.Core` is the only way to get them.
 
 ### Services – `Components/Services/`
 

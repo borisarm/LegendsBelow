@@ -34,7 +34,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Create inventory for a character
         /// </summary>
-        bool CreateInventory(CharacterId characterId, int32_t capacity = 20) {
+        bool CreateInventory(CharacterId characterId, std::int32_t capacity = 20) {
             if (inventories_.contains(characterId)) {
                 return false; // Inventory already exists
             }
@@ -59,14 +59,14 @@ export namespace LB::Services::Inventory {
             }
 
             auto& inventory = inventories_[characterId];
-            int32_t remainingQuantity = item.quantity;
+            std::int32_t remainingQuantity = item.quantity;
 
             // Try to stack with existing items first
             if (item.CanStack()) {
                 for (auto& existingItem : inventory) {
                     if (existingItem.itemId == item.itemId && !existingItem.IsStackFull()) {
-                        int32_t spaceAvailable = existingItem.GetRemainingStackSpace();
-                        int32_t amountToAdd = std::min(spaceAvailable, remainingQuantity);
+                        std::int32_t spaceAvailable = existingItem.GetRemainingStackSpace();
+                        std::int32_t amountToAdd = std::min(spaceAvailable, remainingQuantity);
 
                         existingItem.quantity += amountToAdd;
                         remainingQuantity -= amountToAdd;
@@ -103,7 +103,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Remove item from inventory
         /// </summary>
-        InventoryOperationResult RemoveItem(CharacterId characterId, ItemId itemId, int32_t quantity = 1) {
+        InventoryOperationResult RemoveItem(CharacterId characterId, ItemId itemId, std::int32_t quantity = 1) {
             InventoryOperationResult result{};
 
             if (!inventories_.contains(characterId)) {
@@ -112,11 +112,11 @@ export namespace LB::Services::Inventory {
             }
 
             auto& inventory = inventories_[characterId];
-            int32_t remainingToRemove = quantity;
+            std::int32_t remainingToRemove = quantity;
 
             for (auto it = inventory.begin(); it != inventory.end(); ) {
                 if (it->itemId == itemId) {
-                    int32_t amountToRemove = std::min(it->quantity, remainingToRemove);
+                    std::int32_t amountToRemove = std::min(it->quantity, remainingToRemove);
                     it->quantity -= amountToRemove;
                     remainingToRemove -= amountToRemove;
                     result.itemsAffected += amountToRemove;
@@ -206,13 +206,13 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Get item count in inventory
         /// </summary>
-        int32_t GetItemCount(CharacterId characterId, ItemId itemId) const {
+        std::int32_t GetItemCount(CharacterId characterId, ItemId itemId) const {
             auto it = inventories_.find(characterId);
             if (it == inventories_.end()) {
                 return 0;
             }
 
-            int32_t count = 0;
+            std::int32_t count = 0;
             for (const auto& item : it->second) {
                 if (item.itemId == itemId) {
                     count += item.quantity;
@@ -232,24 +232,24 @@ export namespace LB::Services::Inventory {
                 return false;
             }
 
-            return static_cast<int32_t>(inventoryIt->second.size()) < capacityIt->second;
+            return static_cast<std::int32_t>(inventoryIt->second.size()) < capacityIt->second;
         }
 
         /// <summary>
         /// Get current inventory usage
         /// </summary>
-        int32_t GetInventorySize(CharacterId characterId) const {
+        std::int32_t GetInventorySize(CharacterId characterId) const {
             auto it = inventories_.find(characterId);
             if (it == inventories_.end()) {
                 return 0;
             }
-            return static_cast<int32_t>(it->second.size());
+            return static_cast<std::int32_t>(it->second.size());
         }
 
         /// <summary>
         /// Get inventory capacity
         /// </summary>
-        int32_t GetInventoryCapacity(CharacterId characterId) const {
+        std::int32_t GetInventoryCapacity(CharacterId characterId) const {
             auto it = capacities_.find(characterId);
             if (it == capacities_.end()) {
                 return 0;
@@ -260,7 +260,7 @@ export namespace LB::Services::Inventory {
         /// <summary>
         /// Set inventory capacity
         /// </summary>
-        bool SetInventoryCapacity(CharacterId characterId, int32_t capacity) {
+        bool SetInventoryCapacity(CharacterId characterId, std::int32_t capacity) {
             if (!inventories_.contains(characterId)) {
                 return false;
             }
@@ -334,7 +334,7 @@ export namespace LB::Services::Inventory {
 
     private:
         std::unordered_map<CharacterId, std::vector<InventoryItem>> inventories_;
-        std::unordered_map<CharacterId, int32_t> capacities_;
+        std::unordered_map<CharacterId, std::int32_t> capacities_;
         std::unordered_map<CharacterId, EquippedItems> equippedItems_;
     };
 

@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    vcpkg: manifest mode only. The five projects that need vcpkg packages enable the manifest
+    (vcpkg.json at the root, versions pinned in vcpkg-configuration.json). vcpkg's classic mode,
+    on by default with "vcpkg integrate install", would add the machine's global
+    <vcpkg root>\installed\<triplet>\include to every other project, so a header missing from
+    vcpkg.json could still build on one machine and fail on another. Imported before vcpkg's
+    defaults, which only fill in properties left empty.
+  -->
+  <PropertyGroup>
+    <VcpkgEnableClassic>false</VcpkgEnableClassic>
+  </PropertyGroup>
+</Project>

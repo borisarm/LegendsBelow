@@ -1,7 +1,17 @@
 ###############################################################################
 # Set default behavior to automatically normalize line endings.
-* text=auto
+* text=auto eol=crlf
 
+# Stored with LF, checked out with CRLF on every machine (whatever core.autocrlf says): this is a
+# Windows/MSBuild project, and Visual Studio writes CRLF.
+# Binary assets are never converted
+*.glb binary
+*.bin binary
+*.png binary
+*.ico binary
+*.ttf binary
+# The resource script is UTF-16: no line-ending conversion
+*.rc -text
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

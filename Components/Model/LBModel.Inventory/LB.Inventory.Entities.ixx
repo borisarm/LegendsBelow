@@ -19,8 +19,8 @@ export namespace LB::Inventory {
         ItemId itemId;
         LB::String name;
         LB::String description;
-        int32_t quantity{1};
-        int32_t maxStack{1};
+        std::int32_t quantity{1};
+        std::int32_t maxStack{1};
         bool isEquippable{false};
         bool isConsumable{false};
         EquipmentSlot equipmentSlot{EquipmentSlot::None};
@@ -33,7 +33,7 @@ export namespace LB::Inventory {
             return quantity >= maxStack;
         }
 
-        [[nodiscard]] int32_t GetRemainingStackSpace() const noexcept {
+        [[nodiscard]] std::int32_t GetRemainingStackSpace() const noexcept {
             return std::max(0, maxStack - quantity);
         }
     };
@@ -49,17 +49,17 @@ export namespace LB::Inventory {
         ArmorCategory armorCategory{ArmorCategory::None};
 
         // Stat bonuses
-        int32_t strengthBonus{0};
-        int32_t dexterityBonus{0};
-        int32_t constitutionBonus{0};
-        int32_t intelligenceBonus{0};
-        int32_t wisdomBonus{0};
-        int32_t charismaBonus{0};
+        std::int32_t strengthBonus{0};
+        std::int32_t dexterityBonus{0};
+        std::int32_t constitutionBonus{0};
+        std::int32_t intelligenceBonus{0};
+        std::int32_t wisdomBonus{0};
+        std::int32_t charismaBonus{0};
 
         // Combat stats
-        int32_t armorClassBonus{0};
-        int32_t attackBonus{0};
-        int32_t damageBonus{0};
+        std::int32_t armorClassBonus{0};
+        std::int32_t attackBonus{0};
+        std::int32_t damageBonus{0};
 
         [[nodiscard]] LB::Attributes GetAttributeBonuses() const noexcept {
             return LB::Attributes{
@@ -117,24 +117,24 @@ export namespace LB::Inventory {
             return total;
         }
 
-        [[nodiscard]] int32_t GetTotalArmorClass() const noexcept {
-            int32_t total = 0;
+        [[nodiscard]] std::int32_t GetTotalArmorClass() const noexcept {
+            std::int32_t total = 0;
             for (const auto& [slot, equip] : equipment) {
                 total += equip.armorClassBonus;
             }
             return total;
         }
 
-        [[nodiscard]] int32_t GetTotalAttackBonus() const noexcept {
-            int32_t total = 0;
+        [[nodiscard]] std::int32_t GetTotalAttackBonus() const noexcept {
+            std::int32_t total = 0;
             for (const auto& [slot, equip] : equipment) {
                 total += equip.attackBonus;
             }
             return total;
         }
 
-        [[nodiscard]] int32_t GetTotalDamageBonus() const noexcept {
-            int32_t total = 0;
+        [[nodiscard]] std::int32_t GetTotalDamageBonus() const noexcept {
+            std::int32_t total = 0;
             for (const auto& [slot, equip] : equipment) {
                 total += equip.damageBonus;
             }

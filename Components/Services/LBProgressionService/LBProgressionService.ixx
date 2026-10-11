@@ -13,7 +13,6 @@ import LB.ProgressionService.ResourceGrowthConfig;
 import LB.ProgressionService.LevelProgressionResult;
 import LB.ProgressionService.AbilityUnlock;
 
-using namespace std;
 
 /// <summary>
 /// Progression service for LegendsBelow
@@ -85,12 +84,12 @@ export namespace LB::Services::Progression {
         /// <summary>
         /// Calculate skill points gained per level
         /// </summary>
-        [[nodiscard]] static int32_t CalculateSkillPointsPerLevel(
+        [[nodiscard]] static std::int32_t CalculateSkillPointsPerLevel(
             CharacterClass characterClass,
-            int32_t intelligenceModifier) noexcept {
+            std::int32_t intelligenceModifier) noexcept {
 
-            int32_t baseSkillPoints = 2;
-            int32_t classBonus = 0;
+            std::int32_t baseSkillPoints = 2;
+            std::int32_t classBonus = 0;
 
             switch (characterClass) {
                 case CharacterClass::Warrior:
@@ -117,8 +116,8 @@ export namespace LB::Services::Progression {
         /// </summary>
         [[nodiscard]] static LevelProgressionResult CalculateProgression(
             CharacterClass characterClass,
-            int32_t oldLevel,
-            int32_t newLevel,
+            std::int32_t oldLevel,
+            std::int32_t newLevel,
             const Attributes& currentAttributes) noexcept {
 
             LevelProgressionResult result;
@@ -136,8 +135,8 @@ export namespace LB::Services::Progression {
 
             // Calculate resource gains
             auto resourceGrowth = GetResourceGrowth(characterClass);
-            int32_t conMod = currentAttributes.GetConstitutionModifier();
-            int32_t intMod = currentAttributes.GetIntelligenceModifier();
+            std::int32_t conMod = currentAttributes.GetConstitutionModifier();
+            std::int32_t intMod = currentAttributes.GetIntelligenceModifier();
 
             result.hitPointGain = resourceGrowth.CalculateHitPointGain(result.levelsGained, conMod);
             result.manaPointGain = resourceGrowth.CalculateManaPointGain(result.levelsGained, intMod);
@@ -156,12 +155,12 @@ export namespace LB::Services::Progression {
         /// </summary>
         [[nodiscard]] static std::vector<String> GetAbilitiesForLevelRange(
             CharacterClass characterClass,
-            int32_t startLevel,
-            int32_t endLevel) noexcept {
+            std::int32_t startLevel,
+            std::int32_t endLevel) noexcept {
 
             std::vector<LB::String> abilities;
 
-            for (int32_t level = startLevel; level <= endLevel; ++level) {
+            for (std::int32_t level = startLevel; level <= endLevel; ++level) {
                 auto levelAbilities = GetAbilitiesAtLevel(characterClass, level);
                 abilities.insert(abilities.end(), levelAbilities.begin(), levelAbilities.end());
             }
@@ -174,7 +173,7 @@ export namespace LB::Services::Progression {
         /// </summary>
         [[nodiscard]] static std::vector<String> GetAbilitiesAtLevel(
             CharacterClass characterClass,
-            int32_t level) noexcept {
+            std::int32_t level) noexcept {
 
             std::vector<String> abilities;
 
@@ -243,7 +242,7 @@ export namespace LB::Services::Progression {
         /// Calculate effective character level (accounts for multiclassing)
         /// For now, just returns actual level (multiclass support future)
         /// </summary>
-        [[nodiscard]] static int32_t CalculateEffectiveLevel(int32_t actualLevel) noexcept {
+        [[nodiscard]] static std::int32_t CalculateEffectiveLevel(std::int32_t actualLevel) noexcept {
             return actualLevel;
         }
 
@@ -251,7 +250,7 @@ export namespace LB::Services::Progression {
         /// Calculate challenge rating for encounters
         /// Based on character level
         /// </summary>
-        [[nodiscard]] static float CalculateChallengeRating(int32_t level) noexcept {
+        [[nodiscard]] static float CalculateChallengeRating(std::int32_t level) noexcept {
             if (level <= 1) return 0.25f;
             if (level <= 3) return 0.5f;
             if (level <= 5) return 1.0f;
@@ -262,12 +261,12 @@ export namespace LB::Services::Progression {
         /// Calculate recommended XP award for defeating an enemy
         /// Based on challenge rating and party size
         /// </summary>
-        [[nodiscard]] static int32_t CalculateXPReward(
+        [[nodiscard]] static std::int32_t CalculateXPReward(
             float challengeRating,
-            int32_t partySize = 1) noexcept {
+            std::int32_t partySize = 1) noexcept {
 
             // Base XP by CR
-            int32_t baseXP = 0;
+            std::int32_t baseXP = 0;
             if (challengeRating <= 0.25f) baseXP = 50;
             else if (challengeRating <= 0.5f) baseXP = 100;
             else if (challengeRating <= 1.0f) baseXP = 200;
@@ -275,7 +274,7 @@ export namespace LB::Services::Progression {
             else if (challengeRating <= 3.0f) baseXP = 700;
             else if (challengeRating <= 4.0f) baseXP = 1100;
             else if (challengeRating <= 5.0f) baseXP = 1800;
-            else baseXP = static_cast<int32_t>(1800.0f * std::pow(1.5f, challengeRating - 5.0f));
+            else baseXP = static_cast<std::int32_t>(1800.0f * std::pow(1.5f, challengeRating - 5.0f));
 
             // Divide by party size
             if (partySize > 1) {
@@ -290,7 +289,7 @@ export namespace LB::Services::Progression {
         /// </summary>
         [[nodiscard]] static bool MeetsAbilityRequirements(
             const String& abilityName,
-            int32_t level,
+            std::int32_t level,
             CharacterClass characterClass,
             [[maybe_unused]] const Attributes& attributes) noexcept {
 
@@ -309,7 +308,7 @@ export namespace LB::Services::Progression {
         /// </summary>
         [[nodiscard]] static std::vector<String> SuggestImprovements(
             CharacterClass characterClass,
-            int32_t currentLevel) noexcept {
+            std::int32_t currentLevel) noexcept {
 
             std::vector<String> suggestions;
 

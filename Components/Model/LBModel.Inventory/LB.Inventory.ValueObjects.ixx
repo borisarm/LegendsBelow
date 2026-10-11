@@ -4,7 +4,6 @@ export module LB.Inventory.ValueObjects;
 import LB.Core;
 import std;
 
-using namespace std;
 export namespace LB::Inventory {
 
     /// <summary>
@@ -13,7 +12,7 @@ export namespace LB::Inventory {
     struct InventoryOperationResult {
         bool success{false};
         LB::String errorMessage;
-        int32_t itemsAffected{0};
+        std::int32_t itemsAffected{0};
     };
 
 } // namespace LB::Inventory

@@ -1,5 +1,5 @@
-// LB.Common.ixx - Common types and utilities module interface
-export module LB.Common;
+// Common.ixx - LB.Core partition: common types (String, Id) and utilities
+export module LB.Core:Common;
 
 import std;
 

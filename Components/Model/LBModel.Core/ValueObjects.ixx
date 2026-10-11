@@ -1,27 +1,26 @@
-// LB.CoreValueObjects.ixx - Core value objects shared across domains
-export module LB.CoreValueObjects;
+// ValueObjects.ixx - LB.Core partition: value objects shared across domains
+export module LB.Core:ValueObjects;
 
-import LB.Common;
+import :Common;
 import std;
 
-using namespace std;
 
 export namespace LB {
     /// <summary>
     /// 2D Position for grid-based movement
     /// </summary>
     struct Position {
-        int32_t x{0};
-        int32_t y{0};
+        std::int32_t x{0};
+        std::int32_t y{0};
 
         Position() = default;
-        Position(int32_t x_, int32_t y_) : x(x_), y(y_) {}
+        Position(std::int32_t x_, std::int32_t y_) : x(x_), y(y_) {}
 
         [[nodiscard]] bool operator==(const Position& other) const noexcept {
             return x == other.x && y == other.y;
         }
 
-        [[nodiscard]] int32_t ManhattanDistance(const Position& other) const noexcept {
+        [[nodiscard]] std::int32_t ManhattanDistance(const Position& other) const noexcept {
             return std::abs(x - other.x) + std::abs(y - other.y);
         }
     };
@@ -30,19 +29,19 @@ export namespace LB {
     /// Dice roll configuration (e.g., 2d6 = count:2, sides:6)
     /// </summary>
     struct Dice {
-        int32_t count{1};
-        int32_t sides{6};
-        int32_t bonus{0};
+        std::int32_t count{1};
+        std::int32_t sides{6};
+        std::int32_t bonus{0};
 
-        [[nodiscard]] int32_t GetMaxRoll() const noexcept {
+        [[nodiscard]] std::int32_t GetMaxRoll() const noexcept {
             return (count * sides) + bonus;
         }
 
-        [[nodiscard]] int32_t GetMinRoll() const noexcept {
+        [[nodiscard]] std::int32_t GetMinRoll() const noexcept {
             return count + bonus;
         }
 
-        [[nodiscard]] int32_t GetAverageRoll() const noexcept {
+        [[nodiscard]] std::int32_t GetAverageRoll() const noexcept {
             return ((count * sides) / 2) + bonus;
         }
     };
@@ -64,26 +63,26 @@ export namespace LB {
     };
 
     struct Attributes {
-        int32_t strength{10};
-        int32_t dexterity{10};
-        int32_t constitution{10};
-        int32_t intelligence{10};
-        int32_t wisdom{10};
-        int32_t charisma{10};
+        std::int32_t strength{10};
+        std::int32_t dexterity{10};
+        std::int32_t constitution{10};
+        std::int32_t intelligence{10};
+        std::int32_t wisdom{10};
+        std::int32_t charisma{10};
 
         /// <summary>
         /// Calculate D&D-style modifier: (attribute - 10) / 2
         /// </summary>
-        [[nodiscard]] constexpr int32_t GetModifier(int32_t attribute) const noexcept {
+        [[nodiscard]] constexpr std::int32_t GetModifier(std::int32_t attribute) const noexcept {
             return (attribute - 10) / 2;
         }
 
-        [[nodiscard]] constexpr int32_t GetStrengthModifier() const noexcept { return GetModifier(strength); }
-        [[nodiscard]] constexpr int32_t GetDexterityModifier() const noexcept { return GetModifier(dexterity); }
-        [[nodiscard]] constexpr int32_t GetConstitutionModifier() const noexcept { return GetModifier(constitution); }
-        [[nodiscard]] constexpr int32_t GetIntelligenceModifier() const noexcept { return GetModifier(intelligence); }
-        [[nodiscard]] constexpr int32_t GetWisdomModifier() const noexcept { return GetModifier(wisdom); }
-        [[nodiscard]] constexpr int32_t GetCharismaModifier() const noexcept { return GetModifier(charisma); }
+        [[nodiscard]] constexpr std::int32_t GetStrengthModifier() const noexcept { return GetModifier(strength); }
+        [[nodiscard]] constexpr std::int32_t GetDexterityModifier() const noexcept { return GetModifier(dexterity); }
+        [[nodiscard]] constexpr std::int32_t GetConstitutionModifier() const noexcept { return GetModifier(constitution); }
+        [[nodiscard]] constexpr std::int32_t GetIntelligenceModifier() const noexcept { return GetModifier(intelligence); }
+        [[nodiscard]] constexpr std::int32_t GetWisdomModifier() const noexcept { return GetModifier(wisdom); }
+        [[nodiscard]] constexpr std::int32_t GetCharismaModifier() const noexcept { return GetModifier(charisma); }
 
         /// <summary>
         /// Validate all attributes are within valid range [1-30]
@@ -100,7 +99,7 @@ export namespace LB {
         /// <summary>
         /// Value of one attribute
         /// </summary>
-        [[nodiscard]] constexpr int32_t Get(AttributeType type) const noexcept {
+        [[nodiscard]] constexpr std::int32_t Get(AttributeType type) const noexcept {
             switch (type) {
                 case AttributeType::Strength: return strength;
                 case AttributeType::Dexterity: return dexterity;
@@ -115,7 +114,7 @@ export namespace LB {
         /// <summary>
         /// Set one attribute
         /// </summary>
-        constexpr void Set(AttributeType type, int32_t value) noexcept {
+        constexpr void Set(AttributeType type, std::int32_t value) noexcept {
             switch (type) {
                 case AttributeType::Strength: strength = value; break;
                 case AttributeType::Dexterity: dexterity = value; break;

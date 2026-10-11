@@ -9,7 +9,6 @@ export import :Font;
 import LB.Core;
 import std;
 
-using namespace std;
 
 /// <summary>
 /// Rendering system for LegendsBelow
@@ -49,13 +48,13 @@ export namespace LB::Systems::Rendering {
     /// Rectangle definition
     /// </summary>
     struct Rectangle {
-        int32_t x{0};
-        int32_t y{0};
-        int32_t width{0};
-        int32_t height{0};
+        std::int32_t x{0};
+        std::int32_t y{0};
+        std::int32_t width{0};
+        std::int32_t height{0};
 
         constexpr Rectangle() = default;
-        constexpr Rectangle(int32_t x_, int32_t y_, int32_t w, int32_t h)
+        constexpr Rectangle(std::int32_t x_, std::int32_t y_, std::int32_t w, std::int32_t h)
             : x(x_), y(y_), width(w), height(h) {}
     };
 
@@ -69,7 +68,7 @@ export namespace LB::Systems::Rendering {
         Color tint{Color::White()};
         float rotation{0.0f};
         float scale{1.0f};
-        int32_t layerDepth{0};
+        std::int32_t layerDepth{0};
     };
 
     /// <summary>
@@ -78,7 +77,7 @@ export namespace LB::Systems::Rendering {
     struct RectangleRenderData {
         Rectangle rect{};
         Color color{Color::White()};
-        int32_t layerDepth{0};
+        std::int32_t layerDepth{0};
     };
 
     /// <summary>
@@ -178,7 +177,7 @@ export namespace LB::Systems::Rendering {
         String fontId;                         // a loaded font's name; empty: the default font; "pixel": the pixel font
         Color color{Color::White()};           // linear, straight alpha
         float scale{1.0f};
-        int32_t layerDepth{0};                 // overlay order, shared with rectangles
+        std::int32_t layerDepth{0};                 // overlay order, shared with rectangles
         bool outline{false};                   // a dark outline, for text over the world
     };
 
@@ -196,11 +195,11 @@ export namespace LB::Systems::Rendering {
     /// Render statistics
     /// </summary>
     struct RenderStats {
-        uint32_t drawCalls{0};
-        uint32_t meshesRendered{0};
-        uint32_t modelsRendered{0};
-        uint32_t spritesRendered{0};
-        uint32_t textRendered{0};
+        std::uint32_t drawCalls{0};
+        std::uint32_t meshesRendered{0};
+        std::uint32_t modelsRendered{0};
+        std::uint32_t spritesRendered{0};
+        std::uint32_t textRendered{0};
         float frameTime{0.0f};
         float fps{0.0f};
     };
@@ -223,7 +222,7 @@ export namespace LB::Systems::Rendering {
         /// <summary>
         /// Initialize the rendering system without a GPU device (headless)
         /// </summary>
-        bool Initialize(int32_t screenWidth, int32_t screenHeight) {
+        bool Initialize(std::int32_t screenWidth, std::int32_t screenHeight) {
             screenWidth_ = screenWidth;
             screenHeight_ = screenHeight;
             viewport_ = Rectangle{0, 0, screenWidth, screenHeight};
@@ -238,7 +237,7 @@ export namespace LB::Systems::Rendering {
         /// native window (an HWND on Windows). A null window falls back to headless mode.
         /// Returns false if the device could not be created.
         /// </summary>
-        bool Initialize(void* nativeWindow, int32_t screenWidth, int32_t screenHeight);
+        bool Initialize(void* nativeWindow, std::int32_t screenWidth, std::int32_t screenHeight);
 
         /// <summary>
         /// Shutdown the rendering system, waiting for the GPU and releasing the device
@@ -255,7 +254,7 @@ export namespace LB::Systems::Rendering {
         /// <summary>
         /// Notify the renderer that the output window was resized
         /// </summary>
-        void OnWindowSizeChanged(int32_t width, int32_t height);
+        void OnWindowSizeChanged(std::int32_t width, std::int32_t height);
 
         /// <summary>
         /// Notify the renderer that the output window moved (may change display/HDR state)
@@ -499,7 +498,7 @@ export namespace LB::Systems::Rendering {
         /// <summary>
         /// Draw a filled screen-space rectangle on the 2D overlay (above the 3D world; alpha blends)
         /// </summary>
-        void DrawRectangle(const Rectangle& rect, const Color& color, int32_t layerDepth = 0) {
+        void DrawRectangle(const Rectangle& rect, const Color& color, std::int32_t layerDepth = 0) {
             if (!initialized_) return;
 
             SpriteRenderData sprite{};
@@ -534,7 +533,7 @@ export namespace LB::Systems::Rendering {
         /// <summary>
         /// Get screen dimensions
         /// </summary>
-        void GetScreenSize(int32_t& width, int32_t& height) const {
+        void GetScreenSize(std::int32_t& width, std::int32_t& height) const {
             width = screenWidth_;
             height = screenHeight_;
         }
@@ -576,8 +575,8 @@ export namespace LB::Systems::Rendering {
         DeviceCallback onDeviceRestored_;
 
         bool initialized_{false};
-        int32_t screenWidth_{1920};
-        int32_t screenHeight_{1080};
+        std::int32_t screenWidth_{1920};
+        std::int32_t screenHeight_{1080};
         Color clearColor_{Color::Black()};
         Rectangle viewport_{0, 0, 1920, 1080};
         bool vsyncEnabled_{true};
@@ -623,7 +622,7 @@ export namespace LB::Systems::Rendering {
                 });
 
             // Textured sprites are not drawn yet; rectangles queue a sprite each and are drawn by the overlay
-            stats_.spritesRendered = static_cast<uint32_t>(spriteQueue_.size());
+            stats_.spritesRendered = static_cast<std::uint32_t>(spriteQueue_.size());
         }
 
         void RenderText() {
@@ -633,7 +632,7 @@ export namespace LB::Systems::Rendering {
                     return a.layerDepth < b.layerDepth;
                 });
 
-            stats_.textRendered = static_cast<uint32_t>(textQueue_.size());
+            stats_.textRendered = static_cast<std::uint32_t>(textQueue_.size());
 
             // The overlay (rectangles, text, and sprites) is one draw
             stats_.drawCalls += !spriteQueue_.empty() || !textQueue_.empty() ? 1 : 0;

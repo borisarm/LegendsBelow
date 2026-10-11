@@ -1,10 +1,10 @@
 // LB.Core.ixx - Core domain module (foundation for all domains)
 export module LB.Core;
 
-// Re-export core components
-export import LB.Common;
-export import LB.CoreValueObjects;
-export import LB.Entity;
+// The core is one module; its parts are partitions, so nothing can import a part on its own
+export import :Common;          // String, Id, InvalidId
+export import :ValueObjects;    // Position, Dice, Attributes, ...
+export import :Entity;          // Entity
 
 export namespace LB::Core {
     // Module version information

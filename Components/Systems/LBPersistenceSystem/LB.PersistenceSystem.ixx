@@ -4,7 +4,6 @@ export module LB.PersistenceSystem;
 import LB.Core;
 import std;
 
-using namespace std;
 
 /// <summary>
 /// Persistence system for LegendsBelow
@@ -25,13 +24,13 @@ export namespace LB::Systems::Persistence {
     /// Save slot information
     /// </summary>
     struct SaveSlotInfo {
-        int32_t slotIndex{0};
+        std::int32_t slotIndex{0};
         String saveName;
         String timestamp;           // UTC, ISO 8601 (set when saved)
-        int32_t characterLevel{1};
+        std::int32_t characterLevel{1};
         String characterName;
         String location;
-        int32_t playtimeSeconds{0};
+        std::int32_t playtimeSeconds{0};
         bool exists{false};
     };
 
@@ -62,8 +61,8 @@ export namespace LB::Systems::Persistence {
         float musicVolume{0.7f};
         float sfxVolume{1.0f};
         bool fullscreen{true};
-        int32_t resolutionWidth{1920};
-        int32_t resolutionHeight{1080};
+        std::int32_t resolutionWidth{1920};
+        std::int32_t resolutionHeight{1080};
         String language{"en-US"};
     };
 
@@ -95,7 +94,7 @@ export namespace LB::Systems::Persistence {
         /// <summary>
         /// Save to a slot with only a name (no game state payload)
         /// </summary>
-        SaveResult SaveGame(int32_t slotIndex, const String& saveName) {
+        SaveResult SaveGame(std::int32_t slotIndex, const String& saveName) {
             SaveSlotInfo info{};
             info.saveName = saveName;
             return SaveGame(slotIndex, info, SaveData{});
@@ -104,22 +103,22 @@ export namespace LB::Systems::Persistence {
         /// <summary>
         /// Save game state to a slot. slotIndex, timestamp and exists are set by the system.
         /// </summary>
-        SaveResult SaveGame(int32_t slotIndex, const SaveSlotInfo& metadata, const SaveData& data);
+        SaveResult SaveGame(std::int32_t slotIndex, const SaveSlotInfo& metadata, const SaveData& data);
 
         /// <summary>
         /// Load game state from a slot
         /// </summary>
-        LoadResult LoadGame(int32_t slotIndex);
+        LoadResult LoadGame(std::int32_t slotIndex);
 
         /// <summary>
         /// Delete a save slot (and its file)
         /// </summary>
-        bool DeleteSave(int32_t slotIndex);
+        bool DeleteSave(std::int32_t slotIndex);
 
         /// <summary>
         /// Get information about a save slot
         /// </summary>
-        std::optional<SaveSlotInfo> GetSaveSlotInfo(int32_t slotIndex) const {
+        std::optional<SaveSlotInfo> GetSaveSlotInfo(std::int32_t slotIndex) const {
             auto it = saveSlots_.find(slotIndex);
             if (it == saveSlots_.end()) return std::nullopt;
             return it->second;
@@ -140,7 +139,7 @@ export namespace LB::Systems::Persistence {
         /// <summary>
         /// Check if a save slot exists
         /// </summary>
-        bool SaveSlotExists(int32_t slotIndex) const {
+        bool SaveSlotExists(std::int32_t slotIndex) const {
             auto it = saveSlots_.find(slotIndex);
             return it != saveSlots_.end() && it->second.exists;
         }
@@ -161,7 +160,7 @@ export namespace LB::Systems::Persistence {
         /// <summary>
         /// Get maximum number of save slots
         /// </summary>
-        int32_t GetMaxSaveSlots() const {
+        std::int32_t GetMaxSaveSlots() const {
             return maxSaveSlots_;
         }
 
@@ -180,18 +179,18 @@ export namespace LB::Systems::Persistence {
         }
 
     private:
-        bool IsValidSlot(int32_t slotIndex) const noexcept {
+        bool IsValidSlot(std::int32_t slotIndex) const noexcept {
             return slotIndex >= 0 && slotIndex < maxSaveSlots_;
         }
 
-        std::filesystem::path GetSaveFilePath(int32_t slotIndex) const;
+        std::filesystem::path GetSaveFilePath(std::int32_t slotIndex) const;
         std::filesystem::path GetPreferencesFilePath() const;
 
         bool initialized_{false};
         std::filesystem::path saveDirectory_;
-        int32_t maxSaveSlots_{10};
-        std::map<int32_t, SaveSlotInfo> saveSlots_;
-        std::map<int32_t, SaveData> saveData_;   // in-memory payloads (memory-only mode)
+        std::int32_t maxSaveSlots_{10};
+        std::map<std::int32_t, SaveSlotInfo> saveSlots_;
+        std::map<std::int32_t, SaveData> saveData_;   // in-memory payloads (memory-only mode)
         PlayerPreferences preferences_{};
     };
 

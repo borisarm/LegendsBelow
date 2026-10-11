@@ -3,13 +3,12 @@ export module LB.Dungeon.Enums;
 
 import std;
 
-using namespace std;
 export namespace LB::Dungeon {
 
     /// <summary>
     /// Room type defining purpose and contents
     /// </summary>
-    enum class RoomType : uint32_t {
+    enum class RoomType : std::uint32_t {
         Empty = 0,
         Combat = 1,
         Treasure = 2,
@@ -24,7 +23,7 @@ export namespace LB::Dungeon {
     /// <summary>
     /// Room difficulty level
     /// </summary>
-    enum class RoomDifficulty : uint32_t {
+    enum class RoomDifficulty : std::uint32_t {
         Easy = 1,
         Normal = 2,
         Hard = 3,
@@ -35,7 +34,7 @@ export namespace LB::Dungeon {
     /// <summary>
     /// Direction for room connections
     /// </summary>
-    enum class Direction : uint32_t {
+    enum class Direction : std::uint32_t {
         North = 0,
         East = 1,
         South = 2,

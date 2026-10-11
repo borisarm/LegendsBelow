@@ -2,7 +2,6 @@
 export module LB.Combat.Enums;
 
 import std;
-using namespace std;
 
 export namespace LB::Combat {
 
@@ -10,7 +9,7 @@ export namespace LB::Combat {
     /// Damage types for combat mechanics
     /// Physical damage affected by armor, magical damage by resistances
     /// </summary>
-    enum class DamageType : uint32_t {
+    enum class DamageType : std::uint32_t {
         None = 0,
         // Physical damage types
         Slashing = 1,       // Swords, axes - blocked by armor
@@ -33,7 +32,7 @@ export namespace LB::Combat {
     /// <summary>
     /// Weapon categories defining basic weapon behavior
     /// </summary>
-    enum class WeaponType : uint32_t {
+    enum class WeaponType : std::uint32_t {
         None = 0,
         Sword = 1,          // Balanced melee, slashing damage
         Axe = 2,            // High damage, higher variance, slashing
@@ -49,7 +48,7 @@ export namespace LB::Combat {
     /// <summary>
     /// Armor categories defining protection type
     /// </summary>
-    enum class ArmorCategory : uint32_t {
+    enum class ArmorCategory : std::uint32_t {
         None = 0,
         Cloth = 1,          // Light armor for mages
         Light = 2,          // Leather armor for rogues
@@ -61,7 +60,7 @@ export namespace LB::Combat {
     /// <summary>
     /// Spell schools defining magical traditions
     /// </summary>
-    enum class SpellSchool : uint32_t {
+    enum class SpellSchool : std::uint32_t {
         None = 0,
         Evocation = 1,      // Direct damage and energy manipulation
         Frost = 2,          // Cold-based magic with slowing effects
@@ -74,7 +73,7 @@ export namespace LB::Combat {
     /// <summary>
     /// Spell categories defining tactical usage
     /// </summary>
-    enum class SpellCategory : uint32_t {
+    enum class SpellCategory : std::uint32_t {
         None = 0,
         Damage = 1,         // Direct damage dealing
         Heal = 2,           // Health restoration
@@ -87,7 +86,7 @@ export namespace LB::Combat {
     /// <summary>
     /// Equipment slot for items
     /// </summary>
-    enum class EquipmentSlot : uint32_t {
+    enum class EquipmentSlot : std::uint32_t {
         None = 0,
         Head = 1,
         Chest = 2,

@@ -3,7 +3,6 @@ export module LB.Character.Enums;
 
 import std;
 
-using namespace std;
 
 export namespace LB::Character {
 
@@ -11,7 +10,7 @@ export namespace LB::Character {
     /// Character classes defining gameplay archetypes
     /// Based on classic RPG design principles
     /// </summary>
-    enum class CharacterClass : uint32_t {
+    enum class CharacterClass : std::uint32_t {
         None = 0,
         Warrior = 1,    // Melee combat specialist
         Rogue = 2,      // Stealth and precision

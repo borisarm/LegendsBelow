@@ -45,9 +45,9 @@ export namespace LB::Repositories {
 		::add_convention<MemGetSpellsBySchool, std::vector<SpellId>(SpellSchool) const>
 		::add_convention<MemGetSchoolDescription, std::optional<String>(SpellSchool) const>
 		::add_convention<MemGetSpellsByClass, std::vector<SpellId>(CharacterClass) const>
-		::add_convention<MemGetSpellsByLevel, std::vector<SpellId>(int32_t) const>
+		::add_convention<MemGetSpellsByLevel, std::vector<SpellId>(std::int32_t) const>
 		::add_convention<MemGetSpellsByCategory, std::vector<SpellId>(SpellCategory) const>
-		::add_convention<MemGetSpellsByManaCost, std::vector<SpellId>(int32_t, int32_t) const>
+		::add_convention<MemGetSpellsByManaCost, std::vector<SpellId>(std::int32_t, std::int32_t) const>
 		::add_convention<MemGetSpellsByCastTime, std::vector<SpellId>(float) const>
 		::support_copy<pro::constraint_level::nontrivial>
 		::build {};

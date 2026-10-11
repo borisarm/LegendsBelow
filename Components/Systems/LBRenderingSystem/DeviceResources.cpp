@@ -120,7 +120,7 @@ namespace LB::Systems::Rendering::Detail
         void MoveToNextFrame();
         void GetAdapter(IDXGIAdapter1** ppAdapter);
 
-        static constexpr size_t MAX_BACK_BUFFER_COUNT = 3;
+        static constexpr std::size_t MAX_BACK_BUFFER_COUNT = 3;
 
         UINT                                                m_backBufferIndex;
 

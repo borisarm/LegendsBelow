@@ -55,7 +55,8 @@ The detailed rules and an error-to-fix table are in `.github/copilot-instruction
 
 - Everything except LBGameEditor and test projects is a C++20 module (`.ixx`, module names `LB.Xxx`). Module projects have no precompiled headers.
 - Partition files: `export module LB.Engine:Name;`, import siblings as `import :Name;`, re-export from the primary interface. Internal (non-exported) partitions must be `.cpp` files with `<CompileAs>CompileAsCppModuleInternalPartition</CompileAs>` (else C7622). New files must be added to the `.vcxproj` (and `.filters`).
-- Import `LB.Core`, not `LB.Common`. There is no `LB::Domain` namespace; use `LB::Character`, `LB::Combat`, `LB::Inventory`, `LB::Dungeon`. Never redefine domain types in services; `using` them.
+- In module code write `std::int32_t`, `std::size_t`, `std::string`: `import std` only guarantees names in `std`, and `using namespace std;` is not used.
+- Import `LB.Core` for the core types (`String`, `Id`, `Position`, `Entity`, ...); its parts are partitions (`LB.Core:Common`, `:ValueObjects`, `:Entity`) and cannot be imported alone. There is no `LB::Domain` namespace; use `LB::Character`, `LB::Combat`, `LB::Inventory`, `LB::Dungeon`. Never redefine domain types in services; `using` them.
 - Projects importing module libraries must match their `SDLCheck`, `FloatingPointModel`, and `ControlFlowGuard` settings (else C5050). Test projects reference both the component and `LBModel.Core`.
 - Gameplay rules follow `Documentation/design-*.md`; cite the section in comments for non-obvious formulas, and keep tunables in data files.
 - File headers are a one-line `// File.ixx - what it is` comment; types and public members get `/// <summary>` doc comments.

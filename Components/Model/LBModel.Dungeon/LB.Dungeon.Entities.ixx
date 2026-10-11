@@ -37,8 +37,8 @@ export namespace LB::Dungeon {
             return connections.contains(dir);
         }
 
-        [[nodiscard]] int32_t GetConnectionCount() const {
-            return static_cast<int32_t>(connections.size());
+        [[nodiscard]] std::int32_t GetConnectionCount() const {
+            return static_cast<std::int32_t>(connections.size());
         }
 
         [[nodiscard]] bool IsCombatRoom() const {
@@ -60,12 +60,12 @@ export namespace LB::Dungeon {
     struct Encounter {
         EncounterId encounterId;
         RoomDifficulty difficulty;
-        int32_t recommendedLevel;
+        std::int32_t recommendedLevel;
         std::vector<CharacterId> enemies;
         float challengeRating;
 
-        [[nodiscard]] int32_t GetEnemyCount() const {
-            return static_cast<int32_t>(enemies.size());
+        [[nodiscard]] std::int32_t GetEnemyCount() const {
+            return static_cast<std::int32_t>(enemies.size());
         }
     };
 
@@ -75,16 +75,16 @@ export namespace LB::Dungeon {
     struct Dungeon {
         DungeonId dungeonId;
         LB::String name;
-        int32_t recommendedLevel;
-        int32_t depth; // Number of rooms
+        std::int32_t recommendedLevel;
+        std::int32_t depth; // Number of rooms
 
         std::unordered_map<RoomId, DungeonRoom> rooms;
         RoomId entranceRoomId{0};
         RoomId exitRoomId{0};
         RoomId currentRoomId{0};
 
-        [[nodiscard]] int32_t GetRoomCount() const {
-            return static_cast<int32_t>(rooms.size());
+        [[nodiscard]] std::int32_t GetRoomCount() const {
+            return static_cast<std::int32_t>(rooms.size());
         }
 
         [[nodiscard]] std::optional<DungeonRoom> GetRoom(RoomId roomId) const {
@@ -97,16 +97,16 @@ export namespace LB::Dungeon {
             return GetRoom(currentRoomId);
         }
 
-        [[nodiscard]] int32_t GetExploredRoomCount() const {
-            int32_t count = 0;
+        [[nodiscard]] std::int32_t GetExploredRoomCount() const {
+            std::int32_t count = 0;
             for (const auto& [id, room] : rooms) {
                 if (room.isExplored) count++;
             }
             return count;
         }
 
-        [[nodiscard]] int32_t GetClearedRoomCount() const {
-            int32_t count = 0;
+        [[nodiscard]] std::int32_t GetClearedRoomCount() const {
+            std::int32_t count = 0;
             for (const auto& [id, room] : rooms) {
                 if (room.isCleared) count++;
             }

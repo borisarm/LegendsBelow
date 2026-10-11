@@ -130,11 +130,11 @@ namespace LB::Content {
                 if (required && out.empty()) Error(std::format("'{}' must not be empty", field));
             }
 
-            void ReadInt(const char* field, int32_t& out, bool required) {
+            void ReadInt(const char* field, std::int32_t& out, bool required) {
                 if (!Present(field, required)) return;
                 const auto& value = object_.at(field);
                 if (!value.is_number_integer()) { TypeError(field, "an integer"); return; }
-                out = value.get<int32_t>();
+                out = value.get<std::int32_t>();
             }
 
             void ReadFloat(const char* field, float& out, bool required) {
@@ -199,7 +199,7 @@ namespace LB::Content {
             }
 
             // { "Fire": 2, "Cold": 0 } -> map keyed by damage type
-            void ReadResistances(const char* field, std::map<DamageType, int32_t>& out) {
+            void ReadResistances(const char* field, std::map<DamageType, std::int32_t>& out) {
                 if (!Present(field, false)) return;
                 const auto& value = object_.at(field);
                 if (!value.is_object()) { TypeError(field, "an object of damage type to rating"); return; }
@@ -207,7 +207,7 @@ namespace LB::Content {
                     DamageType type{};
                     if (!ParseEnum(field, name, type, DamageTypes)) continue;
                     if (!rating.is_number_integer()) { TypeError(field, "integer ratings"); continue; }
-                    out[type] = rating.get<int32_t>();
+                    out[type] = rating.get<std::int32_t>();
                 }
             }
 
@@ -241,7 +241,7 @@ namespace LB::Content {
             }
 
             // "20" -> 20, "19-20" -> 19
-            void ReadCritRange(const char* field, int32_t& out) {
+            void ReadCritRange(const char* field, std::int32_t& out) {
                 if (!Present(field, false)) return;
                 const auto& value = object_.at(field);
                 if (!value.is_string()) { TypeError(field, "a range like \"19-20\""); return; }
@@ -403,7 +403,7 @@ namespace LB::Content {
 
             // "startingAttributes": { "STR": 16, ... } - all six, each in the domain's [1, 30]
             if (const Json* attributes = reader.Nested("startingAttributes", true, false)) {
-                int32_t* targets[] = {
+                std::int32_t* targets[] = {
                     &definition.startingAttributes.strength, &definition.startingAttributes.dexterity,
                     &definition.startingAttributes.constitution, &definition.startingAttributes.intelligence,
                     &definition.startingAttributes.wisdom, &definition.startingAttributes.charisma,
@@ -414,7 +414,7 @@ namespace LB::Content {
                         reader.Error(std::format("'startingAttributes' needs an integer '{}'", name));
                         continue;
                     }
-                    *targets[i] = (*attributes)[name].get<int32_t>();
+                    *targets[i] = (*attributes)[name].get<std::int32_t>();
                 }
                 if (!definition.startingAttributes.IsValid()) reader.Error("'startingAttributes' values must be in [1, 30]");
 
@@ -471,7 +471,7 @@ namespace LB::Content {
                         reader.Error(std::format("'weaponAdjustments' value for '{}' must be an integer", name));
                         continue;
                     }
-                    if (!definition.weaponAdjustments.emplace(*weapon, value.get<int32_t>()).second) {
+                    if (!definition.weaponAdjustments.emplace(*weapon, value.get<std::int32_t>()).second) {
                         reader.Error(std::format("'weaponAdjustments' lists '{}' more than once (Polearm is Spear)", NameOf(WeaponTypes, *weapon)));
                     }
                 }
@@ -511,7 +511,7 @@ namespace LB::Content {
 
             // Starting attributes must respect the class caps (read above)
             for (const auto& entry : AttributeTypes) {
-                const int32_t cap = definition.IsPrimaryAttribute(entry.value) ? definition.attributeGrowth.primaryAttributeCap : definition.attributeGrowth.otherAttributeCap;
+                const std::int32_t cap = definition.IsPrimaryAttribute(entry.value) ? definition.attributeGrowth.primaryAttributeCap : definition.attributeGrowth.otherAttributeCap;
                 if (definition.startingAttributes.Get(entry.value) > cap) {
                     reader.Error(std::format("starting {} {} is above the class cap {}", entry.name, definition.startingAttributes.Get(entry.value), cap));
                 }

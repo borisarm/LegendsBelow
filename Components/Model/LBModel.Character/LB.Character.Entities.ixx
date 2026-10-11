@@ -17,16 +17,16 @@ export namespace LB::Character {
     export class Character : public LB::Entity {
     private:
         CharacterClass class_;
-        int32_t level_;
-        int32_t experience_;
+        std::int32_t level_;
+        std::int32_t experience_;
         LB::Attributes attributes_;
-        int32_t currentHitPoints_;
-        int32_t maxHitPoints_;
-        int32_t currentManaPoints_;
-        int32_t maxManaPoints_;
-        int32_t armorClass_;
+        std::int32_t currentHitPoints_;
+        std::int32_t maxHitPoints_;
+        std::int32_t currentManaPoints_;
+        std::int32_t maxManaPoints_;
+        std::int32_t armorClass_;
         LB::Position position_;
-        int32_t unspentAttributePoints_{0};
+        std::int32_t unspentAttributePoints_{0};
 
     public:
         Character(CharacterId id, const LB::String& name, CharacterClass characterClass, LB::Attributes attributes)
@@ -45,30 +45,30 @@ export namespace LB::Character {
 
         // Accessors
         [[nodiscard]] CharacterClass GetClass() const noexcept { return class_; }
-        [[nodiscard]] int32_t GetLevel() const noexcept { return level_; }
-        [[nodiscard]] int32_t GetExperience() const noexcept { return experience_; }
+        [[nodiscard]] std::int32_t GetLevel() const noexcept { return level_; }
+        [[nodiscard]] std::int32_t GetExperience() const noexcept { return experience_; }
         [[nodiscard]] const LB::Attributes& GetAttributes() const noexcept { return attributes_; }
-        [[nodiscard]] int32_t GetCurrentHitPoints() const noexcept { return currentHitPoints_; }
-        [[nodiscard]] int32_t GetMaxHitPoints() const noexcept { return maxHitPoints_; }
-        [[nodiscard]] int32_t GetCurrentManaPoints() const noexcept { return currentManaPoints_; }
-        [[nodiscard]] int32_t GetMaxManaPoints() const noexcept { return maxManaPoints_; }
-        [[nodiscard]] int32_t GetArmorClass() const noexcept { return armorClass_; }
+        [[nodiscard]] std::int32_t GetCurrentHitPoints() const noexcept { return currentHitPoints_; }
+        [[nodiscard]] std::int32_t GetMaxHitPoints() const noexcept { return maxHitPoints_; }
+        [[nodiscard]] std::int32_t GetCurrentManaPoints() const noexcept { return currentManaPoints_; }
+        [[nodiscard]] std::int32_t GetMaxManaPoints() const noexcept { return maxManaPoints_; }
+        [[nodiscard]] std::int32_t GetArmorClass() const noexcept { return armorClass_; }
         [[nodiscard]] const LB::Position& GetPosition() const noexcept { return position_; }
 
         // Mutators
-        void SetLevel(int32_t level) { level_ = level; }
-        void SetExperience(int32_t experience) { experience_ = experience; }
+        void SetLevel(std::int32_t level) { level_ = level; }
+        void SetExperience(std::int32_t experience) { experience_ = experience; }
         void SetAttributes(const LB::Attributes& attributes) { attributes_ = attributes; }
-        void SetHitPoints(int32_t current, int32_t max) { currentHitPoints_ = current; maxHitPoints_ = max; }
-        void SetManaPoints(int32_t current, int32_t max) { currentManaPoints_ = current; maxManaPoints_ = max; }
-        void SetArmorClass(int32_t ac) { armorClass_ = ac; }
+        void SetHitPoints(std::int32_t current, std::int32_t max) { currentHitPoints_ = current; maxHitPoints_ = max; }
+        void SetManaPoints(std::int32_t current, std::int32_t max) { currentManaPoints_ = current; maxManaPoints_ = max; }
+        void SetArmorClass(std::int32_t ac) { armorClass_ = ac; }
         void SetPosition(const LB::Position& pos) { position_ = pos; }
 
         [[nodiscard]] bool IsAlive() const noexcept { return currentHitPoints_ > 0; }
 
         // Attribute points earned on level-up that the player has not assigned yet
-        [[nodiscard]] int32_t GetUnspentAttributePoints() const noexcept { return unspentAttributePoints_; }
-        void SetUnspentAttributePoints(int32_t points) { unspentAttributePoints_ = points; }
+        [[nodiscard]] std::int32_t GetUnspentAttributePoints() const noexcept { return unspentAttributePoints_; }
+        void SetUnspentAttributePoints(std::int32_t points) { unspentAttributePoints_ = points; }
     };
 
     /// <summary>
@@ -77,8 +77,8 @@ export namespace LB::Character {
     export struct Spell {
         SpellId id;
         LB::String name;
-        int32_t manaCost;
-        int32_t baseDamage;
+        std::int32_t manaCost;
+        std::int32_t baseDamage;
     };
 
 } // namespace LB::Character

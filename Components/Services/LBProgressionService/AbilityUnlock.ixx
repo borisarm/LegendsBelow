@@ -5,7 +5,6 @@ import LB.Core;
 import LB.Character;
 import std;
 
-using namespace std;
 
 export namespace LB::Services::Progression {
 
@@ -15,7 +14,7 @@ export namespace LB::Services::Progression {
     /// </summary>
     export struct AbilityUnlock {
         LB::String abilityName;
-        int32_t requiredLevel;
+        std::int32_t requiredLevel;
         LB::Character::CharacterClass characterClass;
     };
 

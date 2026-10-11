@@ -11,7 +11,6 @@ import LB.Content;
 import LB.Repositories;
 import std;
 
-using namespace std;
 
 export namespace LB::Content {
 
@@ -58,7 +57,7 @@ export namespace LB::Content {
             return Select([characterClass](const SpellDefinition& s) { return s.CanBeCastBy(characterClass); });
         }
 
-        std::vector<LB::Character::SpellId> GetSpellsByLevel(int32_t spellLevel) const {
+        std::vector<LB::Character::SpellId> GetSpellsByLevel(std::int32_t spellLevel) const {
             return Select([spellLevel](const SpellDefinition& s) { return s.level == spellLevel; });
         }
 
@@ -66,7 +65,7 @@ export namespace LB::Content {
             return Select([category](const SpellDefinition& s) { return s.HasCategory(category); });
         }
 
-        std::vector<LB::Character::SpellId> GetSpellsByManaCost(int32_t minCost, int32_t maxCost) const {
+        std::vector<LB::Character::SpellId> GetSpellsByManaCost(std::int32_t minCost, std::int32_t maxCost) const {
             return Select([minCost, maxCost](const SpellDefinition& s) { return s.manaCost >= minCost && s.manaCost <= maxCost; });
         }
 

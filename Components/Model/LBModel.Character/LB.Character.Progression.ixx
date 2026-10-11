@@ -4,7 +4,6 @@ export module LB.Character.Progression;
 import LB.Core;
 import std;
 
-using namespace std;
 
 export namespace LB::Character {
 
@@ -13,25 +12,25 @@ export namespace LB::Character {
     /// later levels hold the gains for that level.
     /// </summary>
     struct ClassLevelGains {
-        int32_t level{1};
-        int32_t hpGain{0};
-        int32_t mpGain{0};
-        int32_t meleeAttackBonus{0};
-        int32_t rangedAttackBonus{0};
-        int32_t physicalSaveBonus{0};
-        int32_t mentalSaveBonus{0};
+        std::int32_t level{1};
+        std::int32_t hpGain{0};
+        std::int32_t mpGain{0};
+        std::int32_t meleeAttackBonus{0};
+        std::int32_t rangedAttackBonus{0};
+        std::int32_t physicalSaveBonus{0};
+        std::int32_t mentalSaveBonus{0};
     };
 
     /// <summary>
     /// Cumulative class values at a level (sum of the progression rows up to it)
     /// </summary>
     struct ClassLevelTotals {
-        int32_t maxHitPoints{0};
-        int32_t maxManaPoints{0};
-        int32_t meleeAttackBonus{0};
-        int32_t rangedAttackBonus{0};
-        int32_t physicalSaveBonus{0};
-        int32_t mentalSaveBonus{0};
+        std::int32_t maxHitPoints{0};
+        std::int32_t maxManaPoints{0};
+        std::int32_t meleeAttackBonus{0};
+        std::int32_t rangedAttackBonus{0};
+        std::int32_t physicalSaveBonus{0};
+        std::int32_t mentalSaveBonus{0};
     };
 
     /// <summary>
@@ -39,10 +38,10 @@ export namespace LB::Character {
     /// between automatic class points and points the player assigns), and the per-class caps
     /// </summary>
     struct AttributeGrowth {
-        int32_t autoPointsPerLevel{1};    // go to the class's primary attributes, alternating
-        int32_t freePointsPerLevel{1};    // assigned by the player
-        int32_t primaryAttributeCap{25};  // design 4.1 absolute cap
-        int32_t otherAttributeCap{18};    // top of the creation range
+        std::int32_t autoPointsPerLevel{1};    // go to the class's primary attributes, alternating
+        std::int32_t freePointsPerLevel{1};    // assigned by the player
+        std::int32_t primaryAttributeCap{25};  // design 4.1 absolute cap
+        std::int32_t otherAttributeCap{18};    // top of the creation range
     };
 
     /// <summary>
@@ -58,7 +57,7 @@ export namespace LB::Character {
     /// A class's level 1..MaxLevel progression table
     /// </summary>
     struct ClassProgression {
-        static constexpr int32_t MaxLevel = 20;
+        static constexpr std::int32_t MaxLevel = 20;
 
         std::vector<ClassLevelGains> levels;  // in order, levels 1..MaxLevel
 
@@ -68,7 +67,7 @@ export namespace LB::Character {
         [[nodiscard]] bool IsComplete() const {
             if (levels.size() != static_cast<std::size_t>(MaxLevel)) return false;
             for (std::size_t i = 0; i < levels.size(); ++i) {
-                if (levels[i].level != static_cast<int32_t>(i + 1)) return false;
+                if (levels[i].level != static_cast<std::int32_t>(i + 1)) return false;
             }
             return true;
         }
@@ -76,9 +75,9 @@ export namespace LB::Character {
         /// <summary>
         /// Totals at a level, clamped to [1, MaxLevel] (no table gains beyond the cap)
         /// </summary>
-        [[nodiscard]] ClassLevelTotals TotalsAt(int32_t level) const {
+        [[nodiscard]] ClassLevelTotals TotalsAt(std::int32_t level) const {
             ClassLevelTotals totals{};
-            const int32_t last = std::clamp(level, 1, MaxLevel);
+            const std::int32_t last = std::clamp(level, 1, MaxLevel);
             for (const auto& row : levels) {
                 if (row.level > last) break;
                 totals.maxHitPoints += row.hpGain;
