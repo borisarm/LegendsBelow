@@ -46,4 +46,23 @@
   <PropertyGroup Condition="'$(LBAddressSanitizer)' == 'true'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
+  <!--
+    Static analysis: -p:LBStaticAnalysis=true compiles with /analyze (null dereferences,
+    uninitialized variables, buffer overruns, ...). External headers are not analyzed
+    (DisableAnalyzeExternal above), and findings fail the build like warnings do.
+  -->
+  <ItemDefinitionGroup Condition="'$(LBStaticAnalysis)' == 'true'">
+    <ClCompile>
+      <EnablePREfast>true</EnablePREfast>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <!--
+    In the test projects GoogleTest's assertion macros compare constants (C6326) and test bodies
+    build large fixtures on the stack (C6262): known false positives there, not in our code.
+  -->
+  <ItemDefinitionGroup Condition="'$(LBStaticAnalysis)' == 'true' and $(MSBuildProjectDirectory.Contains('\Components\Tests'))">
+    <ClCompile>
+      <DisableSpecificWarnings>6326;6262;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
 </Project>

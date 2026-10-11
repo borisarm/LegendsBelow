@@ -142,6 +142,9 @@
   <ItemGroup>
     <ClCompile Include="Animator.ixx" />
     <ClCompile Include="Encounter.ixx" />
+    <ClCompile Include="Enemies.ixx" />
+    <ClCompile Include="EnemyBehavior.ixx" />
+    <ClCompile Include="Waves.ixx" />
     <ClCompile Include="World.ixx" />
     <ClCompile Include="DungeonFloor.cpp" />
     <ClCompile Include="Effects.cpp" />

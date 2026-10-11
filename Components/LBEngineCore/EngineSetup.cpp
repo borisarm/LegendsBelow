@@ -23,11 +23,11 @@ namespace LB::Engine {
             return false;
         }
 
-        session_.dungeonMode = options.dungeon;
-        session_.baseSeed = options.randomSeed ? *options.randomSeed : std::random_device{}();
-        session_.world = WorldMap::Arena(ArenaHalfWidth, ArenaHalfHeight);
-        session_.depth = 0;
-        session_.rooms.clear();
+        session_->dungeonMode = options.dungeon;
+        session_->baseSeed = options.randomSeed ? *options.randomSeed : std::random_device{}();
+        session_->world = WorldMap::Arena(ArenaHalfWidth, ArenaHalfHeight);
+        session_->depth = 0;
+        session_->rooms.clear();
 
         if (!renderingSystem_.Initialize(nativeWindow, width, height)) {
             initializationError_ = "Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.";
@@ -54,11 +54,11 @@ namespace LB::Engine {
             return false;
         }
 
-        session_.encounter = options.randomSeed ? Encounter(*options.randomSeed) : Encounter();
-        session_.lootRoller = options.randomSeed ? LootRoller(*options.randomSeed + 1) : LootRoller();
-        session_.spawnEnemies = options.spawnEnemies;
+        session_->encounter = options.randomSeed ? Encounter(*options.randomSeed) : Encounter();
+        session_->lootRoller = options.randomSeed ? LootRoller(*options.randomSeed + 1) : LootRoller();
+        session_->spawnEnemies = options.spawnEnemies;
         GiveStartingKit();
-        if (session_.dungeonMode && session_.playerId) {
+        if (session_->dungeonMode && session_->playerId) {
             StartFloor(1);
         }
         StartEncounter();
@@ -95,7 +95,7 @@ namespace LB::Engine {
 
         // Everything this run owned goes at once (nothing to forget when state is added),
         // also what a failed Initialize had set up
-        session_ = {};
+        session_ = std::make_unique<Session>();
         assets_ = {};
         initialized_ = false;
     }
@@ -105,15 +105,15 @@ namespace LB::Engine {
 
         Systems::Persistence::SaveSlotInfo metadata{};
         metadata.saveName = slotIndex == QuickSaveSlot ? "Quick Save" : std::format("Save {}", slotIndex);
-        metadata.playtimeSeconds = static_cast<std::int32_t>(session_.gameTimeSeconds);
+        metadata.playtimeSeconds = static_cast<std::int32_t>(session_->gameTimeSeconds);
 
         Systems::Persistence::SaveData data;
-        data["gameTimeSeconds"] = std::format("{}", session_.gameTimeSeconds);
-        if (session_.playerId) {
-            data["player.x"] = std::format("{}", session_.playerPosition.x);
-            data["player.y"] = std::format("{}", session_.playerPosition.y);
+        data["gameTimeSeconds"] = std::format("{}", session_->gameTimeSeconds);
+        if (session_->playerId) {
+            data["player.x"] = std::format("{}", session_->playerPosition.x);
+            data["player.y"] = std::format("{}", session_->playerPosition.y);
             WriteProgress(data);
-            if (session_.dungeonMode) WriteFloor(data);
+            if (session_->dungeonMode) WriteFloor(data);
         }
 
         return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
@@ -135,17 +135,17 @@ namespace LB::Engine {
         double playerY = 0.0;
         const bool hasPlayerPosition = ParseDouble(result.data, "player.x", playerX) && ParseDouble(result.data, "player.y", playerY);
 
-        session_.gameTimeSeconds = gameTime;
-        if (session_.playerId && session_.dungeonMode) {
+        session_->gameTimeSeconds = gameTime;
+        if (session_->playerId && session_->dungeonMode) {
             ReadFloor(result.data);      // the floor first: the position is on it
         }
         const WorldPoint saved{ static_cast<float>(playerX), static_cast<float>(playerY) };
-        if (session_.playerId && hasPlayerPosition && session_.world.CircleFits(saved, PlayerRadius)) {
-            session_.playerPosition = saved;
-            session_.characterService.PlaceCharacter(*session_.playerId, ToTile(session_.playerPosition));
-            session_.camera.SnapTo({ session_.playerPosition.x, session_.playerPosition.y });  // instant refocus
+        if (session_->playerId && hasPlayerPosition && session_->world.CircleFits(saved, PlayerRadius)) {
+            session_->playerPosition = saved;
+            session_->characterService.PlaceCharacter(*session_->playerId, ToTile(session_->playerPosition));
+            session_->camera.SnapTo({ session_->playerPosition.x, session_->playerPosition.y });  // instant refocus
         }
-        if (session_.playerId) {
+        if (session_->playerId) {
             ReadProgress(result.data);   // saves from before progression keep the current one
         }
         return true;
@@ -157,7 +157,7 @@ namespace LB::Engine {
     /// </summary>
     bool GameEngine::LoadModels(const std::string& modelDirectory) {
         assets_.models = {};
-        session_.walls.Clear();
+        session_->walls.Clear();
         if (modelDirectory.empty()) return true;
 
         const auto directory = std::filesystem::path(std::u8string(modelDirectory.begin(), modelDirectory.end()));
@@ -213,7 +213,7 @@ namespace LB::Engine {
             return false;
         }
         assets_.models.loaded = true;
-        session_.walls.Build(session_.world, renderingSystem_, assets_.models.wall, assets_.models.corner, ModelScale);
+        session_->walls.Build(session_->world, renderingSystem_, assets_.models.wall, assets_.models.corner, ModelScale);
         return true;
     }
 
@@ -288,7 +288,7 @@ namespace LB::Engine {
             rules.primaryAttributes = definition.primaryAttributes;
             rules.attributeGrowth = definition.attributeGrowth;
             rules.armorAdjustments = definition.armorAdjustments;
-            session_.characterService.SetClassRules(definition.characterClass, std::move(rules));
+            session_->characterService.SetClassRules(definition.characterClass, std::move(rules));
         }
     }
 
@@ -306,22 +306,22 @@ namespace LB::Engine {
 
         Services::Character::CharacterCreationRequest request("Hero", playerClass, classData->startingAttributes);
 
-        session_.playerId = session_.characterService.CreateCharacter(request);
-        if (!session_.playerId) return false;
+        session_->playerId = session_->characterService.CreateCharacter(request);
+        if (!session_->playerId) return false;
 
-        session_.playerPosition = WorldPoint{};
-        session_.characterService.PlaceCharacter(*session_.playerId, ToTile(session_.playerPosition));
-        session_.camera.SnapTo({ session_.playerPosition.x, session_.playerPosition.y });
+        session_->playerPosition = WorldPoint{};
+        session_->characterService.PlaceCharacter(*session_->playerId, ToTile(session_->playerPosition));
+        session_->camera.SnapTo({ session_->playerPosition.x, session_->playerPosition.y });
         return true;
     }
 
     void GameEngine::SetPaused(bool paused) {
-        session_.paused = paused;
+        session_->paused = paused;
 
         // Gameplay sounds stop with the simulation; music keeps playing
         using Systems::Audio::AudioChannel;
         for (auto channel : { AudioChannel::SoundEffects, AudioChannel::Ambient, AudioChannel::Voice }) {
-            if (session_.paused) audioSystem_.PauseChannel(channel);
+            if (session_->paused) audioSystem_.PauseChannel(channel);
             else audioSystem_.ResumeChannel(channel);
         }
     }

@@ -64,61 +64,61 @@ namespace LB::Engine {
     }
 
     void GameEngine::StartFloor(std::int32_t depth) {
-        session_.depth = depth;
-        session_.world = WorldMap(dungeonService_.GenerateFloor(ParamsFor(depth), FloorSeed(session_.baseSeed, depth)), {});
-        const auto& layout = session_.world.Layout();
+        session_->depth = depth;
+        session_->world = WorldMap(dungeonService_.GenerateFloor(ParamsFor(depth), FloorSeed(session_->baseSeed, depth)), {});
+        const auto& layout = session_->world.Layout();
 
-        session_.rooms.assign(layout.rooms.size(), {});
-        auto& entrance = session_.rooms[static_cast<std::size_t>(layout.entranceRoom)];
+        session_->rooms.assign(layout.rooms.size(), {});
+        auto& entrance = session_->rooms[static_cast<std::size_t>(layout.entranceRoom)];
         entrance.triggered = true;
         entrance.cleared = true;
 
-        session_.encounter.Reset();
-        session_.groundItems.clear();
-        if (session_.playerId) {
-            session_.playerPosition = session_.world.RoomCenter(layout.entranceRoom);
-            session_.characterService.PlaceCharacter(*session_.playerId, ToTile(session_.playerPosition));
-            session_.camera.SnapTo({ session_.playerPosition.x, session_.playerPosition.y });
+        session_->encounter.Reset();
+        session_->groundItems.clear();
+        if (session_->playerId) {
+            session_->playerPosition = session_->world.RoomCenter(layout.entranceRoom);
+            session_->characterService.PlaceCharacter(*session_->playerId, ToTile(session_->playerPosition));
+            session_->camera.SnapTo({ session_->playerPosition.x, session_->playerPosition.y });
         }
         if (assets_.models.loaded) {
-            session_.walls.Build(session_.world, renderingSystem_, assets_.models.wall, assets_.models.corner, ModelScale);
+            session_->walls.Build(session_->world, renderingSystem_, assets_.models.wall, assets_.models.corner, ModelScale);
         }
-        session_.torches.Build(session_.world, session_.walls);
-        session_.effects.Clear();
-        session_.minimap.Reset(session_.world);
-        session_.minimap.Reveal(session_.world, session_.playerPosition);
+        session_->torches.Build(session_->world, session_->walls);
+        session_->effects.Clear();
+        session_->minimap.Reset(session_->world);
+        session_->minimap.Reveal(session_->world, session_->playerPosition);
     }
 
     void GameEngine::Descend() {
-        if (!session_.dungeonMode || !session_.playerId) return;
-        StartFloor(session_.depth + 1);
-        session_.characterService.RestCharacter(*session_.playerId);   // a breather on the stairs down
-        session_.combatText.Clear();
+        if (!session_->dungeonMode || !session_->playerId) return;
+        StartFloor(session_->depth + 1);
+        session_->characterService.RestCharacter(*session_->playerId);   // a breather on the stairs down
+        session_->combatText.Clear();
     }
 
     // Walking into a room for the first time raises its enemies (scaled by depth); a room is
     // cleared once all of them are dead
     void GameEngine::UpdateRooms() {
-        const auto& layout = session_.world.Layout();
-        const auto here = session_.world.RoomAt(session_.playerPosition);
-        if (here >= 0 && IsPlayerAlive() && !session_.rooms[static_cast<std::size_t>(here)].triggered) {
-            auto& room = session_.rooms[static_cast<std::size_t>(here)];
+        const auto& layout = session_->world.Layout();
+        const auto here = session_->world.RoomAt(session_->playerPosition);
+        if (here >= 0 && IsPlayerAlive() && !session_->rooms[static_cast<std::size_t>(here)].triggered) {
+            auto& room = session_->rooms[static_cast<std::size_t>(here)];
             room.triggered = true;
             const auto type = layout.rooms[static_cast<std::size_t>(here)].type;
             const auto* light = content_->FindEnemy(LightEnemy);
             const auto* heavy = content_->FindEnemy(HeavyEnemy);
             const auto raise = [&](const Content::EnemyDefinition* kind, std::int32_t count) {
                 if (!kind || count <= 0) return;
-                for (const auto id : session_.encounter.SpawnInRoom(*kind, count, here, session_.playerPosition, session_.depth)) room.enemies.push_back(id);
+                for (const auto id : session_->encounter.SpawnInRoom(*kind, count, here, session_->playerPosition, session_->depth)) room.enemies.push_back(id);
             };
             switch (type) {
             case RoomType::Combat:
-                raise(light, std::min(2 + session_.depth / 2, 4));
-                raise(heavy, session_.depth >= 2 ? std::min(1 + session_.depth / 4, 2) : 0);
+                raise(light, std::min(2 + session_->depth / 2, 4));
+                raise(heavy, session_->depth >= 2 ? std::min(1 + session_->depth / 4, 2) : 0);
                 break;
             case RoomType::Elite:
                 raise(heavy, 2);
-                raise(light, 1 + session_.depth / 3);
+                raise(light, 1 + session_->depth / 3);
                 break;
             case RoomType::Exit:
                 raise(light, 2);
@@ -130,10 +130,10 @@ namespace LB::Engine {
             if (!HasFight(type) || room.enemies.empty()) room.cleared = true;
         }
 
-        for (auto& room : session_.rooms) {
+        for (auto& room : session_->rooms) {
             if (!room.triggered || room.cleared) continue;
             room.cleared = std::ranges::all_of(room.enemies, [this](std::uint32_t id) {
-                const auto* enemy = session_.encounter.FindEnemy(id);
+                const auto* enemy = session_->encounter.FindEnemy(id);
                 return !enemy || enemy->IsDead();
             });
         }
@@ -142,26 +142,26 @@ namespace LB::Engine {
     // Chests open when the player steps up to them; the trapdoor of a cleared exit room leads down
     void GameEngine::UpdateFloorInteractions() {
         if (!IsPlayerAlive()) return;
-        const auto& layout = session_.world.Layout();
+        const auto& layout = session_->world.Layout();
         for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
-            if (layout.rooms[i].type != RoomType::Treasure || session_.rooms[i].chestOpened) continue;
-            const auto chest = session_.world.RoomCenter(static_cast<std::int32_t>(i));
-            if (Encounter::Distance(chest, session_.playerPosition) <= InteractRadius) {
-                session_.rooms[i].chestOpened = true;
+            if (layout.rooms[i].type != RoomType::Treasure || session_->rooms[i].chestOpened) continue;
+            const auto chest = session_->world.RoomCenter(static_cast<std::int32_t>(i));
+            if (Encounter::Distance(chest, session_->playerPosition) <= InteractRadius) {
+                session_->rooms[i].chestOpened = true;
                 EmitChestEffect(chest);
                 DropLoot(ChestLootTable, chest);
             }
         }
 
         const auto exit = static_cast<std::size_t>(layout.exitRoom);
-        if (session_.rooms[exit].cleared && Encounter::Distance(session_.world.RoomCenter(layout.exitRoom), session_.playerPosition) <= InteractRadius * 0.7f) {
+        if (session_->rooms[exit].cleared && Encounter::Distance(session_->world.RoomCenter(layout.exitRoom), session_->playerPosition) <= InteractRadius * 0.7f) {
             Descend();
         }
     }
 
     void GameEngine::DrawFloorProps(const Systems::Rendering::Color& tint) {
-        if (!session_.dungeonMode) return;
-        const auto& layout = session_.world.Layout();
+        if (!session_->dungeonMode) return;
+        const auto& layout = session_->world.Layout();
         const auto draw = [&](std::string_view file, WorldPoint at, Systems::Rendering::Color color) {
             if (assets_.models.loaded) {
                 renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(file), { at.x, 0.0f, at.y }, 0.0f, ModelScale, tint });
@@ -177,20 +177,20 @@ namespace LB::Engine {
 
         for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
             if (layout.rooms[i].type != RoomType::Treasure) continue;
-            draw(session_.rooms[i].chestOpened ? OpenChestModel : ChestModel, session_.world.RoomCenter(static_cast<std::int32_t>(i)), { 0.35f, 0.20f, 0.08f, 1.0f });
+            draw(session_->rooms[i].chestOpened ? OpenChestModel : ChestModel, session_->world.RoomCenter(static_cast<std::int32_t>(i)), { 0.35f, 0.20f, 0.08f, 1.0f });
         }
-        draw(TrapdoorModel, session_.world.RoomCenter(layout.exitRoom), { 0.10f, 0.08f, 0.06f, 1.0f });
+        draw(TrapdoorModel, session_->world.RoomCenter(layout.exitRoom), { 0.10f, 0.08f, 0.06f, 1.0f });
     }
 
     void GameEngine::WriteFloor(Systems::Persistence::SaveData& data) const {
         std::vector<std::int32_t> cleared;
         std::vector<std::int32_t> chests;
-        for (std::size_t i = 0; i < session_.rooms.size(); ++i) {
-            if (session_.rooms[i].cleared) cleared.push_back(static_cast<std::int32_t>(i));
-            if (session_.rooms[i].chestOpened) chests.push_back(static_cast<std::int32_t>(i));
+        for (std::size_t i = 0; i < session_->rooms.size(); ++i) {
+            if (session_->rooms[i].cleared) cleared.push_back(static_cast<std::int32_t>(i));
+            if (session_->rooms[i].chestOpened) chests.push_back(static_cast<std::int32_t>(i));
         }
-        data["floor.seed"] = std::format("{}", session_.baseSeed);
-        data["floor.depth"] = std::format("{}", session_.depth);
+        data["floor.seed"] = std::format("{}", session_->baseSeed);
+        data["floor.depth"] = std::format("{}", session_->depth);
         data["floor.cleared"] = JoinIndices(cleared);
         data["floor.chests"] = JoinIndices(chests);
     }
@@ -211,36 +211,36 @@ namespace LB::Engine {
         if (std::from_chars(seedText->data(), seedText->data() + seedText->size(), seed).ec != std::errc{}) return;
         if (std::from_chars(depthText->data(), depthText->data() + depthText->size(), depth).ec != std::errc{} || depth < 1) return;
 
-        session_.baseSeed = seed;
+        session_->baseSeed = seed;
         StartFloor(depth);
         for (const auto index : ParseIndices(field("floor.cleared").value_or(""))) {
-            if (index < 0 || static_cast<std::size_t>(index) >= session_.rooms.size()) continue;
-            session_.rooms[static_cast<std::size_t>(index)].triggered = true;
-            session_.rooms[static_cast<std::size_t>(index)].cleared = true;
+            if (index < 0 || static_cast<std::size_t>(index) >= session_->rooms.size()) continue;
+            session_->rooms[static_cast<std::size_t>(index)].triggered = true;
+            session_->rooms[static_cast<std::size_t>(index)].cleared = true;
         }
         for (const auto index : ParseIndices(field("floor.chests").value_or(""))) {
-            if (index >= 0 && static_cast<std::size_t>(index) < session_.rooms.size()) session_.rooms[static_cast<std::size_t>(index)].chestOpened = true;
+            if (index >= 0 && static_cast<std::size_t>(index) < session_->rooms.size()) session_->rooms[static_cast<std::size_t>(index)].chestOpened = true;
         }
     }
 
 
     // What the minimap marks: the trapdoor, unopened chests, and enemies in sight
     void GameEngine::DrawMinimap() {
-        if (!session_.dungeonMode || !session_.playerId || session_.characterScreen.IsOpen()) return;
-        const auto& layout = session_.world.Layout();
+        if (!session_->dungeonMode || !session_->playerId || session_->characterScreen.IsOpen()) return;
+        const auto& layout = session_->world.Layout();
 
         MinimapMarkers markers;
-        markers.player = session_.playerPosition;
-        markers.exit = session_.world.RoomCenter(layout.exitRoom);
-        for (std::size_t i = 0; i < layout.rooms.size() && i < session_.rooms.size(); ++i) {
-            if (layout.rooms[i].type == RoomType::Treasure && !session_.rooms[i].chestOpened) {
-                markers.chests.push_back(session_.world.RoomCenter(static_cast<std::int32_t>(i)));
+        markers.player = session_->playerPosition;
+        markers.exit = session_->world.RoomCenter(layout.exitRoom);
+        for (std::size_t i = 0; i < layout.rooms.size() && i < session_->rooms.size(); ++i) {
+            if (layout.rooms[i].type == RoomType::Treasure && !session_->rooms[i].chestOpened) {
+                markers.chests.push_back(session_->world.RoomCenter(static_cast<std::int32_t>(i)));
             }
         }
-        for (const auto& enemy : session_.encounter.GetEnemies()) {
-            if (!enemy.IsDead() && session_.world.LineOfSight(session_.playerPosition, enemy.position)) markers.enemies.push_back(enemy.position);
+        for (const auto& enemy : session_->encounter.GetEnemies()) {
+            if (!enemy.IsDead() && session_->world.LineOfSight(session_->playerPosition, enemy.position)) markers.enemies.push_back(enemy.position);
         }
-        session_.minimap.Draw(renderingSystem_, session_.world, markers);
+        session_->minimap.Draw(renderingSystem_, session_->world, markers);
     }
 
 } // namespace LB::Engine

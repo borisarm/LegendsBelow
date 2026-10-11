@@ -47,11 +47,11 @@ namespace LB::Systems::Rendering::Detail
         {
             using namespace DirectX;
             const CD3DX12_DESCRIPTOR_RANGE atlasRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-            CD3DX12_ROOT_PARAMETER parameters[2];
+            CD3DX12_ROOT_PARAMETER parameters[2]{};
             parameters[0].InitAsConstants(2, 0, 0, D3D12_SHADER_VISIBILITY_VERTEX);
             parameters[1].InitAsDescriptorTable(1, &atlasRange, D3D12_SHADER_VISIBILITY_PIXEL);
             // s0 point (pixel font, rectangles), s1 linear (distance fields)
-            CD3DX12_STATIC_SAMPLER_DESC samplers[2];
+            CD3DX12_STATIC_SAMPLER_DESC samplers[2]{};
             samplers[0].Init(0, D3D12_FILTER_MIN_MAG_MIP_POINT,
                 D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP);
             samplers[1].Init(1, D3D12_FILTER_MIN_MAG_MIP_LINEAR,

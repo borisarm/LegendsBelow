@@ -4,6 +4,7 @@
 #   Scripts/Test.ps1 -Configuration Release   Release
 #   Scripts/Test.ps1 -AddressSanitizer        instrumented build (rebuilds everything), tests
 #                                             under ASan; run a plain build afterwards to go back
+#   Scripts/Test.ps1 -StaticAnalysis          build with /analyze (findings fail the build), tests
 #   Scripts/Test.ps1 -NoBuild                 run the tests of the last build
 #
 # Run from anywhere; tests run from the repository so they find Assets/. Exits non-zero when
@@ -13,6 +14,7 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
     [switch]$AddressSanitizer,
+    [switch]$StaticAnalysis,
     [switch]$NoBuild
 )
 
@@ -29,6 +31,7 @@ if (-not $NoBuild) {
     $arguments = @((Join-Path $root 'LegendsBelow.slnx'), '-m', '-nologo', '-v:minimal',
                    "-p:Configuration=$Configuration", '-p:Platform=x64')
     if ($AddressSanitizer) { $arguments += @('-t:Rebuild', '-p:LBAddressSanitizer=true') }
+    if ($StaticAnalysis) { $arguments += '-p:LBStaticAnalysis=true' }
     & $msbuild @arguments
     if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)" }
 }

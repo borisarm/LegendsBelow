@@ -26,7 +26,7 @@ namespace LB::Systems::Rendering::Detail
         {
             using namespace DirectX;
             const CD3DX12_DESCRIPTOR_RANGE spriteRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-            CD3DX12_ROOT_PARAMETER parameters[2];
+            CD3DX12_ROOT_PARAMETER parameters[2]{};
             parameters[0].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_VERTEX);
             parameters[1].InitAsDescriptorTable(1, &spriteRange, D3D12_SHADER_VISIBILITY_PIXEL);
             CD3DX12_STATIC_SAMPLER_DESC sampler(0, D3D12_FILTER_MIN_MAG_MIP_LINEAR,

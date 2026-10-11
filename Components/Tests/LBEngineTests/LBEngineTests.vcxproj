@@ -102,9 +102,20 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="EngineTestHelpers.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="test.cpp" />
+    <ClCompile Include="StepTimerTests.cpp" />
+    <ClCompile Include="EngineLoopTests.cpp" />
+    <ClCompile Include="SaveLoadTests.cpp" />
+    <ClCompile Include="MovementAndContentTests.cpp" />
+    <ClCompile Include="CameraAndModelTests.cpp" />
+    <ClCompile Include="EncounterTests.cpp" />
+    <ClCompile Include="CombatTests.cpp" />
+    <ClCompile Include="ProgressionTests.cpp" />
+    <ClCompile Include="DungeonTests.cpp" />
+    <ClCompile Include="EffectsTests.cpp" />
+    <ClCompile Include="SessionAndComponentTests.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>

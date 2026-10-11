@@ -1,5 +1,6 @@
 # build.yml - Build the solution and run every test on each push and pull request:
-# Debug and Release at /W4 with warnings as errors, and a Debug run under AddressSanitizer.
+# Debug and Release at /W4 with warnings as errors, a Debug run under AddressSanitizer, and a
+# Debug build with MSVC static analysis (/analyze).
 name: Build and test
 
 on:
@@ -31,6 +32,10 @@ jobs:
           - name: Debug (AddressSanitizer)
             configuration: Debug
             sanitizer: true
+          - name: Debug (static analysis)
+            configuration: Debug
+            sanitizer: false
+            analysis: true
     env:
       # vcpkg's binary cache, kept between runs (the GDK, DXC, and DirectXTK12 take a while to build)
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
@@ -73,4 +78,5 @@ jobs:
         run: |
           $arguments = @{ Configuration = '${{ matrix.configuration }}' }
           if ('${{ matrix.sanitizer }}' -eq 'true') { $arguments.AddressSanitizer = $true }
+          if ('${{ matrix.analysis }}' -eq 'true') { $arguments.StaticAnalysis = $true }
           ./Scripts/Test.ps1 @arguments

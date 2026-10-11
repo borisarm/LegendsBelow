@@ -286,7 +286,7 @@ export namespace LB::Engine {
         [[nodiscard]] const Systems::Audio::AudioSystem& GetAudio() const noexcept { return audioSystem_; }
         [[nodiscard]] Systems::Audio::AudioSystem& GetAudio() noexcept { return audioSystem_; }
         [[nodiscard]] const Systems::Persistence::PersistenceSystem& GetPersistence() const noexcept { return persistenceSystem_; }
-        [[nodiscard]] const Services::Character::CharacterService& GetCharacters() const noexcept { return session_.characterService; }
+        [[nodiscard]] const Services::Character::CharacterService& GetCharacters() const noexcept { return session_->characterService; }
         [[nodiscard]] const Systems::Rendering::RenderingSystem& GetRendering() const noexcept { return renderingSystem_; }
 
         /// <summary>
@@ -303,17 +303,17 @@ export namespace LB::Engine {
         /// <summary>
         /// The player character, once the engine is initialized
         /// </summary>
-        [[nodiscard]] std::optional<LB::Character::CharacterId> GetPlayerId() const noexcept { return session_.playerId; }
+        [[nodiscard]] std::optional<LB::Character::CharacterId> GetPlayerId() const noexcept { return session_->playerId; }
 
         /// <summary>
         /// Player position in world tiles
         /// </summary>
-        [[nodiscard]] WorldPoint GetPlayerPosition() const noexcept { return session_.playerPosition; }
+        [[nodiscard]] WorldPoint GetPlayerPosition() const noexcept { return session_->playerPosition; }
 
         /// <summary>
         /// Where the player faces: radians around the vertical axis, 0 faces +Z (south)
         /// </summary>
-        [[nodiscard]] float GetPlayerFacingYaw() const noexcept { return session_.playerFacingYaw; }
+        [[nodiscard]] float GetPlayerFacingYaw() const noexcept { return session_->playerFacingYaw; }
 
         /// <summary>
         /// True when gamepads are read from the platform (GameInput runtime available)
@@ -324,22 +324,22 @@ export namespace LB::Engine {
         /// Tactical pause (design-combat-system.md): the loop keeps running and reading input,
         /// but the simulation and the game clock stop.
         /// </summary>
-        [[nodiscard]] bool IsPaused() const noexcept { return session_.paused; }
+        [[nodiscard]] bool IsPaused() const noexcept { return session_->paused; }
 
         /// <summary>
         /// Simulated time, excluding time spent paused
         /// </summary>
-        [[nodiscard]] double GetGameTimeSeconds() const noexcept { return session_.gameTimeSeconds; }
+        [[nodiscard]] double GetGameTimeSeconds() const noexcept { return session_->gameTimeSeconds; }
 
         /// <summary>
         /// The walkable world: the test arena, or the current dungeon floor
         /// </summary>
-        [[nodiscard]] const WorldMap& GetWorld() const noexcept { return session_.world; }
+        [[nodiscard]] const WorldMap& GetWorld() const noexcept { return session_->world; }
 
         /// <summary>
         /// The dungeon floor the player is on (1 for the first; 0 in the test arena)
         /// </summary>
-        [[nodiscard]] std::int32_t GetDepth() const noexcept { return session_.depth; }
+        [[nodiscard]] std::int32_t GetDepth() const noexcept { return session_->depth; }
 
         /// <summary>
         /// State of a room of the current floor: enemies raised (when the player first walks in),
@@ -352,29 +352,29 @@ export namespace LB::Engine {
             std::vector<std::uint32_t> enemies;
         };
 
-        [[nodiscard]] const std::vector<RoomState>& GetRoomStates() const noexcept { return session_.rooms; }
+        [[nodiscard]] const std::vector<RoomState>& GetRoomStates() const noexcept { return session_->rooms; }
 
         using Torch = LB::Engine::Torch;
 
         /// <summary>
         /// The torches on the room walls of the current floor
         /// </summary>
-        [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return session_.torches.Torches(); }
+        [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return session_->torches.Torches(); }
 
         /// <summary>
         /// Particles in the world: torch fire, hit sparks, dust, sparkles
         /// </summary>
-        [[nodiscard]] const ParticleField& GetParticles() const noexcept { return session_.effects.Particles(); }
+        [[nodiscard]] const ParticleField& GetParticles() const noexcept { return session_->effects.Particles(); }
 
         /// <summary>
         /// Has the player seen this floor cell? (what the minimap shows)
         /// </summary>
-        [[nodiscard]] bool IsCellExplored(std::int32_t x, std::int32_t y) const noexcept { return session_.minimap.IsExplored(x, y); }
+        [[nodiscard]] bool IsCellExplored(std::int32_t x, std::int32_t y) const noexcept { return session_->minimap.IsExplored(x, y); }
 
         /// <summary>
         /// The minimap shown large (M or the right stick click toggles it)
         /// </summary>
-        [[nodiscard]] bool IsMapExpanded() const noexcept { return session_.minimap.IsExpanded(); }
+        [[nodiscard]] bool IsMapExpanded() const noexcept { return session_->minimap.IsExpanded(); }
 
         /// <summary>
         /// Go down to the next floor (normally by stepping on the trapdoor of a cleared exit room)
@@ -383,31 +383,31 @@ export namespace LB::Engine {
 
         /// <summary>
         /// The enemies and waves of the arena
-        [[nodiscard]] const Encounter& GetEncounter() const noexcept { return session_.encounter; }
+        [[nodiscard]] const Encounter& GetEncounter() const noexcept { return session_->encounter; }
 
         /// <summary>
         /// Attacks resolved during the last simulation step (the player's and the enemies')
         /// </summary>
-        [[nodiscard]] const std::vector<CombatEvent>& GetCombatEvents() const noexcept { return session_.combatEvents; }
+        [[nodiscard]] const std::vector<CombatEvent>& GetCombatEvents() const noexcept { return session_->combatEvents; }
 
         /// <summary>
         /// Damage numbers and misses currently floating over characters
         /// </summary>
-        [[nodiscard]] const std::vector<FloatingText>& GetFloatingTexts() const noexcept { return session_.combatText.Texts(); }
+        [[nodiscard]] const std::vector<FloatingText>& GetFloatingTexts() const noexcept { return session_->combatText.Texts(); }
 
         /// <summary>
         /// True while there is a player with hit points left
         /// </summary>
         [[nodiscard]] bool IsPlayerAlive() const {
-            if (!session_.playerId) return false;
-            const auto character = session_.characterService.GetCharacter(*session_.playerId);
+            if (!session_->playerId) return false;
+            const auto character = session_->characterService.GetCharacter(*session_->playerId);
             return character && character->get().IsAlive();
         }
 
         /// <summary>
         /// True while the player's weapon swing plays (attacks repeat while Attack is held)
         /// </summary>
-        [[nodiscard]] bool IsPlayerAttacking() const noexcept { return session_.playerCombat.swinging; }
+        [[nodiscard]] bool IsPlayerAttacking() const noexcept { return session_->playerCombat.swinging; }
 
         /// <summary>
         /// The player's weapon attack (design-combat-system.md 4.1, 4.3): class attack bonus with the
@@ -415,15 +415,15 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] Services::Combat::WeaponAttackProfile GetPlayerAttackProfile() const {
             Services::Combat::WeaponAttackProfile attack{};
-            if (!session_.playerId || !session_.playerWeapon) return attack;
-            const auto character = session_.characterService.GetCharacter(*session_.playerId);
+            if (!session_->playerId || !session_->playerWeapon) return attack;
+            const auto character = session_->characterService.GetCharacter(*session_->playerId);
             if (!character) return attack;
 
-            const auto& weapon = *session_.playerWeapon;
+            const auto& weapon = *session_->playerWeapon;
             const auto& attributes = character->get().GetAttributes();
             const std::int32_t modifier = weapon.attributeScale == "DEX" ? attributes.GetDexterityModifier()
                                         : weapon.attributeScale == "STR" ? attributes.GetStrengthModifier() : 0;
-            attack.attackBonus = session_.characterService.GetAttackBonus(*session_.playerId, weapon.category).value_or(0);
+            attack.attackBonus = session_->characterService.GetAttackBonus(*session_->playerId, weapon.category).value_or(0);
             attack.damageDice = weapon.damageDice;
             attack.damageBonus = weapon.damageBonus + static_cast<std::int32_t>(std::lround(static_cast<float>(modifier) * weapon.scaleFactor));
             attack.damageType = weapon.damageTypes.empty() ? LB::Combat::DamageType::Slashing : weapon.damageTypes.front();
@@ -438,12 +438,12 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] Services::Combat::DefenseProfile GetPlayerDefense() const {
             Services::Combat::DefenseProfile defense{};
-            if (!session_.playerId) return defense;
-            const auto character = session_.characterService.GetCharacter(*session_.playerId);
+            if (!session_->playerId) return defense;
+            const auto character = session_->characterService.GetCharacter(*session_->playerId);
             if (!character) return defense;
 
             defense.armorClass = character->get().GetArmorClass() + character->get().GetAttributes().GetDexterityModifier();
-            for (const auto& piece : session_.characterService.GetEquippedArmor(*session_.playerId)) {
+            for (const auto& piece : session_->characterService.GetEquippedArmor(*session_->playerId)) {
                 if (const auto* armor = content_->FindArmor(piece.armorId)) {
                     defense.physicalArmor += armor->physicalAR + armor->armorBonus;
                 }
@@ -454,13 +454,13 @@ export namespace LB::Engine {
         /// <summary>
         /// Gold carried
         /// </summary>
-        [[nodiscard]] std::int32_t GetGold() const noexcept { return session_.gold; }
+        [[nodiscard]] std::int32_t GetGold() const noexcept { return session_->gold; }
 
         /// <summary>
         /// The bag (unequipped items); item ids are packed ItemRefs
         /// </summary>
         [[nodiscard]] std::vector<Inventory::InventoryItem> GetInventory() const {
-            return session_.playerId ? session_.inventoryService.GetInventory(*session_.playerId) : std::vector<Inventory::InventoryItem>{};
+            return session_->playerId ? session_->inventoryService.GetInventory(*session_->playerId) : std::vector<Inventory::InventoryItem>{};
         }
 
         /// <summary>
@@ -471,17 +471,17 @@ export namespace LB::Engine {
         /// <summary>
         /// The weapon the player attacks with
         /// </summary>
-        [[nodiscard]] const Content::WeaponDefinition* GetPlayerWeapon() const noexcept { return session_.playerWeapon; }
+        [[nodiscard]] const Content::WeaponDefinition* GetPlayerWeapon() const noexcept { return session_->playerWeapon; }
 
         /// <summary>
         /// Gold and items lying on the floor, waiting to be picked up
         /// </summary>
-        [[nodiscard]] const std::vector<GroundItem>& GetGroundItems() const noexcept { return session_.groundItems; }
+        [[nodiscard]] const std::vector<GroundItem>& GetGroundItems() const noexcept { return session_->groundItems; }
 
         /// <summary>
         /// The character and inventory screen (I, C, or the gamepad View button)
         /// </summary>
-        [[nodiscard]] const CharacterScreen& GetCharacterScreen() const noexcept { return session_.characterScreen; }
+        [[nodiscard]] const CharacterScreen& GetCharacterScreen() const noexcept { return session_->characterScreen; }
 
         /// <summary>
         /// Put items (by content key) in the bag. Returns how many fit.
@@ -516,7 +516,7 @@ export namespace LB::Engine {
         std::optional<std::uint32_t> SpawnEnemy(std::string_view key, WorldPoint at) {
             const auto* type = content_->FindEnemy(key);
             if (!initialized_ || !type) return std::nullopt;
-            return session_.encounter.Spawn(*type, at, std::atan2(session_.playerPosition.x - at.x, session_.playerPosition.y - at.y), false);
+            return session_->encounter.Spawn(*type, at, std::atan2(session_->playerPosition.x - at.x, session_->playerPosition.y - at.y), false);
         }
 
         /// <summary>
@@ -525,7 +525,7 @@ export namespace LB::Engine {
         /// </summary>
         bool EquipPlayerArmor(std::string_view armorKey) {
             const auto* armor = content_->FindArmor(armorKey);
-            if (!session_.playerId || !armor) return false;
+            if (!session_->playerId || !armor) return false;
 
             Services::Character::ArmorPiece piece{};
             piece.armorId = armor->id;
@@ -533,7 +533,7 @@ export namespace LB::Engine {
             piece.category = armor->category;
             piece.movementPenalty = armor->movementPenalty;
             piece.castPenalty = armor->castPenalty;
-            return session_.characterService.EquipArmor(*session_.playerId, piece);
+            return session_->characterService.EquipArmor(*session_->playerId, piece);
         }
 
         /// <summary>
@@ -542,7 +542,7 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] std::vector<float> GetWallOpacities() const {
             std::vector<float> opacities;
-            for (const auto& wall : session_.walls.Pieces()) opacities.push_back(wall.opacity);
+            for (const auto& wall : session_->walls.Pieces()) opacities.push_back(wall.opacity);
             return opacities;
         }
 
@@ -550,7 +550,7 @@ export namespace LB::Engine {
         /// The isometric camera following the player
         /// </summary>
         [[nodiscard]] const Systems::Rendering::IsometricCamera& GetCamera() const noexcept {
-            return session_.camera;
+            return session_->camera;
         }
 
         /// <summary>
@@ -648,13 +648,13 @@ export namespace LB::Engine {
 
         // The player's character; null before Initialize, without class content, or if it is gone
         [[nodiscard]] const LB::Character::Character* PlayerCharacter() const {
-            if (!session_.playerId) return nullptr;
-            const auto character = session_.characterService.GetCharacter(*session_.playerId);
+            if (!session_->playerId) return nullptr;
+            const auto character = session_->characterService.GetCharacter(*session_->playerId);
             return character ? &character->get() : nullptr;
         }
 
         [[nodiscard]] float PlayerAttackSeconds() const noexcept {
-            return session_.playerWeapon ? session_.playerWeapon->attackTimeSeconds : 1.0f;
+            return session_->playerWeapon ? session_->playerWeapon->attackTimeSeconds : 1.0f;
         }
 
         // The player's body keeps this far (tiles) from walls
@@ -750,7 +750,7 @@ export namespace LB::Engine {
         };
 
         Assets assets_;
-        Session session_;
+        std::unique_ptr<Session> session_ = std::make_unique<Session>();   // on the heap: it is large (~20 KB)
         StepTimer timer_;
         bool active_{true};
         bool initialized_{false};

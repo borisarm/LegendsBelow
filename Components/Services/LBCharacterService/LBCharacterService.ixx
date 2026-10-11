@@ -457,14 +457,14 @@ export namespace LB::Services::Character {
         /// </summary>
         bool SpendAttributePoint(CharacterId id, AttributeType attribute) {
             auto it = characters_.find(id);
+            if (it == characters_.end()) return false;
             const auto* rules = GetRulesFor(id);
-            if (it == characters_.end() || !rules) {
-                return false;
-            }
+            if (rules == nullptr) return false;
+            const auto& classRules = *rules;
 
             auto& character = it->second;
             auto attributes = character.GetAttributes();
-            if (character.GetUnspentAttributePoints() <= 0 || attributes.Get(attribute) >= attributeCap(*rules, attribute)) {
+            if (character.GetUnspentAttributePoints() <= 0 || attributes.Get(attribute) >= attributeCap(classRules, attribute)) {
                 return false;
             }
 
@@ -473,8 +473,8 @@ export namespace LB::Services::Character {
             character.SetUnspentAttributePoints(character.GetUnspentAttributePoints() - 1);
 
             const auto level = character.GetLevel();
-            const auto newMaxHP = calculateMaxHitPoints(*rules, level, attributes);
-            const auto newMaxMP = calculateMaxManaPoints(character.GetClass(), *rules, level, attributes);
+            const auto newMaxHP = calculateMaxHitPoints(classRules, level, attributes);
+            const auto newMaxMP = calculateMaxManaPoints(character.GetClass(), classRules, level, attributes);
             character.SetHitPoints(std::clamp(character.GetCurrentHitPoints() + newMaxHP - character.GetMaxHitPoints(), 0, newMaxHP), newMaxHP);
             character.SetManaPoints(std::clamp(character.GetCurrentManaPoints() + newMaxMP - character.GetMaxManaPoints(), 0, newMaxMP), newMaxMP);
             return true;
@@ -488,16 +488,16 @@ export namespace LB::Services::Character {
         /// </summary>
         bool RestoreProgress(CharacterId id, std::int32_t level, std::int32_t experience, const Attributes& attributes, std::int32_t unspentPoints) {
             auto it = characters_.find(id);
+            if (it == characters_.end()) return false;
             const auto* rules = GetRulesFor(id);
-            if (it == characters_.end() || !rules) {
-                return false;
-            }
+            if (rules == nullptr) return false;
+            const auto& classRules = *rules;
             if (level < 1 || level > ClassProgression::MaxLevel || experience < 0 || unspentPoints < 0 || !attributes.IsValid()) {
                 return false;
             }
             for (auto attribute : { AttributeType::Strength, AttributeType::Dexterity, AttributeType::Constitution,
                                     AttributeType::Intelligence, AttributeType::Wisdom, AttributeType::Charisma }) {
-                if (attributes.Get(attribute) > attributeCap(*rules, attribute)) return false;
+                if (attributes.Get(attribute) > attributeCap(classRules, attribute)) return false;
             }
 
             auto& character = it->second;
@@ -508,8 +508,8 @@ export namespace LB::Services::Character {
             character.SetAttributes(attributes);
             character.SetUnspentAttributePoints(unspentPoints);
 
-            const auto maxHP = calculateMaxHitPoints(*rules, level, attributes);
-            const auto maxMP = calculateMaxManaPoints(character.GetClass(), *rules, level, attributes);
+            const auto maxHP = calculateMaxHitPoints(classRules, level, attributes);
+            const auto maxMP = calculateMaxManaPoints(character.GetClass(), classRules, level, attributes);
             character.SetHitPoints(std::clamp(static_cast<std::int32_t>(std::lround(health * maxHP)), character.IsAlive() ? 1 : 0, maxHP), maxHP);
             character.SetManaPoints(maxMP, maxMP);
             return true;
@@ -542,13 +542,13 @@ export namespace LB::Services::Character {
         /// </summary>
         std::optional<std::int32_t> GetAttackBonus(CharacterId id, WeaponType weapon) const {
             auto it = characters_.find(id);
+            if (it == characters_.end()) return std::nullopt;
             const auto* rules = GetRulesFor(id);
-            if (it == characters_.end() || !rules) {
-                return std::nullopt;
-            }
+            if (rules == nullptr) return std::nullopt;
+            const auto& classRules = *rules;
 
             const auto& character = it->second;
-            const auto totals = rules->progression.TotalsAt(character.GetLevel());
+            const auto totals = classRules.progression.TotalsAt(character.GetLevel());
             const bool ranged = weapon == WeaponType::Bow || weapon == WeaponType::Crossbow;
             const std::int32_t classBonus = ranged ? totals.rangedAttackBonus : totals.meleeAttackBonus;
             const std::int32_t attributeBonus = ranged

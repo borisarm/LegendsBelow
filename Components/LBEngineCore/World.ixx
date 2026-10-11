@@ -15,6 +15,20 @@ export namespace LB::Engine {
     };
 
     /// <summary>
+    /// Straight-line distance between two ground points (tiles)
+    /// </summary>
+    [[nodiscard]] inline float Distance(WorldPoint a, WorldPoint b) noexcept {
+        return std::hypot(b.x - a.x, b.y - a.y);
+    }
+
+    /// <summary>
+    /// The ground direction a yaw faces (radians around the vertical axis; 0 faces +Z)
+    /// </summary>
+    [[nodiscard]] inline WorldPoint Forward(float yaw) noexcept {
+        return { std::sin(yaw), std::cos(yaw) };
+    }
+
+    /// <summary>
     /// A floor layout placed in the world. Each layout cell is CellTiles x CellTiles tiles (one
     /// KayKit wall segment long); floor cells are open, every other cell is solid. Moves slide
     /// along walls, and a flow field leads enemies around them.

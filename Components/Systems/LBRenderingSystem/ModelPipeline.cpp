@@ -308,7 +308,7 @@ namespace LB::Systems::Rendering::Detail
             auto device = m_device.GetD3DDevice();
 
             const CD3DX12_DESCRIPTOR_RANGE textureRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-            CD3DX12_ROOT_PARAMETER parameters[4];
+            CD3DX12_ROOT_PARAMETER parameters[4]{};
             parameters[RootFrame].InitAsConstantBufferView(0);
             parameters[RootMaterial].InitAsConstants(sizeof(MaterialConstants) / 4, 1, 0, D3D12_SHADER_VISIBILITY_PIXEL);
             parameters[RootTexture].InitAsDescriptorTable(1, &textureRange, D3D12_SHADER_VISIBILITY_PIXEL);

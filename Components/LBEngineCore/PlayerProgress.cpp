@@ -82,7 +82,7 @@ namespace LB::Engine {
 
     std::int32_t GameEngine::GiveItem(std::string_view key, std::int32_t quantity) {
         const auto item = ItemRef::FromKey(*content_, key);
-        if (!session_.playerId || !item.IsValid() || quantity <= 0) return 0;
+        if (!session_->playerId || !item.IsValid() || quantity <= 0) return 0;
 
         Inventory::InventoryItem stack{};
         stack.itemId = item.Pack();
@@ -93,15 +93,15 @@ namespace LB::Engine {
         if (item.kind == ItemKind::Consumable) stack.maxStack = content_->FindConsumable(item.id)->maxStack;
         if (item.kind == ItemKind::Weapon) stack.equipmentSlot = content_->FindWeapon(item.id)->slot;
         if (item.kind == ItemKind::Armor) stack.equipmentSlot = content_->FindArmor(item.id)->slot;
-        return session_.inventoryService.AddItem(*session_.playerId, stack).itemsAffected;
+        return session_->inventoryService.AddItem(*session_->playerId, stack).itemsAffected;
     }
 
     void GameEngine::GiveStartingKit() {
-        session_.gold = 0;
-        session_.groundItems.clear();
-        session_.playerWeapon = content_->FindWeapon(StartingWeapon);
-        if (!session_.playerId) return;
-        session_.inventoryService.CreateInventory(*session_.playerId, BagCapacity);
+        session_->gold = 0;
+        session_->groundItems.clear();
+        session_->playerWeapon = content_->FindWeapon(StartingWeapon);
+        if (!session_->playerId) return;
+        session_->inventoryService.CreateInventory(*session_->playerId, BagCapacity);
         GiveItem(HealingPotion, StartingPotions);
     }
 
@@ -132,18 +132,18 @@ namespace LB::Engine {
 
     bool GameEngine::EquipItem(std::string_view key) {
         const auto item = ItemRef::FromKey(*content_, key);
-        if (!session_.playerId || !item.IsValid() || CountItem(key) == 0 || !CanEquip(item).empty()) return false;
+        if (!session_->playerId || !item.IsValid() || CountItem(key) == 0 || !CanEquip(item).empty()) return false;
 
-        session_.inventoryService.RemoveItem(*session_.playerId, item.Pack(), 1);
+        session_->inventoryService.RemoveItem(*session_->playerId, item.Pack(), 1);
         if (item.kind == ItemKind::Weapon) {
-            if (session_.playerWeapon) GiveItem(session_.playerWeapon->key);
-            session_.playerWeapon = content_->FindWeapon(item.id);
+            if (session_->playerWeapon) GiveItem(session_->playerWeapon->key);
+            session_->playerWeapon = content_->FindWeapon(item.id);
             return true;
         }
 
         // The piece in the same slot goes back to the bag (there is room: one item just left it)
         const auto* armor = content_->FindArmor(item.id);
-        for (const auto& worn : session_.characterService.GetEquippedArmor(*session_.playerId)) {
+        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
             if (worn.slot == armor->slot) {
                 if (const auto* previous = content_->FindArmor(worn.armorId)) GiveItem(previous->key);
             }
@@ -152,11 +152,11 @@ namespace LB::Engine {
     }
 
     bool GameEngine::UnequipArmorSlot(EquipmentSlot slot) {
-        if (!session_.playerId || !session_.inventoryService.HasInventorySpace(*session_.playerId)) return false;
-        for (const auto& worn : session_.characterService.GetEquippedArmor(*session_.playerId)) {
+        if (!session_->playerId || !session_->inventoryService.HasInventorySpace(*session_->playerId)) return false;
+        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
             if (worn.slot != slot) continue;
             const auto* armor = content_->FindArmor(worn.armorId);
-            if (!armor || !session_.characterService.UnequipArmor(*session_.playerId, slot)) return false;
+            if (!armor || !session_->characterService.UnequipArmor(*session_->playerId, slot)) return false;
             GiveItem(armor->key);
             return true;
         }
@@ -165,7 +165,7 @@ namespace LB::Engine {
 
     bool GameEngine::UseItem(std::string_view key) {
         const auto item = ItemRef::FromKey(*content_, key);
-        if (!session_.playerId || item.kind != ItemKind::Consumable || CountItem(key) == 0 || !IsPlayerAlive()) return false;
+        if (!session_->playerId || item.kind != ItemKind::Consumable || CountItem(key) == 0 || !IsPlayerAlive()) return false;
 
         const auto* consumable = content_->FindConsumable(item.id);
         const auto* player = PlayerCharacter();
@@ -175,10 +175,10 @@ namespace LB::Engine {
             return false;   // no waste at full health
         }
 
-        session_.inventoryService.RemoveItem(*session_.playerId, item.Pack(), 1);
+        session_->inventoryService.RemoveItem(*session_->playerId, item.Pack(), 1);
         if (consumable->healing.count > 0) {
-            const auto healed = session_.characterService.HealCharacter(*session_.playerId, session_.lootRoller.RollDice(consumable->healing));
-            session_.combatText.Add(std::format("+{}", healed), { session_.playerPosition.x, PlayerTop(), session_.playerPosition.y }, { 0.45f, 0.95f, 0.45f, 1.0f }, 3.0f);
+            const auto healed = session_->characterService.HealCharacter(*session_->playerId, session_->lootRoller.RollDice(consumable->healing));
+            session_->combatText.Add(std::format("+{}", healed), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.45f, 0.95f, 0.45f, 1.0f }, 3.0f);
             EmitHealingEffect();
         }
         return true;
@@ -195,12 +195,12 @@ namespace LB::Engine {
     // ------------------------------------------------------------------------------------------
 
     void GameEngine::OnEnemyKilled(const Enemy& enemy) {
-        if (!session_.playerId) return;
+        if (!session_->playerId) return;
 
-        const Systems::Rendering::Vector3 overPlayer{ session_.playerPosition.x, PlayerTop(), session_.playerPosition.y };
+        const Systems::Rendering::Vector3 overPlayer{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
         if (enemy.experience > 0) {
-            if (const auto progress = session_.characterService.AwardExperience(*session_.playerId, enemy.experience); progress && progress->levelIncreased) {
-                session_.combatText.Add("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
+            if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, enemy.experience); progress && progress->levelIncreased) {
+                session_->combatText.Add("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
                 EmitLevelUpEffect();
             }
         }
@@ -212,38 +212,38 @@ namespace LB::Engine {
     void GameEngine::DropLoot(std::string_view lootTable, WorldPoint at) {
         const auto* table = content_->FindLootTable(lootTable);
         if (!table) return;
-        for (auto drop : session_.lootRoller.Roll(*table, *content_)) {
-            const auto offset = session_.lootRoller.Scatter(0.45f);
-            drop.id = session_.nextGroundItemId++;
+        for (auto drop : session_->lootRoller.Roll(*table, *content_)) {
+            const auto offset = session_->lootRoller.Scatter(0.45f);
+            drop.id = session_->nextGroundItemId++;
             const WorldPoint spot{ at.x + offset.x, at.y + offset.y };
-            drop.position = session_.world.CircleFits(spot, 0.2f) ? spot : at;
-            session_.groundItems.push_back(drop);
+            drop.position = session_->world.CircleFits(spot, 0.2f) ? spot : at;
+            session_->groundItems.push_back(drop);
         }
     }
 
     // Walking over gold or an item picks it up; an item that does not fit stays (warned once)
     void GameEngine::UpdateGroundItems(float elapsedSeconds) {
-        if (!session_.playerId) return;
+        if (!session_->playerId) return;
         const bool alive = IsPlayerAlive();
-        std::erase_if(session_.groundItems, [&](GroundItem& ground) {
+        std::erase_if(session_->groundItems, [&](GroundItem& ground) {
             ground.ageSeconds += elapsedSeconds;
-            if (!alive || Encounter::Distance(ground.position, session_.playerPosition) > PickupRadius) return false;
+            if (!alive || Encounter::Distance(ground.position, session_->playerPosition) > PickupRadius) return false;
 
             const Systems::Rendering::Vector3 at{ ground.position.x, 0.6f, ground.position.y };
             if (ground.IsGold()) {
-                session_.gold += ground.quantity;
-                session_.combatText.Add(std::format("+{} GOLD", ground.quantity), at, { 0.95f, 0.80f, 0.35f, 1.0f }, 2.0f);
+                session_->gold += ground.quantity;
+                session_->combatText.Add(std::format("+{} GOLD", ground.quantity), at, { 0.95f, 0.80f, 0.35f, 1.0f }, 2.0f);
                 return true;
             }
 
             const auto [name, key] = DescribeItem(*content_, ground.item);
             if (GiveItem(key, ground.quantity) == ground.quantity) {
-                session_.combatText.Add(name, at, { 1.0f, 1.0f, 1.0f, 1.0f }, 2.0f);
+                session_->combatText.Add(name, at, { 1.0f, 1.0f, 1.0f, 1.0f }, 2.0f);
                 return true;
             }
             if (!ground.fullWarningShown) {
                 ground.fullWarningShown = true;
-                session_.combatText.Add("BAG FULL", at, { 0.95f, 0.45f, 0.40f, 1.0f }, 2.0f);
+                session_->combatText.Add("BAG FULL", at, { 0.95f, 0.45f, 0.40f, 1.0f }, 2.0f);
             }
             return false;
         });
@@ -255,7 +255,7 @@ namespace LB::Engine {
 
     std::vector<ScreenRow> GameEngine::BuildScreenRows() const {
         std::vector<ScreenRow> rows;
-        const auto playerStatus = session_.playerId ? session_.characterService.GetCharacterStatus(*session_.playerId) : std::nullopt;
+        const auto playerStatus = session_->playerId ? session_->characterService.GetCharacterStatus(*session_->playerId) : std::nullopt;
         const auto* player = PlayerCharacter();
         if (!playerStatus || !player) return rows;
         const auto& status = *playerStatus;
@@ -266,7 +266,7 @@ namespace LB::Engine {
         const auto* classDefinition = content_->FindClass(status.characterClass);
         heading(std::format("{} - level {} {}", status.name, status.level, classDefinition ? classDefinition->name : std::string{}));
         info(std::format("Experience {} / {}", status.currentExperience, status.experienceToNextLevel),
-             std::format("HP {}/{}   Gold {}", status.currentHitPoints, status.maxHitPoints, session_.gold));
+             std::format("HP {}/{}   Gold {}", status.currentHitPoints, status.maxHitPoints, session_->gold));
 
         // Attributes: with points to spend, each one below its cap can be raised
         const auto points = character.GetUnspentAttributePoints();
@@ -284,10 +284,10 @@ namespace LB::Engine {
 
         // Equipment: the weapon, then each armour slot
         heading("Equipped");
-        if (session_.playerWeapon) {
-            info(std::format("Main hand: {}", session_.playerWeapon->name), std::format("{} +{}", DiceText(session_.playerWeapon->damageDice), GetPlayerAttackProfile().damageBonus));
+        if (session_->playerWeapon) {
+            info(std::format("Main hand: {}", session_->playerWeapon->name), std::format("{} +{}", DiceText(session_->playerWeapon->damageDice), GetPlayerAttackProfile().damageBonus));
         }
-        for (const auto& worn : session_.characterService.GetEquippedArmor(*session_.playerId)) {
+        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
             const auto* armor = content_->FindArmor(worn.armorId);
             if (!armor) continue;
             ScreenRow row{ std::format("{}: {}", SlotName(worn.slot), armor->name), std::format("AR {}", armor->physicalAR + armor->armorBonus) };
@@ -331,41 +331,41 @@ namespace LB::Engine {
     // Open/close, move the cursor, and act on the chosen row
     void GameEngine::UpdateCharacterScreen() {
         const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
-        if (!session_.playerId) return;
+        if (!session_->playerId) return;
 
-        if (!session_.characterScreen.IsOpen()) {
+        if (!session_->characterScreen.IsOpen()) {
             if (triggered(CharacterScreenAction)) {
-                session_.characterScreen.Open();
-                session_.characterScreen.SetRows(BuildScreenRows());
+                session_->characterScreen.Open();
+                session_->characterScreen.SetRows(BuildScreenRows());
             }
             return;
         }
 
         if (triggered(CharacterScreenAction) || triggered(MenuBackAction)) {
-            session_.characterScreen.Close();
+            session_->characterScreen.Close();
             return;
         }
 
-        session_.characterScreen.SetRows(BuildScreenRows());
-        if (triggered(MenuUpAction)) session_.characterScreen.Step(-1);
-        if (triggered(MenuDownAction)) session_.characterScreen.Step(+1);
+        session_->characterScreen.SetRows(BuildScreenRows());
+        if (triggered(MenuUpAction)) session_->characterScreen.Step(-1);
+        if (triggered(MenuDownAction)) session_->characterScreen.Step(+1);
         if (!triggered(MenuConfirmAction)) return;
 
-        const auto* row = session_.characterScreen.Selected();
+        const auto* row = session_->characterScreen.Selected();
         if (!row || !row->enabled) return;
         const auto key = DescribeItem(*content_, row->item).second;
         switch (row->action) {
-        case ScreenAction::SpendPoint: session_.characterService.SpendAttributePoint(*session_.playerId, row->attribute); break;
+        case ScreenAction::SpendPoint: session_->characterService.SpendAttributePoint(*session_->playerId, row->attribute); break;
         case ScreenAction::Equip: EquipItem(key); break;
         case ScreenAction::Use: UseItem(key); break;
         case ScreenAction::Unequip: UnequipArmorSlot(row->slot); break;
         case ScreenAction::None: break;
         }
-        session_.characterScreen.SetRows(BuildScreenRows());
+        session_->characterScreen.SetRows(BuildScreenRows());
     }
 
     void GameEngine::DrawCharacterScreen() {
-        if (!session_.characterScreen.IsOpen()) return;
+        if (!session_->characterScreen.IsOpen()) return;
 
         std::int32_t width = 0;
         std::int32_t height = 0;
@@ -373,7 +373,7 @@ namespace LB::Engine {
         const std::int32_t panelWidth = std::min(width - 40, 620);
         const std::int32_t left = (width - panelWidth) / 2;
         const std::int32_t top = 30;
-        const auto& rows = session_.characterScreen.GetRows();
+        const auto& rows = session_->characterScreen.GetRows();
         constexpr std::int32_t lineHeight = 22;
         const std::int32_t panelHeight = std::min(height - 60, static_cast<std::int32_t>(rows.size()) * lineHeight + 60);
         renderingSystem_.DrawRectangle({ left, top, panelWidth, panelHeight }, Display(0.06f, 0.05f, 0.06f, 0.92f), 30);
@@ -386,11 +386,11 @@ namespace LB::Engine {
 
         // Keep the cursor's row in view when the list is taller than the panel
         const auto visible = static_cast<std::size_t>(std::max(1, (panelHeight - 60) / lineHeight));
-        const auto first = session_.characterScreen.GetCursor() >= visible ? session_.characterScreen.GetCursor() - visible + 1 : 0;
+        const auto first = session_->characterScreen.GetCursor() >= visible ? session_->characterScreen.GetCursor() - visible + 1 : 0;
         for (std::size_t i = first; i < rows.size() && i < first + visible; ++i) {
             const auto& row = rows[i];
             const std::int32_t y = top + 50 + static_cast<std::int32_t>(i - first) * lineHeight;
-            const bool selected = i == session_.characterScreen.GetCursor() && row.IsSelectable();
+            const bool selected = i == session_->characterScreen.GetCursor() && row.IsSelectable();
             if (selected) {
                 renderingSystem_.DrawRectangle({ left + 8, y - 4, panelWidth - 16, lineHeight }, Display(0.30f, 0.22f, 0.10f, 0.9f), 31);
             }
@@ -430,14 +430,14 @@ namespace LB::Engine {
 
     // The model of the equipped weapon's category, held in the knight's hand
     Systems::Rendering::ModelId GameEngine::HeldWeaponModel() const {
-        if (!session_.playerWeapon) return assets_.models.playerWeapon;
-        const auto model = ItemModel(GroundItem{ 0, { ItemKind::Weapon, session_.playerWeapon->id } });
+        if (!session_->playerWeapon) return assets_.models.playerWeapon;
+        const auto model = ItemModel(GroundItem{ 0, { ItemKind::Weapon, session_->playerWeapon->id } });
         return model == assets_.characterModels.at("lootSackA.glb") ? assets_.models.playerWeapon : model;
     }
 
     // Loot lies on the floor turning slowly, weapons laid flat, so it catches the eye
     void GameEngine::DrawGroundItems(const Color& tint) {
-        for (const auto& item : session_.groundItems) {
+        for (const auto& item : session_->groundItems) {
             const float spin = item.ageSeconds * 1.2f;
             if (!assets_.models.loaded) {
                 Systems::Rendering::MeshRenderData mesh{};
@@ -473,11 +473,11 @@ namespace LB::Engine {
         data["player.experience"] = std::format("{}", character.GetExperience());
         data["player.attributes"] = std::format("{};{};{};{};{};{}", a.strength, a.dexterity, a.constitution, a.intelligence, a.wisdom, a.charisma);
         data["player.points"] = std::format("{}", character.GetUnspentAttributePoints());
-        data["player.gold"] = std::format("{}", session_.gold);
-        data["player.weapon"] = session_.playerWeapon ? session_.playerWeapon->key : std::string{};
+        data["player.gold"] = std::format("{}", session_->gold);
+        data["player.weapon"] = session_->playerWeapon ? session_->playerWeapon->key : std::string{};
 
         std::string armour;
-        for (const auto& worn : session_.characterService.GetEquippedArmor(*session_.playerId)) {
+        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
             if (const auto* piece = content_->FindArmor(worn.armorId)) armour += piece->key + ";";
         }
         data["player.armour"] = armour;
@@ -509,20 +509,20 @@ namespace LB::Engine {
         for (std::size_t i = 0; i < attributes.size(); ++i) {
             if (!ParseInt(values[i], attributes[i])) return;
         }
-        if (!session_.characterService.RestoreProgress(*session_.playerId, level, experience,
+        if (!session_->characterService.RestoreProgress(*session_->playerId, level, experience,
                 LB::Attributes{ attributes[0], attributes[1], attributes[2], attributes[3], attributes[4], attributes[5] }, points)) {
             return;
         }
 
-        if (const auto* text = field("player.gold"); text && ParseInt(*text, gold)) session_.gold = std::max(0, gold);
-        if (const auto* text = field("player.weapon"); text && content_->FindWeapon(*text)) session_.playerWeapon = content_->FindWeapon(*text);
+        if (const auto* text = field("player.gold"); text && ParseInt(*text, gold)) session_->gold = std::max(0, gold);
+        if (const auto* text = field("player.weapon"); text && content_->FindWeapon(*text)) session_->playerWeapon = content_->FindWeapon(*text);
 
-        for (const auto& worn : session_.characterService.GetEquippedArmor(*session_.playerId)) session_.characterService.UnequipArmor(*session_.playerId, worn.slot);
+        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) session_->characterService.UnequipArmor(*session_->playerId, worn.slot);
         if (const auto* text = field("player.armour")) {
             for (const auto& key : Split(*text, ';')) EquipPlayerArmor(key);
         }
 
-        session_.inventoryService.ClearInventory(*session_.playerId);
+        session_->inventoryService.ClearInventory(*session_->playerId);
         if (const auto* text = field("player.bag")) {
             for (const auto& entry : Split(*text, ';')) {
                 const auto colon = entry.rfind(':');

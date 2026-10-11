@@ -37,14 +37,14 @@ namespace LB::Engine {
 
         // Placeholder pause feedback until there is a pause menu: dim the whole frame.
         // Colors are picked as display (sRGB) values and handed to the renderer as linear.
-        const float dim = session_.paused || session_.characterScreen.IsOpen() ? 0.4f : 1.0f;
+        const float dim = session_->paused || session_->characterScreen.IsOpen() ? 0.4f : 1.0f;
         const Shade shade{ dim };
 
         // Dim ambient background (design-technical-directx12.md 2.2), then the 3D world
         renderingSystem_.Clear(shade(0.05f, 0.05f, 0.07f));
         // Dungeon floors are dark: the torches light them
         Systems::Rendering::SceneLighting lighting{};
-        if (session_.dungeonMode) {
+        if (session_->dungeonMode) {
             lighting.directional = DungeonDirectionalLight * dim;
             lighting.ambient = { 0.02f * dim, 0.018f * dim, 0.025f * dim, 1.0f };
         }
@@ -52,15 +52,15 @@ namespace LB::Engine {
             lighting.directional = dim;
         }
         renderingSystem_.SetLighting(lighting);
-        renderingSystem_.SetCamera(session_.camera.GetView());
+        renderingSystem_.SetCamera(session_->camera.GetView());
         DrawArena(shade);
         DrawPlayer(shade);
         DrawEnemies(shade);
         DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
         DrawFloorProps(shade(1.0f, 1.0f, 1.0f));
-        session_.torches.Draw(renderingSystem_, session_.walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
+        session_->torches.Draw(renderingSystem_, session_->walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
                               ModelScale, shade(1.0f, 1.0f, 1.0f), timer_.GetTotalSeconds());
-        session_.effects.Draw(renderingSystem_, shade(1.0f, 1.0f, 1.0f));
+        session_->effects.Draw(renderingSystem_, shade(1.0f, 1.0f, 1.0f));
         DrawHud();
         DrawMinimap();
         DrawCharacterScreen();
@@ -97,8 +97,8 @@ namespace LB::Engine {
 
         // Every tile of a floor cell is a flagstone; every solid tile touching one is a wall block
         constexpr float FloorThickness = 0.2f;
-        const auto& layout = session_.world.Layout();
-        const auto origin = session_.world.Origin();
+        const auto& layout = session_->world.Layout();
+        const auto origin = session_->world.Origin();
         const auto tiles = static_cast<std::int32_t>(WorldMap::CellTiles);
         const auto isFloorTile = [&](std::int32_t tx, std::int32_t ty) {
             return layout.IsFloor(static_cast<std::int32_t>(std::floor(static_cast<float>(tx) / WorldMap::CellTiles)),
@@ -148,11 +148,11 @@ namespace LB::Engine {
             return renderingSystem_.GetModel(model)->boundsMax.y * ModelScale;
         };
 
-        const auto& layout = session_.world.Layout();
+        const auto& layout = session_->world.Layout();
         for (std::int32_t cy = 0; cy < layout.height; ++cy) {
             for (std::int32_t cx = 0; cx < layout.width; ++cx) {
                 if (!layout.IsFloor(cx, cy)) continue;
-                const auto corner = session_.world.CellCorner(cx, cy);
+                const auto corner = session_->world.CellCorner(cx, cy);
                 for (std::int32_t dy = 0; dy < static_cast<std::int32_t>(WorldMap::CellTiles); ++dy) {
                     for (std::int32_t dx = 0; dx < static_cast<std::int32_t>(WorldMap::CellTiles); ++dx) {
                         const auto tx = static_cast<std::int32_t>(std::floor(corner.x)) + dx;
@@ -166,7 +166,7 @@ namespace LB::Engine {
             }
         }
 
-        session_.walls.Draw(renderingSystem_, tint, ModelScale);
+        session_->walls.Draw(renderingSystem_, tint, ModelScale);
     }
 
     // The sword arm's pose at the shoulder during a swing: a horizontal slash that reads from
@@ -174,12 +174,12 @@ namespace LB::Engine {
     // knight's right (around Y), sweeps across the front through the impact, then settles.
     Systems::Rendering::Matrix4 GameEngine::SwordArmPose() const noexcept {
         using Systems::Rendering::Matrix4;
-        if (!session_.playerCombat.swinging) return {};
+        if (!session_->playerCombat.swinging) return {};
 
         constexpr float lifted = -1.0f;
         constexpr float windUp = -1.1f;     // toward the knight's right
         constexpr float followThrough = 1.0f;
-        const float phase = session_.playerCombat.swingSeconds / PlayerAttackSeconds();
+        const float phase = session_->playerCombat.swingSeconds / PlayerAttackSeconds();
         const float impact = Encounter::AttackImpactFraction;
         const float windUpEnd = impact * 0.65f;
 
@@ -210,7 +210,7 @@ namespace LB::Engine {
 
     // Placeholder hero: a body, a head, and a visor showing where they face (or the knight model)
     void GameEngine::DrawPlayer(const Shade& shade) {
-        if (!session_.playerId) return;
+        if (!session_->playerId) return;
 
         if (assets_.models.loaded) {
             // Feet on the floor, facing the walk direction (glTF characters face +Z)
@@ -218,11 +218,11 @@ namespace LB::Engine {
             const auto* knight = renderingSystem_.GetModel(assets_.models.player);
             const float feet = -knight->boundsMin.y * ModelScale;
             Systems::Rendering::ModelRenderData body{
-                assets_.models.player, { session_.playerPosition.x, feet, session_.playerPosition.y }, session_.playerFacingYaw, ModelScale, HitTint(shade, session_.playerCombat.hitFlashSeconds) };
+                assets_.models.player, { session_->playerPosition.x, feet, session_->playerPosition.y }, session_->playerFacingYaw, ModelScale, HitTint(shade, session_->playerCombat.hitFlashSeconds) };
 
             // Down: tip over backwards around the feet, lifted so the back rests on the floor
             if (!IsPlayerAlive()) {
-                const float fall = SmoothStep(0.0f, 0.6f, session_.playerCombat.deadSeconds);
+                const float fall = SmoothStep(0.0f, 0.6f, session_->playerCombat.deadSeconds);
                 body.transform = Matrix4::RotationX(-1.5f * fall) * Matrix4::Translation({ 0.0f, 0.35f * fall, 0.0f });
             }
 
@@ -247,10 +247,10 @@ namespace LB::Engine {
 
         constexpr float BodyHeight = 1.1f;
         constexpr float HeadSize = 0.42f;
-        const float x = session_.playerPosition.x;
-        const float z = session_.playerPosition.y;
-        const float forwardX = std::sin(session_.playerFacingYaw);
-        const float forwardZ = std::cos(session_.playerFacingYaw);
+        const float x = session_->playerPosition.x;
+        const float z = session_->playerPosition.y;
+        const float forwardX = std::sin(session_->playerFacingYaw);
+        const float forwardZ = std::cos(session_->playerFacingYaw);
 
         MeshRenderData body{};
         body.shape = MeshShape::Cylinder;
@@ -270,7 +270,7 @@ namespace LB::Engine {
         visor.shape = MeshShape::Box;
         visor.position = { x + forwardX * HeadSize * 0.45f, BodyHeight + HeadSize * 0.5f, z + forwardZ * HeadSize * 0.45f };
         visor.size = { HeadSize * 0.7f, HeadSize * 0.2f, HeadSize * 0.2f };
-        visor.yawRadians = session_.playerFacingYaw;
+        visor.yawRadians = session_->playerFacingYaw;
         visor.color = shade(0.15f, 0.15f, 0.20f);
         renderingSystem_.DrawMesh(visor);
     }
@@ -281,7 +281,7 @@ namespace LB::Engine {
     /// </summary>
     void GameEngine::DrawEnemies(const Shade& shade) {
 
-        for (const auto& enemy : session_.encounter.GetEnemies()) {
+        for (const auto& enemy : session_->encounter.GetEnemies()) {
             const auto& type = *enemy.definition;
             auto tint = HitTint(shade, enemy.hitFlashSeconds);
             tint.a = Encounter::Opacity(enemy);
@@ -331,33 +331,33 @@ namespace LB::Engine {
     // floating combat texts
     void GameEngine::DrawHud() {
         HudModel hud;
-        if (session_.playerId) {
-            if (const auto status = session_.characterService.GetCharacterStatus(*session_.playerId)) {
+        if (session_->playerId) {
+            if (const auto status = session_->characterService.GetCharacterStatus(*session_->playerId)) {
                 HudModel::Player player;
                 player.hitPoints = status->currentHitPoints;
                 player.maxHitPoints = status->maxHitPoints;
                 player.healthFraction = static_cast<float>(status->healthPercentage());
                 player.level = status->level;
-                const float previous = static_cast<float>(session_.characterService.GetExperienceForLevel(status->level));
+                const float previous = static_cast<float>(session_->characterService.GetExperienceForLevel(status->level));
                 const float next = static_cast<float>(status->experienceToNextLevel);
                 player.experienceFraction = next > previous ? (static_cast<float>(status->currentExperience) - previous) / (next - previous) : 1.0f;
-                player.gold = session_.gold;
+                player.gold = session_->gold;
                 player.potions = CountItem(HealingPotion);
-                const auto character = session_.characterService.GetCharacter(*session_.playerId);
+                const auto character = session_->characterService.GetCharacter(*session_->playerId);
                 player.pointsToSpend = character && character->get().GetUnspentAttributePoints() > 0;
                 hud.player = player;
             }
         }
-        for (const auto& enemy : session_.encounter.GetEnemies()) {
+        for (const auto& enemy : session_->encounter.GetEnemies()) {
             if (!enemy.IsTargetable() || enemy.hitPoints >= enemy.maxHitPoints) continue;
             hud.enemyBars.push_back({ { enemy.position.x, EnemyTop(enemy), enemy.position.y },
                                       static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints) });
         }
-        if (session_.depth > 0) hud.banner = std::format("DEPTH {}", session_.depth);
-        else if (session_.encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_.encounter.GetWave());
+        if (session_->depth > 0) hud.banner = std::format("DEPTH {}", session_->depth);
+        else if (session_->encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_->encounter.GetWave());
 
         Hud::Draw(renderingSystem_, hud);
-        session_.combatText.Draw(renderingSystem_);
+        session_->combatText.Draw(renderingSystem_);
     }
 
 } // namespace LB::Engine

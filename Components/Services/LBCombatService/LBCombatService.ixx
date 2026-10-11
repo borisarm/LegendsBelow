@@ -145,7 +145,7 @@ export namespace LB::Services::Combat {
             std::int32_t attackBonus,
             std::int32_t targetArmorClass,
             bool advantage = false,
-            bool disadvantage = false) const {
+            bool disadvantage = false) {
 
             AttackRollResult result{};
             result.attackBonus = attackBonus;
@@ -179,7 +179,7 @@ export namespace LB::Services::Combat {
         /// <summary>
         /// Roll dice: count x d(sides) + bonus
         /// </summary>
-        std::int32_t RollDice(const LB::Dice& dice) const {
+        std::int32_t RollDice(const LB::Dice& dice) {
             std::uniform_int_distribution<std::int32_t> die(1, std::max(1, dice.sides));
             std::int32_t total = dice.bonus;
             for (std::int32_t i = 0; i < dice.count; ++i) {
@@ -214,7 +214,7 @@ export namespace LB::Services::Combat {
         /// (natural 1 always misses, natural 20 always hits), crits on a hit within the crit
         /// range multiply the damage roll, then the target's defenses apply.
         /// </summary>
-        WeaponAttackResult ResolveWeaponAttack(const WeaponAttackProfile& attack, const DefenseProfile& target) const {
+        WeaponAttackResult ResolveWeaponAttack(const WeaponAttackProfile& attack, const DefenseProfile& target) {
             WeaponAttackResult result{};
             result.naturalRoll = rollD20();
             result.totalRoll = result.naturalRoll + attack.attackBonus;
@@ -347,7 +347,7 @@ export namespace LB::Services::Combat {
         /// </summary>
         bool SpellAttackHits(
             std::int32_t spellAttackBonus,
-            std::int32_t targetArmorClass) const {
+            std::int32_t targetArmorClass) {
 
             std::int32_t roll = rollD20();
             return (roll + spellAttackBonus) >= targetArmorClass;
@@ -360,7 +360,7 @@ export namespace LB::Services::Combat {
         bool MakesSavingThrow(
             std::int32_t saveDC,
             std::int32_t saveBonus,
-            bool advantage = false) const {
+            bool advantage = false) {
 
             std::int32_t roll = rollD20(advantage, false);
             return (roll + saveBonus) >= saveDC;
@@ -500,7 +500,7 @@ export namespace LB::Services::Combat {
         /// <summary>
         /// Roll a d20 with optional advantage or disadvantage
         /// </summary>
-        std::int32_t rollD20(bool advantage = false, bool disadvantage = false) const {
+        std::int32_t rollD20(bool advantage = false, bool disadvantage = false) {
             auto& gen = rng_;
             std::uniform_int_distribution<std::int32_t> dist(1, 20);
 
@@ -520,7 +520,7 @@ export namespace LB::Services::Combat {
 
         // Dice state; mutable so rolls stay available from const queries.
         // One instance must not be used from several threads at once.
-        mutable std::mt19937 rng_;
+        std::mt19937 rng_;   // rolling dice changes it: the methods that roll are not const
     };
 
 } // namespace LB::Services::Combat

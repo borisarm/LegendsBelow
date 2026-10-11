@@ -1,141 +1,35 @@
-// Encounter.ixx - Enemies in the arena: waves, Tier 1 AI, and melee combat with the player
+// Encounter.ixx - The enemies of a floor: spawning them, running their behavior each step, the
+// test arena's waves, and resolving attacks both ways with CombatService
 export module LB.Engine:Encounter;
 
 import std;
-import LB.Core;
-import LB.Combat;
 import LB.Content;
 import LB.CombatService;
-import LB.RenderingSystem;
-import :Animator;
 import :World;
+import :Enemies;
+import :EnemyBehavior;
+import :Waves;
 
 export namespace LB::Engine {
 
     /// <summary>
-    /// What an enemy is doing (design-combat-system.md 9.1, Tier 1: move to the target and attack)
-    /// </summary>
-    enum class EnemyState {
-        Spawning,    // rising from the ground; cannot act or be hit
-        Idle,        // has not noticed the player (or the player is down)
-        Chasing,     // closing in, or waiting in reach for the next attack
-        Attacking,   // winding up and swinging; the hit lands part way through
-        Staggered,   // reeling from a hit (not while attacking)
-        Dead         // corpse, removed after a while
-    };
-
-    /// <summary>
-    /// A clip and its length
-    /// </summary>
-    struct ClipInfo {
-        Systems::Rendering::AnimationId id{};
-        float seconds{1.0f};
-    };
-
-    /// <summary>
-    /// Animation clips enemies play (KayKit Rig_Medium), with their lengths so playback can be
-    /// fitted to gameplay timings. All invalid when no animations are loaded (headless).
-    /// </summary>
-    struct EnemyClips {
-        Systems::Rendering::AnimationId idle{};
-        Systems::Rendering::AnimationId walk{};
-        Systems::Rendering::AnimationId attack{};
-        Systems::Rendering::AnimationId hit{};
-        Systems::Rendering::AnimationId death{};
-        Systems::Rendering::AnimationId spawn{};
-        float walkSeconds{1.0f};
-        float attackSeconds{1.0f};
-        float hitSeconds{1.0f};
-        float spawnSeconds{1.0f};
-        // Attack clips named by enemy types (EnemyDefinition::attackAnimation), by enemy key;
-        // types without one use `attack`
-        std::map<std::string, ClipInfo, std::less<>> attacks;
-    };
-
-    /// <summary>
-    /// One enemy in the arena. Stats come from its EnemyDefinition (enemies.json).
-    /// </summary>
-    struct Enemy {
-        std::uint32_t id{0};
-        const Content::EnemyDefinition* definition{nullptr};
-        WorldPoint position{};
-        float facingYaw{0.0f};              // radians around the vertical axis; 0 faces +Z
-        EnemyState state{EnemyState::Spawning};
-        float stateSeconds{0.0f};           // time spent in the current state
-        std::int32_t hitPoints{1};
-        std::int32_t maxHitPoints{1};       // the type's hit points scaled for the wave
-        std::int32_t bonusDamage{0};        // added to the type's damage for the wave
-        std::int32_t experience{0};         // awarded for the kill, scaled for the wave
-        bool impactDone{false};             // the current attack's hit has been resolved
-        float recoverySeconds{0.0f};        // until the next attack may start
-        float hitFlashSeconds{0.0f};        // > 0 right after being hit
-        Animator animator;
-
-        [[nodiscard]] bool IsDead() const noexcept { return state == EnemyState::Dead; }
-
-        // Can be attacked: on its feet and done spawning
-        [[nodiscard]] bool IsTargetable() const noexcept {
-            return state != EnemyState::Dead && state != EnemyState::Spawning;
-        }
-    };
-
-    /// <summary>
-    /// Who attacked whom in a combat event
-    /// </summary>
-    enum class CombatEventKind {
-        PlayerAttack,   // the player struck at an enemy
-        EnemyAttack     // an enemy struck at the player
-    };
-
-    /// <summary>
-    /// A resolved attack: the roll, the damage after defenses, and whether it killed the enemy
-    /// (player attacks). Enemy attacks are applied to the player by the engine.
-    /// </summary>
-    struct CombatEvent {
-        CombatEventKind kind{CombatEventKind::PlayerAttack};
-        std::uint32_t enemyId{0};
-        Services::Combat::WeaponAttackResult result{};
-        bool killed{false};
-    };
-
-    /// <summary>
-    /// The player as enemies see it during a step
-    /// </summary>
-    struct PlayerTarget {
-        WorldPoint position{};
-        bool alive{true};
-        Services::Combat::DefenseProfile defense{};
-    };
-
-    /// <summary>
     /// The enemies of a floor: spawns them (waves of a light and a heavy type in the test arena,
-    /// groups in dungeon rooms), runs their AI (notice the player in sight, close in around walls
-    /// along a flow field, attack on a timer, reel from hits, die), and resolves attacks both ways
-    /// with CombatService. Rendering-independent: animation clips are optional.
+    /// groups in dungeon rooms), runs their behavior (EnemyBehavior) each step, and resolves attacks
+    /// both ways with CombatService. Rendering-independent: animation clips are optional.
     /// </summary>
     class Encounter {
     public:
-        // Bodies keep this far apart (tiles, center to edge)
-        static constexpr float CharacterRadius = 0.3f;
-        // The player's hit lands this far through the attack time (wind-up, then swing); enemies
-        // use their type's attackImpactFraction, matched to their attack animation
-        static constexpr float AttackImpactFraction = 0.45f;
-        // A target may step this much past reach during the wind-up and still be hit
-        static constexpr float AttackReachSlack = 0.35f;
-        // Enemies only start an attack when the player is within this cone (cosine: 60 degrees)
-        static constexpr float AttackConeCosine = 0.5f;
-        static constexpr float TurnRateRadiansPerSecond = 10.0f;
-        static constexpr float SpawnSeconds = 1.3f;
-        static constexpr float StaggerSeconds = 0.45f;
-        static constexpr float HitFlashSeconds = 0.2f;
-        static constexpr float CorpseSeconds = 5.0f;        // after dying, then removed
-        static constexpr float CorpseFadeSeconds = 1.0f;    // last part of CorpseSeconds
-        static constexpr float WaveDelaySeconds = 3.0f;     // between clearing a wave and the next
-        static constexpr float MinimumSpawnDistance = 5.0f; // from the player
-        // Pushing bodies apart is repeated so crowds settle within a step
-        static constexpr int SeparationPasses = 4;
-        // Walk cycles are authored for this ground speed (tiles per second)
-        static constexpr float WalkAnimationSpeed = 2.0f;
+        // The enemies' rules, as the rest of the engine knows them (EnemyBehavior, Waves)
+        static constexpr float CharacterRadius = EnemyBehavior::CharacterRadius;
+        static constexpr float AttackImpactFraction = EnemyBehavior::AttackImpactFraction;
+        static constexpr float AttackReachSlack = EnemyBehavior::AttackReachSlack;
+        static constexpr float SpawnSeconds = EnemyBehavior::SpawnSeconds;
+        static constexpr float HitFlashSeconds = EnemyBehavior::HitFlashSeconds;
+        static constexpr float CorpseSeconds = EnemyBehavior::CorpseSeconds;
+        static constexpr float CorpseFadeSeconds = EnemyBehavior::CorpseFadeSeconds;
+        static constexpr float WaveDelaySeconds = Waves::DelaySeconds;
+        static constexpr float MinimumSpawnDistance = Waves::MinimumSpawnDistance;
+        using WaveScaling = Waves::Scaling;
 
         /// <summary>
         /// Encounter with nondeterministic dice and spawn points
@@ -155,10 +49,11 @@ export namespace LB::Engine {
             light_ = light;
             heavy_ = heavy;
             world_ = &world;
+            behavior_.SetWorld(&world);
         }
 
         void SetClips(const EnemyClips& clips) {
-            clips_ = clips;
+            behavior_.SetClips(clips);
         }
 
         /// <summary>
@@ -170,29 +65,9 @@ export namespace LB::Engine {
             waveTimerSeconds_ = 0.0f;
         }
 
-        /// <summary>
-        /// How much tougher a wave's enemies are (design-combat-system.md 8.1, the wave standing in
-        /// for depth): +15% hit points and +10% experience per wave, +1 damage every second wave
-        /// </summary>
-        struct WaveScaling {
-            float hitPoints{1.0f};
-            std::int32_t damage{0};
-            float experience{1.0f};
-        };
+        [[nodiscard]] static WaveScaling ScalingFor(std::int32_t wave) noexcept { return Waves::ScalingFor(wave); }
 
-        static WaveScaling ScalingFor(std::int32_t wave) noexcept {
-            const std::int32_t depth = std::max(0, wave - 1);
-            return { 1.0f + 0.15f * static_cast<float>(depth), depth / 2, 1.0f + 0.1f * static_cast<float>(depth) };
-        }
-
-        /// <summary>
-        /// Enemies in a wave: light ones grow from 2 to 4, heavy ones from 0 to 2
-        /// (placeholder composition until dungeon rooms define their encounters)
-        /// </summary>
-        static std::pair<std::int32_t, std::int32_t> WaveComposition(std::int32_t wave) noexcept {
-            const std::int32_t n = std::max(1, wave);
-            return { std::min(2 + (n - 1) / 2, 4), std::min(n / 2, 2) };
-        }
+        [[nodiscard]] static std::pair<std::int32_t, std::int32_t> WaveComposition(std::int32_t wave) noexcept { return Waves::Composition(wave); }
 
         /// <summary>
         /// Start a wave: its enemies rise at random spots at least MinimumSpawnDistance from the player
@@ -203,10 +78,10 @@ export namespace LB::Engine {
             if (!light_) return;
 
             const auto spawnFacingPlayer = [&](const Content::EnemyDefinition& type) {
-                const auto at = FindSpawnPoint(player);
+                const auto at = Waves::WaveSpawnPoint(world_, player, enemies_, rng_);
                 Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, wave);
             };
-            const auto [lightCount, heavyCount] = WaveComposition(wave);
+            const auto [lightCount, heavyCount] = Waves::Composition(wave);
             for (std::int32_t i = 0; i < heavyCount; ++i) spawnFacingPlayer(heavy_ ? *heavy_ : *light_);
             for (std::int32_t i = 0; i < lightCount; ++i) spawnFacingPlayer(*light_);
         }
@@ -216,7 +91,7 @@ export namespace LB::Engine {
         /// spawn animation) it is ready at once (tests, scripted placements).
         /// </summary>
         std::uint32_t Spawn(const Content::EnemyDefinition& type, WorldPoint at, float facingYaw, bool rise = true, std::int32_t wave = 1) {
-            const auto scaling = ScalingFor(wave);
+            const auto scaling = Waves::ScalingFor(wave);
             Enemy enemy;
             enemy.id = nextId_++;
             enemy.definition = &type;
@@ -226,24 +101,26 @@ export namespace LB::Engine {
             enemy.hitPoints = enemy.maxHitPoints;
             enemy.bonusDamage = scaling.damage;
             enemy.experience = static_cast<std::int32_t>(std::lround(static_cast<float>(type.experience) * scaling.experience));
-            Enter(enemy, rise ? EnemyState::Spawning : EnemyState::Idle);
+            behavior_.Enter(enemy, rise ? EnemyState::Spawning : EnemyState::Idle);
             enemies_.push_back(std::move(enemy));
             return enemies_.back().id;
         }
 
         /// <summary>
-        /// One simulation step: AI and movement for every enemy, attacks against the player, corpse
-        /// clean-up, and the next wave once one is cleared. Returns the enemy attacks resolved this
-        /// step (the engine applies their damage to the player).
+        /// One simulation step: every enemy acts, the strikes that land on the player are resolved,
+        /// bodies are pushed apart, corpses cleared, and the next wave starts once one is cleared.
+        /// Returns the enemy attacks resolved this step (the engine applies their damage).
         /// </summary>
         std::vector<CombatEvent> Update(float elapsedSeconds, const PlayerTarget& player) {
             std::vector<CombatEvent> events;
-            flowFieldReady_ = false;
+            behavior_.BeginStep();
             for (auto& enemy : enemies_) {
-                UpdateEnemy(enemy, elapsedSeconds, player, events);
+                if (behavior_.Update(enemy, elapsedSeconds, player)) {
+                    events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), player.defense), false });
+                }
             }
-            for (int pass = 0; pass < SeparationPasses; ++pass) {
-                Separate(player);
+            for (int pass = 0; pass < EnemyBehavior::SeparationPasses; ++pass) {
+                behavior_.Separate(enemies_, player);
             }
 
             std::erase_if(enemies_, [](const Enemy& e) { return e.IsDead() && e.stateSeconds >= CorpseSeconds; });
@@ -267,20 +144,7 @@ export namespace LB::Engine {
             std::vector<std::uint32_t> ids;
             if (!world_) return ids;
             for (std::int32_t i = 0; i < count; ++i) {
-                WorldPoint at = world_->RoomCenter(room);
-                float bestScore = -1.0f;
-                for (int attempt = 0; attempt < 24; ++attempt) {
-                    const auto candidate = world_->RandomPointInRoom(room, 1.0f, rng_);
-                    if (!world_->CircleFits(candidate, CharacterRadius)) continue;
-                    float nearest = Distance(candidate, player);
-                    for (const auto& enemy : enemies_) {
-                        if (!enemy.IsDead()) nearest = std::min(nearest, Distance(candidate, enemy.position) * 2.5f);
-                    }
-                    if (nearest > bestScore) {
-                        bestScore = nearest;
-                        at = candidate;
-                    }
-                }
+                const auto at = Waves::RoomSpawnPoint(*world_, room, player, enemies_, CharacterRadius, rng_);
                 ids.push_back(Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, depth));
             }
             return ids;
@@ -323,10 +187,10 @@ export namespace LB::Engine {
                 enemy->hitFlashSeconds = HitFlashSeconds;
                 if (enemy->hitPoints == 0) {
                     event.killed = true;
-                    Enter(*enemy, EnemyState::Dead);
+                    behavior_.Enter(*enemy, EnemyState::Dead);
                 }
                 else if (enemy->state != EnemyState::Attacking) {
-                    Enter(*enemy, EnemyState::Staggered);
+                    behavior_.Enter(*enemy, EnemyState::Staggered);
                 }
             }
             return event;
@@ -354,22 +218,11 @@ export namespace LB::Engine {
         /// <summary>
         /// How visible a corpse still is (1 until it starts fading)
         /// </summary>
-        [[nodiscard]] static float Opacity(const Enemy& enemy) noexcept {
-            if (!enemy.IsDead()) return 1.0f;
-            const float fadeStart = CorpseSeconds - CorpseFadeSeconds;
-            return std::clamp(1.0f - (enemy.stateSeconds - fadeStart) / CorpseFadeSeconds, 0.0f, 1.0f);
-        }
+        [[nodiscard]] static float Opacity(const Enemy& enemy) noexcept { return EnemyBehavior::Opacity(enemy); }
 
-        /// <summary>
-        /// The ground direction a yaw faces
-        /// </summary>
-        [[nodiscard]] static WorldPoint Forward(float yaw) noexcept {
-            return { std::sin(yaw), std::cos(yaw) };
-        }
+        [[nodiscard]] static WorldPoint Forward(float yaw) noexcept { return LB::Engine::Forward(yaw); }
 
-        [[nodiscard]] static float Distance(WorldPoint a, WorldPoint b) noexcept {
-            return std::hypot(b.x - a.x, b.y - a.y);
-        }
+        [[nodiscard]] static float Distance(WorldPoint a, WorldPoint b) noexcept { return LB::Engine::Distance(a, b); }
 
     private:
         Enemy* Find(std::uint32_t id) noexcept {
@@ -382,210 +235,12 @@ export namespace LB::Engine {
             return { type.attackBonus, type.damageDice, type.damageBonus + enemy.bonusDamage, type.damageType, type.critRangeMin, type.critMultiplier };
         }
 
-        // Change state and start the state's animation
-        void Enter(Enemy& enemy, EnemyState state) {
-            enemy.state = state;
-            enemy.stateSeconds = 0.0f;
-
-            const auto& type = *enemy.definition;
-            switch (state) {
-            case EnemyState::Spawning:
-                enemy.animator.Play(clips_.spawn, false, clips_.spawnSeconds / SpawnSeconds, true, 0.0f);
-                break;
-            case EnemyState::Idle:
-                enemy.animator.Play(clips_.idle, true);
-                break;
-            case EnemyState::Chasing:
-                break;   // walking or waiting in reach, decided every step
-            case EnemyState::Attacking: {
-                enemy.impactDone = false;
-                // The whole clip spans the attack time, so its strike meets attackImpactFraction
-                const auto own = clips_.attacks.find(type.key);
-                const ClipInfo clip = own != clips_.attacks.end() ? own->second : ClipInfo{ clips_.attack, clips_.attackSeconds };
-                enemy.animator.Play(clip.id, false, clip.seconds / type.attackTimeSeconds, true, 0.1f);
-                break;
-            }
-            case EnemyState::Staggered:
-                enemy.animator.Play(clips_.hit, false, clips_.hitSeconds / StaggerSeconds, true, 0.05f);
-                break;
-            case EnemyState::Dead:
-                enemy.animator.Play(clips_.death, false, 1.0f, true, 0.1f);
-                break;
-            }
-        }
-
-        void UpdateEnemy(Enemy& enemy, float dt, const PlayerTarget& player, std::vector<CombatEvent>& events) {
-            enemy.stateSeconds += dt;
-            enemy.hitFlashSeconds = std::max(0.0f, enemy.hitFlashSeconds - dt);
-            enemy.animator.Update(dt);
-
-            const auto& type = *enemy.definition;
-            const float dx = player.position.x - enemy.position.x;
-            const float dy = player.position.y - enemy.position.y;
-            const float distance = std::hypot(dx, dy);
-
-            switch (enemy.state) {
-            case EnemyState::Spawning:
-                if (enemy.stateSeconds >= SpawnSeconds) Enter(enemy, EnemyState::Idle);
-                return;
-
-            case EnemyState::Dead:
-                return;
-
-            case EnemyState::Staggered:
-                if (enemy.stateSeconds >= StaggerSeconds) Enter(enemy, EnemyState::Chasing);
-                return;
-
-            case EnemyState::Attacking:
-                TurnToward(enemy, dx, dy, dt);
-                if (!enemy.impactDone && enemy.stateSeconds >= type.attackTimeSeconds * type.attackImpactFraction) {
-                    enemy.impactDone = true;
-                    if (player.alive && distance <= type.attackRange + AttackReachSlack) {
-                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), player.defense), false });
-                    }
-                }
-                if (enemy.stateSeconds >= type.attackTimeSeconds) {
-                    enemy.recoverySeconds = type.attackRecoverySeconds;
-                    Enter(enemy, EnemyState::Chasing);
-                }
-                return;
-
-            case EnemyState::Idle:
-            case EnemyState::Chasing:
-                break;
-            }
-
-            enemy.recoverySeconds = std::max(0.0f, enemy.recoverySeconds - dt);
-            if (!player.alive) {
-                if (enemy.state != EnemyState::Idle) Enter(enemy, EnemyState::Idle);
-                return;
-            }
-            const bool inSight = !world_ || world_->LineOfSight(enemy.position, player.position);
-            if (enemy.state == EnemyState::Idle) {
-                if (distance > type.aggroRange || !inSight) return;
-                Enter(enemy, EnemyState::Chasing);
-            }
-
-            // In reach: face the player and attack when ready
-            if (distance <= type.attackRange) {
-                TurnToward(enemy, dx, dy, dt);
-                const auto forward = Forward(enemy.facingYaw);
-                const bool facing = distance <= 0.0f || (forward.x * dx + forward.y * dy) / distance >= AttackConeCosine;
-                if (enemy.recoverySeconds <= 0.0f && facing) {
-                    Enter(enemy, EnemyState::Attacking);
-                    return;
-                }
-                enemy.animator.Play(clips_.idle, true);
-                return;
-            }
-
-            // Close in: straight at the player when in sight (stopping a little inside reach), else
-            // along the flow field around the walls
-            float tx = dx, ty = dy;
-            float step = std::min(type.movementSpeed * dt, distance - type.attackRange * 0.9f);
-            if (!inSight && world_) {
-                if (!flowFieldReady_) {
-                    world_->BuildFlowField(player.position);
-                    flowFieldReady_ = true;
-                }
-                const auto waypoint = world_->NextWaypoint(enemy.position);
-                if (!waypoint) {
-                    enemy.animator.Play(clips_.idle, true);
-                    return;
-                }
-                tx = waypoint->x - enemy.position.x;
-                ty = waypoint->y - enemy.position.y;
-                step = type.movementSpeed * dt;
-            }
-            const float length = std::max(1e-4f, std::hypot(tx, ty));
-            enemy.position = MoveBody(enemy.position, { tx / length * step, ty / length * step });
-            TurnToward(enemy, tx, ty, dt);
-            enemy.animator.Play(clips_.walk, true, type.movementSpeed / WalkAnimationSpeed);
-        }
-
-        // Turn toward a ground direction, at most TurnRateRadiansPerSecond
-        static void TurnToward(Enemy& enemy, float dx, float dy, float dt) {
-            if (dx == 0.0f && dy == 0.0f) return;
-            constexpr float pi = std::numbers::pi_v<float>;
-            float delta = std::atan2(dx, dy) - enemy.facingYaw;
-            while (delta > pi) delta -= 2.0f * pi;
-            while (delta < -pi) delta += 2.0f * pi;
-            const float maxTurn = TurnRateRadiansPerSecond * dt;
-            enemy.facingYaw += std::clamp(delta, -maxTurn, maxTurn);
-        }
-
-        // Push overlapping enemies apart, and out of the player (the player is never pushed)
-        void Separate(const PlayerTarget& player) {
-            constexpr float minimum = CharacterRadius * 2.0f;
-            for (std::size_t i = 0; i < enemies_.size(); ++i) {
-                auto& a = enemies_[i];
-                if (a.IsDead()) continue;
-                for (std::size_t j = i + 1; j < enemies_.size(); ++j) {
-                    auto& b = enemies_[j];
-                    if (b.IsDead()) continue;
-                    const float dx = b.position.x - a.position.x;
-                    const float dy = b.position.y - a.position.y;
-                    const float distance = std::hypot(dx, dy);
-                    if (distance >= minimum) continue;
-                    // Coincident bodies separate along a fixed axis
-                    const float nx = distance > 1e-4f ? dx / distance : 1.0f;
-                    const float ny = distance > 1e-4f ? dy / distance : 0.0f;
-                    const float push = (minimum - distance) * 0.5f;
-                    a.position = MoveBody(a.position, { -nx * push, -ny * push });
-                    b.position = MoveBody(b.position, { nx * push, ny * push });
-                }
-
-                if (player.alive) {
-                    const float dx = a.position.x - player.position.x;
-                    const float dy = a.position.y - player.position.y;
-                    const float distance = std::hypot(dx, dy);
-                    if (distance < minimum) {
-                        const float nx = distance > 1e-4f ? dx / distance : 1.0f;
-                        const float ny = distance > 1e-4f ? dy / distance : 0.0f;
-                        a.position = MoveBody(a.position, { player.position.x + nx * minimum - a.position.x, player.position.y + ny * minimum - a.position.y });
-                    }
-                }
-            }
-        }
-
-        // A body's move, sliding along the world's walls (unbounded without a world)
-        WorldPoint MoveBody(WorldPoint from, WorldPoint step) const noexcept {
-            if (!world_) return { from.x + step.x, from.y + step.y };
-            return world_->Move(from, step, CharacterRadius);
-        }
-
-        // A random spot in the world's first room away from the player and the other enemies (the
-        // farthest candidate when none qualifies)
-        WorldPoint FindSpawnPoint(WorldPoint player) {
-            if (!world_ || world_->Layout().rooms.empty()) return player;
-
-            WorldPoint best{};
-            float bestScore = -1.0f;
-            for (int attempt = 0; attempt < 32; ++attempt) {
-                const auto candidate = world_->RandomPointInRoom(0, 1.5f, rng_);
-                float nearestEnemy = std::numeric_limits<float>::max();
-                for (const auto& enemy : enemies_) {
-                    if (!enemy.IsDead()) nearestEnemy = std::min(nearestEnemy, Distance(candidate, enemy.position));
-                }
-                const float fromPlayer = Distance(candidate, player);
-                if (fromPlayer >= MinimumSpawnDistance && nearestEnemy >= 1.0f) return candidate;
-
-                const float score = std::min(fromPlayer, nearestEnemy * MinimumSpawnDistance);
-                if (score > bestScore) {
-                    bestScore = score;
-                    best = candidate;
-                }
-            }
-            return best;
-        }
-
         Services::Combat::CombatService combat_;
         std::mt19937 rng_;
+        EnemyBehavior behavior_;
         const Content::EnemyDefinition* light_{nullptr};
         const Content::EnemyDefinition* heavy_{nullptr};
         const WorldMap* world_{nullptr};
-        bool flowFieldReady_{false};
-        EnemyClips clips_{};
         std::vector<Enemy> enemies_;
         std::uint32_t nextId_{1};
         std::int32_t wave_{0};
