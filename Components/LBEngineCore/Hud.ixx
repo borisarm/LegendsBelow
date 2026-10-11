@@ -25,6 +25,7 @@ export namespace LB::Engine {
             std::int32_t mana{0};
             std::int32_t maxMana{0};
             std::vector<std::string> statuses;   // "Slowed", "Burning"
+            std::string ammo;                 // "ARROWS 30" with a bow or crossbow; empty: none
         };
         // One slot of the spell bar
         struct SpellSlot {
@@ -45,6 +46,15 @@ export namespace LB::Engine {
         std::vector<EnemyBar> enemyBars;
         std::string banner;                   // "WAVE 2", "DEPTH 3" (top center); empty: none
         std::vector<SpellSlot> spellBar;      // bottom right; empty: none
+        // A boss in the fight: its name and health across the top
+        struct Boss {
+            std::string name;
+            float fraction{1.0f};
+            bool phaseTwo{false};
+        };
+        std::optional<Boss> boss;
+        std::string hint;                     // the tactical pause's help (bottom center)
+        std::string order;                    // the order in hand (bottom center)
         std::string castName;                 // the spell being cast (a bar under the hero)
         std::optional<float> castFraction;
     };
@@ -97,6 +107,7 @@ export namespace LB::Engine {
                 label(std::format("LEVEL {}", player.level), 24, screenHeight - 70, 2.0f, display(0.95f, 0.75f, 0.30f));
                 label(std::format("GOLD {}", player.gold), 280, screenHeight - 42, 2.0f, display(0.95f, 0.80f, 0.35f));
                 label(std::format("POTIONS {}", player.potions), 280, screenHeight - 22, 2.0f, display(0.95f, 0.45f, 0.40f));
+                if (!player.ammo.empty()) label(player.ammo, 280, screenHeight - 62, 2.0f, display(0.85f, 0.80f, 0.65f));
                 if (player.pointsToSpend) {
                     label("POINTS TO SPEND (I)", 24, screenHeight - 92, 2.0f, display(0.55f, 0.95f, 0.55f));
                 }
@@ -159,6 +170,24 @@ export namespace LB::Engine {
                 bar(x, y, width, 7, *hud.castFraction, display(0.70f, 0.55f, 1.0f));
                 const auto size = renderer.MeasureText(hud.castName, 1.6f);
                 label(hud.castName, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), y + 10, 1.6f, display(0.85f, 0.80f, 1.0f));
+            }
+
+            if (hud.boss) {
+                constexpr std::int32_t width = 360;
+                const std::int32_t x = screenWidth / 2 - width / 2;
+                bar(x, 66, width, 12, hud.boss->fraction, hud.boss->phaseTwo ? display(0.75f, 0.20f, 0.85f) : display(0.80f, 0.14f, 0.12f));
+                const auto name = hud.boss->phaseTwo ? hud.boss->name + " - ENRAGED" : hud.boss->name;
+                const auto size = renderer.MeasureText(name, 2.0f);
+                label(name, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), 44, 2.0f, display(0.95f, 0.75f, 0.30f));
+            }
+
+            if (!hud.hint.empty()) {
+                const auto size = renderer.MeasureText(hud.hint, 1.6f);
+                label(hud.hint, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), screenHeight - 120, 1.6f, display(0.95f, 0.90f, 0.70f));
+            }
+            if (!hud.order.empty()) {
+                const auto size = renderer.MeasureText(hud.order, 1.8f);
+                label(hud.order, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), screenHeight - 100, 1.8f, display(1.0f, 0.55f, 0.40f));
             }
 
             if (!hud.banner.empty()) {

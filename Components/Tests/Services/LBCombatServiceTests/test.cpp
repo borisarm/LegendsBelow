@@ -617,3 +617,22 @@ TEST(WeaponAttackTests, SameSeed_SameResults) {
         EXPECT_EQ(ra.finalDamage, rb.finalDamage);
     }
 }
+
+TEST(WeaponAttackTests, ExtraDice_AddedOnAHit) {
+    CombatService service(7);
+    WeaponAttackProfile attack{};
+    attack.attackBonus = 100;
+    attack.damageDice = LB::Dice{ 1, 1, 0 };
+    attack.damageType = LB::Combat::DamageType::Fire;
+    attack.critMultiplier = 1.0f;   // a natural 20 still crits
+    attack.extraDice = LB::Dice{ 2, 6, 0 };
+    const DefenseProfile target{};
+
+    for (int i = 0; i < 20; ++i) {
+        const auto result = service.ResolveWeaponAttack(attack, target);
+        if (!result.hit) continue;   // a natural 1
+        EXPECT_GE(result.extraDamage, 2);
+        EXPECT_LE(result.extraDamage, 12);
+        EXPECT_EQ(result.rawDamage, 1 + result.extraDamage);
+    }
+}

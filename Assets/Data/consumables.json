@@ -5,5 +5,19 @@
     "healing": "2d4+2",
     "maxStack": 10,
     "model": "potionSmall_red.glb"
+  },
+  {
+    "id": "consumable_ammo_arrow",
+    "name": "Arrows",
+    "maxStack": 99,
+    "model": "arrow_bow_bundle.gltf",
+    "ammoType": "Arrow"
+  },
+  {
+    "id": "consumable_ammo_bolt",
+    "name": "Bolts",
+    "maxStack": 99,
+    "model": "arrow_crossbow_bundle.gltf",
+    "ammoType": "Bolt"
   }
 ]

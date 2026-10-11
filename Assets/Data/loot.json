@@ -36,7 +36,8 @@
       {
         "item": "weapon_bow_worn_shortbow_t1",
         "weight": 1
-      }
+      },
+      { "item": "consumable_ammo_arrow", "weight": 3, "quantity": "2d4" }
     ]
   },
   {
@@ -132,7 +133,9 @@
       {
         "item": "weapon_crossbow_light_crossbow_t1",
         "weight": 1
-      }
+      },
+      { "item": "consumable_ammo_arrow", "weight": 3, "quantity": "3d6" },
+      { "item": "consumable_ammo_bolt", "weight": 2, "quantity": "2d6" }
     ]
   },
   {
@@ -145,7 +148,9 @@
       { "item": "weapon_bow_worn_shortbow_t1", "weight": 3 },
       { "item": "weapon_crossbow_light_crossbow_t1", "weight": 2 },
       { "item": "armor_hands_leather_gloves_t1", "weight": 2 },
-      { "item": "armor_feet_leather_boots_t1", "weight": 2 }
+      { "item": "armor_feet_leather_boots_t1", "weight": 2 },
+      { "item": "consumable_ammo_bolt", "weight": 4, "quantity": "2d4" },
+      { "item": "consumable_ammo_arrow", "weight": 3, "quantity": "2d4" }
     ]
   },
   {
@@ -158,6 +163,31 @@
       { "item": "weapon_wand_apprentices_wand_t1", "weight": 2 },
       { "item": "weapon_staff_apprentices_staff_t1", "weight": 2 },
       { "item": "armor_hands_leather_gloves_t1", "weight": 1 }
+    ]
+  },
+  {
+    "id": "loot_skeleton_golem",
+    "goldChance": 0.9,
+    "gold": "2d6",
+    "itemChance": 0.6,
+    "items": [
+      { "item": "consumable_potion_healing_minor", "weight": 4 },
+      { "item": "armor_chest_chain_shirt_t1", "weight": 2 },
+      { "item": "weapon_mace_iron_mace_t1", "weight": 2 },
+      { "item": "weapon_sword_iron_longsword_t1", "weight": 2 }
+    ]
+  },
+  {
+    "id": "loot_necromancer",
+    "goldChance": 1.0,
+    "gold": "4d10",
+    "itemChance": 1.0,
+    "items": [
+      { "item": "weapon_sword_iron_longsword_t1", "weight": 2 },
+      { "item": "weapon_crossbow_light_crossbow_t1", "weight": 2 },
+      { "item": "weapon_wand_apprentices_wand_t1", "weight": 1 },
+      { "item": "armor_chest_chain_shirt_t1", "weight": 2 },
+      { "item": "consumable_potion_healing_minor", "weight": 1 }
     ]
   }
 ]

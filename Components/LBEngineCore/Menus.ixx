@@ -38,7 +38,9 @@ export namespace LB::Engine {
         MusicVolume,
         EffectsVolume,
         PlayWarrior,    // a new game as this class
-        PlayMage
+        PlayMage,
+        PlayRogue,
+        PlayCleric
     };
 
     /// <summary>

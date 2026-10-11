@@ -1,4 +1,5 @@
-// Loot.ixx - Item references, loot rolls, and items lying on the floor
+// Loot.ixx - Item references, rolled items (rarity and affixes), loot rolls, and items lying on
+// the floor
 export module LB.Engine:Loot;
 
 import std;
@@ -15,7 +16,8 @@ export namespace LB::Engine {
         None = 0,
         Weapon,       // weapons.json
         Armor,        // armour.json
-        Consumable    // consumables.json
+        Consumable,   // consumables.json
+        Rolled        // a weapon or armour piece with a rarity and affixes (ItemRolls: id is its index)
     };
 
     /// <summary>
@@ -34,7 +36,7 @@ export namespace LB::Engine {
 
         [[nodiscard]] static ItemRef Unpack(LB::Id packed) noexcept {
             const auto kind = static_cast<std::uint8_t>(packed >> 24);
-            if (kind < 1 || kind > 3) return {};
+            if (kind < 1 || kind > 4) return {};
             return { static_cast<ItemKind>(kind), packed & 0xFFFFFF };
         }
 
@@ -65,11 +67,107 @@ export namespace LB::Engine {
         case ItemKind::Consumable:
             if (const auto* consumable = content.FindConsumable(item.id)) return { consumable->name, consumable->key };
             break;
+        case ItemKind::Rolled:   // named by ItemRolls
         case ItemKind::None:
             break;
         }
         return {};
     }
+
+    /// <summary>
+    /// What items add while worn or wielded: their affixes (design-loot-and-progression.md 3.2)
+    /// </summary>
+    struct ItemBonuses {
+        std::int32_t damage{0};
+        std::int32_t attackBonus{0};
+        std::int32_t armorClass{0};
+        std::int32_t armor{0};
+        std::int32_t spellPower{0};
+        float manaRegen{0.0f};
+
+        ItemBonuses& operator+=(const Content::AffixDefinition& affix) noexcept {
+            damage += affix.damage;
+            attackBonus += affix.attackBonus;
+            armorClass += affix.armorClass;
+            armor += affix.armor;
+            spellPower += affix.spellPower;
+            manaRegen += affix.manaRegen;
+            return *this;
+        }
+
+        ItemBonuses& operator+=(const ItemBonuses& other) noexcept {
+            damage += other.damage;
+            attackBonus += other.attackBonus;
+            armorClass += other.armorClass;
+            armor += other.armor;
+            spellPower += other.spellPower;
+            manaRegen += other.manaRegen;
+            return *this;
+        }
+    };
+
+    /// <summary>
+    /// A weapon or armour piece dropped with a rarity and affixes (design-loot-and-progression.md 3)
+    /// </summary>
+    struct RolledItem {
+        ItemRef base;                                         // the weapon or armour piece
+        const Content::RarityDefinition* rarity{nullptr};     // into the content, which outlives the run
+        std::vector<const Content::AffixDefinition*> affixes;
+        std::string name;                                     // "Keen Iron Mace of the Bear"
+    };
+
+    /// <summary>
+    /// The run's rolled items: a Rolled ItemRef is an index into them. Rolled items never stack
+    /// (each has its own id).
+    /// </summary>
+    class ItemRolls {
+    public:
+        /// <summary>
+        /// Keep a rolled item (named from its affixes and base) and return its reference
+        /// </summary>
+        ItemRef Add(RolledItem item, const Content::ContentDatabase& content) {
+            if (item.name.empty()) item.name = NameOf(item, content);
+            items_.push_back(std::move(item));
+            return { ItemKind::Rolled, static_cast<Content::ContentId>(items_.size()) };
+        }
+
+        [[nodiscard]] const RolledItem* Find(ItemRef item) const noexcept {
+            if (item.kind != ItemKind::Rolled || item.id == 0 || item.id > items_.size()) return nullptr;
+            return &items_[item.id - 1];
+        }
+
+        /// <summary>
+        /// The weapon or armour piece under a rolled item (anything else is itself)
+        /// </summary>
+        [[nodiscard]] ItemRef BaseOf(ItemRef item) const noexcept {
+            const auto* rolled = Find(item);
+            return rolled ? rolled->base : item;
+        }
+
+        [[nodiscard]] ItemBonuses BonusesOf(ItemRef item) const noexcept {
+            ItemBonuses bonuses;
+            if (const auto* rolled = Find(item)) {
+                for (const auto* affix : rolled->affixes) bonuses += *affix;
+            }
+            return bonuses;
+        }
+
+        // Prefixes before the base name, suffixes after it
+        static std::string NameOf(const RolledItem& item, const Content::ContentDatabase& content) {
+            std::string name;
+            for (const auto* affix : item.affixes) {
+                if (affix->prefix) name += affix->name + " ";
+            }
+            name += DescribeItem(content, item.base).first;
+            for (const auto* affix : item.affixes) {
+                if (!affix->prefix) name += " " + affix->name;
+            }
+            return name;
+        }
+
+    private:
+        std::vector<RolledItem> items_;
+    };
 
     /// <summary>
     /// Something lying on the floor: gold (item invalid) or one item stack
@@ -111,12 +209,52 @@ export namespace LB::Engine {
                     pick -= entry.weight;
                     if (pick > 0) continue;
                     if (const auto item = ItemRef::FromKey(content, entry.item); item.IsValid()) {
-                        drops.push_back(GroundItem{ 0, item, 1 });
+                        drops.push_back(GroundItem{ 0, item, std::max(1, RollDice(entry.quantity)) });
                     }
                     break;
                 }
             }
             return drops;
+        }
+
+        /// <summary>
+        /// The rarity a weapon or armour piece drops at: by the rarities' weights at a depth
+        /// (design-loot-and-progression.md 4.2-4.3); null without rarities
+        /// </summary>
+        const Content::RarityDefinition* RollRarity(const Content::ContentDatabase& content, std::int32_t depth) {
+            float total = 0.0f;
+            for (const auto& rarity : content.GetRarities()) total += rarity.WeightAt(depth);
+            if (total <= 0.0f) return nullptr;
+            float pick = std::uniform_real_distribution<float>(0.0f, total)(rng_);
+            for (const auto& rarity : content.GetRarities()) {
+                pick -= rarity.WeightAt(depth);
+                if (pick <= 0.0f) return &rarity;
+            }
+            return &content.GetRarities().back();
+        }
+
+        /// <summary>
+        /// Up to `count` different affixes for a weapon (or an armour piece): a prefix, then a
+        /// suffix, then whichever kind is left
+        /// </summary>
+        std::vector<const Content::AffixDefinition*> RollAffixes(const Content::ContentDatabase& content, bool weapon, std::int32_t count) {
+            std::vector<const Content::AffixDefinition*> chosen;
+            for (std::int32_t i = 0; i < count; ++i) {
+                const bool wantPrefix = i % 2 == 0;
+                std::vector<const Content::AffixDefinition*> pool;
+                for (const auto& affix : content.GetAffixes()) {
+                    const bool fits = weapon ? affix.onWeapons : affix.onArmour;
+                    if (fits && std::ranges::find(chosen, &affix) == chosen.end()) pool.push_back(&affix);
+                }
+                std::vector<const Content::AffixDefinition*> preferred;
+                for (const auto* affix : pool) {
+                    if (affix->prefix == wantPrefix) preferred.push_back(affix);
+                }
+                const auto& from = preferred.empty() ? pool : preferred;
+                if (from.empty()) break;
+                chosen.push_back(from[std::uniform_int_distribution<std::size_t>(0, from.size() - 1)(rng_)]);
+            }
+            return chosen;
         }
 
         /// <summary>

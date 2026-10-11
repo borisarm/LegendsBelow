@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
-    EXPECT_EQ(content_.GetSpells().size(), 45u);
+    EXPECT_EQ(content_.GetSpells().size(), 47u);   // 45 and the rogue's two abilities
     EXPECT_EQ(content_.GetWeapons().size(), 12u);
     EXPECT_EQ(content_.GetArmour().size(), 15u);
 }
@@ -158,7 +158,7 @@ TEST_F(ShippedContentTests, SpellRepository_OverShippedContent) {
     auto shared = std::make_shared<const ContentDatabase>(content_);
     LB::Repositories::SpellRepository repo = MakeContentSpellRepository(shared);
 
-    EXPECT_EQ(repo->GetAllSpellIds().size(), 45u);
+    EXPECT_EQ(repo->GetAllSpellIds().size(), 47u);
 
     const auto* bolt = content_.FindSpell("spell_evocation_arcane_bolt_l1");
     auto spell = repo->GetSpell(bolt->id);
@@ -310,7 +310,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 8u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses
+    EXPECT_EQ(result.errors.size(), 10u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -625,7 +625,7 @@ namespace {
 }
 
 TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
-    ASSERT_EQ(content_.GetEnemies().size(), 4u);   // and the crossbowman and the mage (RangedWeaponsAndCrossbowmen, Casters)
+    ASSERT_EQ(content_.GetEnemies().size(), 6u);   // and the crossbowman, the mage, the golem, and the boss (below)
 
     const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
     ASSERT_NE(minion, nullptr);
@@ -969,4 +969,82 @@ TEST_F(ShippedContentTests, Mage_HasASpellBarManaRegenAndAKit) {
     EXPECT_TRUE(warrior->spellBar.empty());
     EXPECT_EQ(warrior->startingWeapon, "weapon_sword_rusted_shortsword_t1");
     EXPECT_EQ(content_.GetStatuses().size(), 8u);
+}
+
+TEST_F(ShippedContentTests, GolemAndNecromancer) {
+    const auto* golem = content_.FindEnemy("enemy_skeleton_golem");
+    ASSERT_NE(golem, nullptr);
+    EXPECT_EQ(golem->rig, "Large");
+    EXPECT_TRUE(golem->staggerImmune);
+
+    const auto* boss = content_.FindEnemy("enemy_necromancer");
+    ASSERT_NE(boss, nullptr);
+    EXPECT_TRUE(boss->boss);
+    EXPECT_TRUE(boss->IsCaster());
+    EXPECT_EQ(boss->summon, "enemy_skeleton_minion");
+    EXPECT_GT(boss->phaseTwoHealthFraction, 0.0f);
+}
+
+TEST(EnemyValidationTests, BadRigAndUnknownSummon_Rejected) {
+    {
+        ContentDatabase content;
+        EXPECT_FALSE(LoadEnemies(content, Array(EnemyWith("rig", R"("Huge")"))).Succeeded());
+    }
+    {
+        ContentDatabase content;
+        auto result = LoadEnemies(content, Array(EnemyWith("summon", R"("enemy_missing")")));
+        EXPECT_TRUE(AnyErrorContains(result, "unknown summon 'enemy_missing'"));
+    }
+}
+
+// ============================================================================
+// Rarities, Affixes, and Ammunition
+// ============================================================================
+
+TEST_F(ShippedContentTests, Rarities_GrowRarerItemsWithDepth) {
+    ASSERT_EQ(content_.GetRarities().size(), 4u);
+    const auto* common = content_.FindRarity("rarity_common");
+    const auto* rare = content_.FindRarity("rarity_rare");
+    ASSERT_NE(common, nullptr);
+    ASSERT_NE(rare, nullptr);
+    EXPECT_EQ(common->affixes, 0);
+    EXPECT_EQ(rare->affixes, 2);
+    EXPECT_GT(common->WeightAt(1), common->WeightAt(10));   // design-loot-and-progression.md 4.3
+    EXPECT_LT(rare->WeightAt(1), rare->WeightAt(10));
+    EXPECT_NEAR(common->WeightAt(10), 43.0f, 0.01f);        // the design's late depth: ~40%
+}
+
+TEST_F(ShippedContentTests, Affixes_PrefixesAndSuffixes) {
+    const auto* keen = content_.FindAffix("affix_prefix_keen");
+    ASSERT_NE(keen, nullptr);
+    EXPECT_TRUE(keen->prefix);
+    EXPECT_TRUE(keen->onWeapons);
+    EXPECT_FALSE(keen->onArmour);
+    const auto* bear = content_.FindAffix("affix_suffix_of_the_bear");
+    ASSERT_NE(bear, nullptr);
+    EXPECT_FALSE(bear->prefix);
+}
+
+TEST_F(ShippedContentTests, Ammunition_ForBowsAndCrossbows) {
+    const auto* arrows = content_.FindConsumable("consumable_ammo_arrow");
+    ASSERT_NE(arrows, nullptr);
+    EXPECT_TRUE(arrows->IsAmmunition());
+    EXPECT_EQ(arrows->ammoType, content_.FindWeapon("weapon_bow_worn_shortbow_t1")->ammoType);
+    EXPECT_EQ(content_.FindConsumable("consumable_ammo_bolt")->ammoType, content_.FindWeapon("weapon_crossbow_light_crossbow_t1")->ammoType);
+    const auto* chest = content_.FindLootTable("loot_chest");
+    const auto it = std::ranges::find(chest->items, std::string("consumable_ammo_arrow"), &LootEntry::item);
+    ASSERT_NE(it, chest->items.end());
+    EXPECT_GT(it->quantity.count, 0);   // a handful
+}
+
+TEST(AffixValidationTests, BadAffixesAndRarities_Rejected) {
+    for (const char* affix : { R"({"id":"a","name":"A","type":"Infix","appliesTo":["Weapon"]})",
+                               R"({"id":"a","name":"A","type":"Prefix","appliesTo":[]})",
+                               R"({"id":"a","name":"A","type":"Prefix","appliesTo":["Ring"]})" }) {
+        ContentDatabase content;
+        EXPECT_FALSE(content.LoadFromJson("[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]", Array(affix)).Succeeded()) << affix;
+    }
+    ContentDatabase content;
+    EXPECT_FALSE(content.LoadFromJson("[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]",
+        R"([{"id":"r","name":"R","affixes":5,"color":[1,1,1],"weight":1}])").Succeeded());
 }

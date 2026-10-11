@@ -188,6 +188,28 @@ export namespace LB::Systems::Rendering {
         }
 
         /// <summary>
+        /// The floor point (height 0) under a screen point, the inverse of WorldToScreen; none when
+        /// the ray from the eye does not come down to the floor
+        /// </summary>
+        [[nodiscard]] static std::optional<Vector3> ScreenToFloor(const CameraView& view, float x, float y, float screenWidth, float screenHeight) noexcept {
+            if (screenWidth <= 0.0f || screenHeight <= 0.0f) return std::nullopt;
+            const Vector3 forward = Normalize(Subtract(view.target, view.eye));
+            const Vector3 right = Normalize(Cross(forward, Vector3{ 0.0f, 1.0f, 0.0f }));
+            const Vector3 up = Cross(right, forward);
+            const float tanHalfFov = std::tan(view.verticalFovRadians * 0.5f);
+            const float aspect = screenWidth / screenHeight;
+            const float ndcX = x / screenWidth * 2.0f - 1.0f;
+            const float ndcY = 1.0f - y / screenHeight * 2.0f;
+            const Vector3 ray{
+                forward.x + right.x * ndcX * tanHalfFov * aspect + up.x * ndcY * tanHalfFov,
+                forward.y + right.y * ndcX * tanHalfFov * aspect + up.y * ndcY * tanHalfFov,
+                forward.z + right.z * ndcX * tanHalfFov * aspect + up.z * ndcY * tanHalfFov };
+            if (ray.y >= -1e-5f) return std::nullopt;
+            const float t = -view.eye.y / ray.y;
+            return Vector3{ view.eye.x + ray.x * t, 0.0f, view.eye.z + ray.z * t };
+        }
+
+        /// <summary>
         /// Project a world point to the screen (same math as the GPU's view and projection)
         /// </summary>
         [[nodiscard]] static ScreenPoint WorldToScreen(const CameraView& view, Vector3 point, float screenWidth, float screenHeight) noexcept {

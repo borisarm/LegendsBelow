@@ -48,6 +48,13 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// Brutes joining a wave: one from the fourth
+        /// </summary>
+        [[nodiscard]] static std::int32_t Brutes(std::int32_t wave) noexcept {
+            return wave < 4 ? 0 : 1;
+        }
+
+        /// <summary>
         /// Spellcasters joining a wave: one from the third wave, two from the sixth
         /// </summary>
         [[nodiscard]] static std::int32_t Casters(std::int32_t wave) noexcept {

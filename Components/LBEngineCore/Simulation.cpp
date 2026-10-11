@@ -42,8 +42,9 @@ namespace LB::Engine {
             LoadGame(QuickSaveSlot);
         }
 
-        // The camera can be turned and zoomed during the tactical pause
+        // The camera can be turned and zoomed during the tactical pause; orders are taken during it
         UpdateCameraControls();
+        if (!menuWasOpen && !screenWasOpen && !menu_.IsOpen() && !session_->characterScreen.IsOpen()) UpdateOrders();
         if (inputSystem_.IsActionTriggered(std::string(MapAction))) {
             session_->minimap.ToggleExpanded();
         }
@@ -53,6 +54,7 @@ namespace LB::Engine {
         if (running) {
             session_->gameTimeSeconds += elapsedSeconds;
             // Attacks first: a swing that starts this step roots the player at once
+            FollowOrder();
             UpdatePlayerCombat(static_cast<float>(elapsedSeconds));
             UpdatePlayerCasting(static_cast<float>(elapsedSeconds));
             const auto before = session_->playerPosition;
@@ -91,7 +93,7 @@ namespace LB::Engine {
     // Waves start once there is a player to fight (and enemies are enabled)
     void GameEngine::StartEncounter() {
         session_->encounter.Configure(content_->FindEnemy(LightEnemy), content_->FindEnemy(HeavyEnemy), session_->world,
-                                      content_->FindEnemy(RangedEnemy), content_->FindEnemy(CasterEnemy));
+                                      content_->FindEnemy(RangedEnemy), content_->FindEnemy(CasterEnemy), content_->FindEnemy(BruteEnemy));
         session_->encounter.SetContent(content_.get());
         session_->encounter.SetClips(assets_.enemyClips);
         session_->encounter.Reset();
@@ -139,8 +141,132 @@ namespace LB::Engine {
         const std::string attack(AttackAction);
         const bool free = !combat.swinging && !session_->casting.active && !session_->playerStatuses.PreventsActions();
         if (free && (inputSystem_.IsActionTriggered(attack) || inputSystem_.IsActionDown(attack))) {
+            session_->order = {};   // the player's own attack replaces an order
             StartPlayerAttack();
         }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Orders and the tactical pause (design-combat-system.md 2.1)
+    // ------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Every step, paused or not: Tab toggles the tactical pause; the mouse picks the enemy under
+    /// it, and a right click orders a move there or an attack on it. While paused, the d-pad
+    /// cycles the picked enemy (nearest first), Attack orders an attack on the picked one, and a
+    /// spell key orders a cast at it; they are carried out when the pause ends.
+    /// </summary>
+    void GameEngine::UpdateOrders() {
+        if (!session_->playerId) return;
+        const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
+        if (triggered(TacticalPauseAction)) SetPaused(!session_->paused);
+
+        // The enemy under the mouse (when it moved), kept while it can be targeted
+        std::optional<WorldPoint> floor;
+        const auto& mouse = inputSystem_.GetMouseState();
+        if (const auto point = renderingSystem_.ScreenToFloor(static_cast<float>(mouse.x), static_cast<float>(mouse.y))) floor = WorldPoint{ point->x, point->z };
+        if (floor && (mouse.deltaX != 0 || mouse.deltaY != 0 || triggered(OrderAction))) {
+            session_->picked.reset();
+            float best = PickRadius;
+            for (const auto& enemy : session_->encounter.GetEnemies()) {
+                const float distance = Distance(enemy.position, *floor);
+                if (enemy.IsTargetable() && distance <= best) {
+                    best = distance;
+                    session_->picked = enemy.id;
+                }
+            }
+        }
+        if (session_->picked) {
+            const auto* enemy = session_->encounter.FindEnemy(*session_->picked);
+            if (!enemy || !enemy->IsTargetable()) session_->picked.reset();
+        }
+
+        if (triggered(OrderAction) && floor && IsPlayerAlive()) {
+            if (session_->picked) session_->order = PlayerOrder{ OrderKind::Attack, {}, session_->picked, 0 };
+            else if (session_->world.IsOpen(*floor)) session_->order = PlayerOrder{ OrderKind::Move, *floor, std::nullopt, 0 };
+        }
+        if (!session_->paused || !IsPlayerAlive()) return;
+
+        // The d-pad cycles through the enemies, nearest first
+        const int cycle = (triggered(MenuRightAction) ? 1 : 0) - (triggered(MenuLeftAction) ? 1 : 0);
+        if (cycle != 0) {
+            std::vector<const Enemy*> targets;
+            for (const auto& enemy : session_->encounter.GetEnemies()) {
+                if (enemy.IsTargetable()) targets.push_back(&enemy);
+            }
+            std::ranges::sort(targets, {}, [this](const Enemy* enemy) { return Distance(enemy->position, session_->playerPosition); });
+            if (!targets.empty()) {
+                auto index = 0;
+                for (std::size_t i = 0; i < targets.size(); ++i) {
+                    if (session_->picked && targets[i]->id == *session_->picked) index = static_cast<int>(i) + cycle;
+                }
+                const auto count = static_cast<int>(targets.size());
+                session_->picked = targets[static_cast<std::size_t>(((index % count) + count) % count)]->id;
+            }
+        }
+        if (session_->picked && triggered(AttackAction)) session_->order = PlayerOrder{ OrderKind::Attack, {}, session_->picked, 0 };
+        for (std::size_t slot = 0; slot < SpellSlots; ++slot) {
+            if (triggered(SpellActions[slot]) && slot < GetSpellBar().size()) session_->order = PlayerOrder{ OrderKind::Cast, {}, session_->picked, slot };
+        }
+    }
+
+    // Can the order's target be struck (or shot, or cast at) from here?
+    bool GameEngine::OrderTargetInReach(const Enemy& target) const {
+        const float distance = Distance(target.position, session_->playerPosition);
+        const auto& order = session_->order;
+        const bool sight = session_->world.LineOfSight(session_->playerPosition, target.position);
+        if (order.kind == OrderKind::Cast) {
+            const auto bar = GetSpellBar();
+            if (order.slot >= bar.size()) return true;
+            const auto& spell = *bar[order.slot];
+            return spell.IsBurstAroundCaster() ? distance <= spell.radius : distance <= spell.range * 0.9f && sight;
+        }
+        const auto* weapon = session_->playerWeapon;
+        if (weapon && weapon->IsRanged()) return distance <= weapon->range * 0.9f && sight;
+        return distance <= PlayerReach;
+    }
+
+    // An order in hand: attack or cast once the target is in reach (the order then holds for the
+    // next attack, a cast ends it); a target that is gone ends it
+    void GameEngine::FollowOrder() {
+        auto& order = session_->order;
+        if (order.kind == OrderKind::None || !IsPlayerAlive()) return;
+        const auto* target = order.target ? session_->encounter.FindEnemy(*order.target) : nullptr;
+        if (order.target && (!target || !target->IsTargetable())) {
+            order = {};
+            return;
+        }
+        if (order.kind == OrderKind::Attack && target && OrderTargetInReach(*target)) {
+            session_->playerFacingYaw = std::atan2(target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y);
+            if (!session_->playerCombat.swinging && !session_->casting.active && !session_->playerStatuses.PreventsActions()) StartPlayerAttack(order.target);
+        }
+        if (order.kind == OrderKind::Cast && !session_->casting.active && !session_->playerCombat.swinging && (!target || OrderTargetInReach(*target))) {
+            const auto slot = order.slot;
+            const auto aim = order.target;
+            order = {};
+            StartCast(slot, aim);
+        }
+    }
+
+    // Where an order walks the player this step (a ground direction), or nothing: arrived, in
+    // reach, or busy
+    std::optional<WorldPoint> GameEngine::OrderStep() const {
+        const auto& order = session_->order;
+        if (order.kind == OrderKind::None || session_->casting.active) return std::nullopt;
+        WorldPoint goal = order.point;
+        if (order.target) {
+            const auto* target = session_->encounter.FindEnemy(*order.target);
+            if (!target || OrderTargetInReach(*target)) return std::nullopt;
+            goal = target->position;
+        }
+        else if (order.kind != OrderKind::Move) {
+            return std::nullopt;
+        }
+        const float dx = goal.x - session_->playerPosition.x;
+        const float dy = goal.y - session_->playerPosition.y;
+        const float length = std::hypot(dx, dy);
+        if (length <= ArriveTiles) return std::nullopt;
+        return WorldPoint{ dx / length, dy / length };
     }
 
     // ------------------------------------------------------------------------------------------
@@ -149,6 +275,33 @@ namespace LB::Engine {
 
     const Content::ClassDefinition* GameEngine::PlayerClassDefinition() const {
         return content_->FindClass(session_->playerClass);
+    }
+
+    // The player's attack on a target: a rogue's sneak attack dice join it against an enemy that
+    // has not noticed them, is struck from behind (flanked), cannot act or move, or right after a
+    // shadowstep (design-character-system.md 3.2.2)
+    Services::Combat::WeaponAttackProfile GameEngine::PlayerAttackAgainst(const Enemy* target) const {
+        auto attack = GetPlayerAttackProfile();
+        const auto* classData = PlayerClassDefinition();
+        if (!classData || classData->sneakAttackDice.count <= 0) return attack;
+        const bool unaware = target && target->state == EnemyState::Idle;
+        const bool helpless = target && (target->statuses.PreventsActions() || target->statuses.MovementMultiplier() <= 0.0f);
+        bool behind = false;
+        if (target) {
+            const auto facing = Forward(target->facingYaw);
+            const float dx = session_->playerPosition.x - target->position.x;
+            const float dy = session_->playerPosition.y - target->position.y;
+            const float length = std::hypot(dx, dy);
+            behind = length > 1e-4f && (facing.x * dx + facing.y * dy) / length < FlankCosine;
+        }
+        if (unaware || helpless || behind || session_->sneakWindowSeconds > 0.0f) attack.extraDice = classData->sneakAttackDice;
+        return attack;
+    }
+
+    void GameEngine::HealPlayer(std::int32_t amount) {
+        const auto healed = session_->characterService.HealCharacter(*session_->playerId, amount);
+        session_->combatText.Add(std::format("+{}", healed), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.45f, 0.95f, 0.45f, 1.0f }, 3.0f);
+        EmitHealingEffect();
     }
 
     std::vector<const Content::SpellDefinition*> GameEngine::GetSpellBar() const {
@@ -173,7 +326,7 @@ namespace LB::Engine {
         case LB::Character::CharacterClass::Rogue: modifier = attributes.GetIntelligenceModifier() / 2; break;
         default: break;
         }
-        return std::max(0, classData->spellPowerBase + modifier * player->GetLevel());
+        return std::max(0, classData->spellPowerBase + modifier * player->GetLevel() + EquippedBonuses().spellPower);
     }
 
     std::string GameEngine::SpellBlocker(std::size_t slot) const {
@@ -198,6 +351,8 @@ namespace LB::Engine {
     void GameEngine::UpdatePlayerCasting(float elapsedSeconds) {
         if (!session_->playerId) return;
         for (auto& cooldown : session_->spellCooldowns) cooldown = std::max(0.0f, cooldown - elapsedSeconds);
+        session_->evadeSeconds = std::max(0.0f, session_->evadeSeconds - elapsedSeconds);
+        session_->sneakWindowSeconds = std::max(0.0f, session_->sneakWindowSeconds - elapsedSeconds);
         session_->casting.releaseSeconds = std::max(0.0f, session_->casting.releaseSeconds - elapsedSeconds);
 
         const auto* player = PlayerCharacter();
@@ -207,7 +362,7 @@ namespace LB::Engine {
                 session_->manaCarry = 0.0f;
             }
             else {
-                session_->manaCarry += classData->manaRegenPerSecond * elapsedSeconds;
+                session_->manaCarry += (classData->manaRegenPerSecond + EquippedBonuses().manaRegen) * elapsedSeconds;
                 if (session_->manaCarry >= 1.0f) {
                     const auto whole = static_cast<std::int32_t>(session_->manaCarry);
                     session_->manaCarry -= static_cast<float>(whole);
@@ -229,6 +384,7 @@ namespace LB::Engine {
         if (session_->playerCombat.swinging) return;
         for (std::size_t slot = 0; slot < SpellSlots; ++slot) {
             if (inputSystem_.IsActionTriggered(std::string(SpellActions[slot]))) {
+                session_->order = {};   // the player's own cast replaces an order
                 StartCast(slot);
                 break;
             }
@@ -237,7 +393,7 @@ namespace LB::Engine {
 
     // A slot's spell begins: a missile turns toward the nearest enemy in its range and in sight;
     // a spell that cannot be cast says why over the player's head
-    void GameEngine::StartCast(std::size_t slot) {
+    void GameEngine::StartCast(std::size_t slot, std::optional<std::uint32_t> aim) {
         const auto blocker = SpellBlocker(slot);
         if (!blocker.empty()) {
             const Systems::Rendering::Vector3 over{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
@@ -248,13 +404,18 @@ namespace LB::Engine {
         }
 
         const auto& spell = *GetSpellBar()[slot];
+        std::optional<std::uint32_t> target;
+        if (spell.IsMissile() || spell.NeedsTarget()) target = aim ? aim : session_->encounter.FindTarget(session_->playerPosition, spell.range, true);
+        if (spell.NeedsTarget() && !target) {
+            session_->combatText.Add("NO TARGET", { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+            PlaySound(GameSound::NoMana);
+            return;
+        }
         auto& casting = session_->casting;
         casting = PlayerCasting{ true, slot, &spell, 0.0f, std::nullopt, 0.0f };
-        if (spell.IsMissile()) {
-            casting.target = session_->encounter.FindTarget(session_->playerPosition, spell.range, true);
-            if (const auto* target = casting.target ? session_->encounter.FindEnemy(*casting.target) : nullptr) {
-                session_->playerFacingYaw = std::atan2(target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y);
-            }
+        casting.target = target;
+        if (const auto* enemy = target ? session_->encounter.FindEnemy(*target) : nullptr) {
+            session_->playerFacingYaw = std::atan2(enemy->position.x - session_->playerPosition.x, enemy->position.y - session_->playerPosition.y);
         }
         session_->playerCombat.hurtSeconds = 0.0f;
         session_->playerAnimator.Play(assets_.playerClips.castLoop.id, true, 1.0f, true, 0.1f);
@@ -273,9 +434,73 @@ namespace LB::Engine {
         session_->spellCooldowns[slot] = spell.cooldownSeconds;
 
         const SpellPayload payload{ &spell, Encounter::SpellDamage(spell, GetPlayerSpellPower()) };
-        if (spell.IsMissile()) {
+        const auto* target = casting.target ? session_->encounter.FindEnemy(*casting.target) : nullptr;
+        if (target && !target->IsTargetable()) target = nullptr;
+        const auto heal = static_cast<std::int32_t>(std::lround(static_cast<float>(spell.baseHeal) + spell.powerCoefficient * static_cast<float>(GetPlayerSpellPower())));
+        const auto takeEvents = [this](const std::vector<CombatEvent>& events) {
+            for (const auto& event : events) {
+                session_->combatEvents.push_back(event);
+                if (event.killed) {
+                    if (const auto* enemy = session_->encounter.FindEnemy(event.enemyId)) OnEnemyKilled(*enemy);
+                }
+            }
+        };
+
+        if (spell.IsHeal()) {
+            // design-spells-system.md 5.2: base + coefficient x the caster's power; a cure lifts hindrances
+            HealPlayer(heal);
+            session_->playerStatuses.RemoveHindrances(spell.cleansesStatuses);
+        }
+        else if (spell.IsDash()) {
+            // A roll along the way the player faces (or is pushing the stick): untouchable meanwhile
+            const auto forward = Forward(session_->playerFacingYaw);
+            constexpr int Steps = 8;
+            for (int i = 0; i < Steps; ++i) {
+                session_->playerPosition = session_->world.Move(session_->playerPosition, { forward.x * spell.dashTiles / Steps, forward.y * spell.dashTiles / Steps }, PlayerRadius);
+            }
+            session_->characterService.PlaceCharacter(*session_->playerId, ToTile(session_->playerPosition));
+            session_->evadeSeconds = spell.evadeSeconds;
+            session_->effects.Emit(ParticleEffect::Footstep, { session_->playerPosition.x, 0.05f, session_->playerPosition.y }, 10);
+            const auto& dodge = assets_.playerClips.dodge;
+            casting.releaseSeconds = SpellReleaseSeconds;
+            session_->playerAnimator.Play(dodge.id, false, dodge.seconds / SpellReleaseSeconds, true, 0.05f);
+            return;
+        }
+        else if (spell.IsShadowstep()) {
+            // Out of the shadows behind the target (beside it when a wall is behind it), facing it
+            if (target) {
+                const auto palette = ElementPalette(LB::Combat::DamageType::Shadow);
+                session_->effects.Emit(ParticleEffect::SpellBurst, { session_->playerPosition.x, 0.5f, session_->playerPosition.y }, 16, 0.8f, &palette);
+                const auto back = Forward(target->facingYaw);
+                WorldPoint at{ target->position.x - back.x * 0.8f, target->position.y - back.y * 0.8f };
+                if (!session_->world.CircleFits(at, PlayerRadius)) {
+                    const float dx = session_->playerPosition.x - target->position.x;
+                    const float dy = session_->playerPosition.y - target->position.y;
+                    const float length = std::max(1e-4f, std::hypot(dx, dy));
+                    at = { target->position.x + dx / length * 0.8f, target->position.y + dy / length * 0.8f };
+                }
+                if (session_->world.CircleFits(at, PlayerRadius)) {
+                    session_->playerPosition = at;
+                    session_->characterService.PlaceCharacter(*session_->playerId, ToTile(at));
+                }
+                session_->playerFacingYaw = std::atan2(target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y);
+                session_->sneakWindowSeconds = SneakWindowSeconds;
+                session_->effects.Emit(ParticleEffect::SpellBurst, { session_->playerPosition.x, 0.5f, session_->playerPosition.y }, 16, 0.8f, &palette);
+            }
+        }
+        else if (spell.IsTargetedStrike()) {
+            // An instant strike (and the caster healed, when the spell heals too)
+            if (target) {
+                if (auto event = session_->encounter.StrikeWithSpell(payload, target->id)) takeEvents({ *event });
+                if (spell.baseHeal > 0) HealPlayer(heal);
+            }
+        }
+        else if (spell.IsTargetedBurst()) {
+            if (target) takeEvents(session_->encounter.CastBurst(payload, target->position));
+        }
+        else if (spell.IsMissile()) {
             auto direction = Forward(session_->playerFacingYaw);
-            if (const auto* target = casting.target ? session_->encounter.FindEnemy(*casting.target) : nullptr; target && target->IsTargetable()) {
+            if (target) {
                 direction = { target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y };
                 session_->playerFacingYaw = std::atan2(direction.x, direction.y);
             }
@@ -326,15 +551,26 @@ namespace LB::Engine {
     }
 
     // A swing or a shot begins: pick the target, face it, and start the attack's animation
-    void GameEngine::StartPlayerAttack() {
+    void GameEngine::StartPlayerAttack(std::optional<std::uint32_t> aim) {
         auto& combat = session_->playerCombat;
         const auto* weapon = session_->playerWeapon;
+        // Bows and crossbows need their ammunition (weapons.json ammoType)
+        if (weapon && weapon->IsRanged() && !weapon->ammoType.empty() && AmmoCount(weapon->ammoType) == 0) {
+            if (!session_->combatText.Texts().empty() && session_->combatText.Texts().back().text.starts_with("NO ")) return;   // said already
+            const auto ammo = std::ranges::find(content_->GetConsumables(), weapon->ammoType, &Content::ConsumableDefinition::ammoType);
+            std::string name = ammo != content_->GetConsumables().end() ? ammo->name : weapon->ammoType;
+            std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+            session_->combatText.Add(std::format("NO {}", name), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+            PlaySound(GameSound::NoMana);
+            return;
+        }
         combat.swinging = true;
         combat.swingSeconds = 0.0f;
         combat.impactDone = false;
         combat.hurtSeconds = 0.0f;
         combat.shooting = weapon && weapon->IsRanged();
-        combat.target = combat.shooting ? session_->encounter.FindTarget(session_->playerPosition, weapon->range, true)
+        combat.target = aim ? aim
+                      : combat.shooting ? session_->encounter.FindTarget(session_->playerPosition, weapon->range, true)
                                         : session_->encounter.FindTarget(session_->playerPosition, PlayerReach);
         if (const auto* target = combat.target ? session_->encounter.FindEnemy(*combat.target) : nullptr) {
             session_->playerFacingYaw = std::atan2(target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y);
@@ -371,7 +607,9 @@ namespace LB::Engine {
         auto& combat = session_->playerCombat;
         if (!combat.shooting) {
             if (!combat.target) return;
-            if (auto event = session_->encounter.StrikeEnemy(*combat.target, GetPlayerAttackProfile(), session_->playerPosition, PlayerReach)) {
+            const auto attack = PlayerAttackAgainst(session_->encounter.FindEnemy(*combat.target));
+            if (auto event = session_->encounter.StrikeEnemy(*combat.target, attack, session_->playerPosition, PlayerReach)) {
+                if (event->result.hit) session_->sneakWindowSeconds = 0.0f;   // a shadowstep's sneak attack is spent on a hit
                 session_->combatEvents.push_back(*event);
                 if (event->killed) {
                     OnEnemyKilled(*session_->encounter.FindEnemy(event->enemyId));
@@ -381,6 +619,7 @@ namespace LB::Engine {
         }
 
         const auto& weapon = *session_->playerWeapon;
+        if (!weapon.ammoType.empty() && !SpendAmmo(weapon.ammoType)) return;   // out of arrows meanwhile
         auto direction = Forward(session_->playerFacingYaw);
         if (const auto* target = combat.target ? session_->encounter.FindEnemy(*combat.target) : nullptr; target && target->IsTargetable()) {
             direction = { target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y };
@@ -389,8 +628,9 @@ namespace LB::Engine {
         // An arrow, a bolt, or a wand's orb of its damage type (no model)
         const auto model = weapon.category == LB::Combat::WeaponType::Crossbow ? BoltModel
                          : weapon.category == LB::Combat::WeaponType::Bow ? ArrowModel : std::string_view{};
-        session_->encounter.Shoot(GetPlayerAttackProfile(), session_->playerPosition, direction, weapon.projectileSpeed, weapon.range,
-                                  std::string(model), PlayerRadius);
+        session_->encounter.Shoot(PlayerAttackAgainst(combat.target ? session_->encounter.FindEnemy(*combat.target) : nullptr),
+                                  session_->playerPosition, direction, weapon.projectileSpeed, weapon.range, std::string(model), PlayerRadius);
+        session_->sneakWindowSeconds = 0.0f;
         PlaySound(GameSound::Shoot, session_->playerPosition);
 
         if (weapon.category == LB::Combat::WeaponType::Bow) {
@@ -445,6 +685,11 @@ namespace LB::Engine {
                 }
                 continue;
             }
+            if (event.result.hit && session_->evadeSeconds > 0.0f && IsPlayerAlive()) {
+                session_->combatText.Add("DODGE", { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.85f, 0.85f, 0.85f, 1.0f }, 2.0f);
+                session_->combatEvents.back().result = {};   // shown as a miss
+                continue;
+            }
             if (event.spell && event.result.hit && IsPlayerAlive()) ApplySpellStatusesToPlayer(*event.spell);
             if (!event.result.hit || event.result.finalDamage <= 0 || !IsPlayerAlive()) continue;
 
@@ -476,6 +721,7 @@ namespace LB::Engine {
     void GameEngine::UpdateCombatTexts(float elapsedSeconds) {
         session_->combatText.Update(elapsedSeconds);
         for (const auto& event : session_->combatEvents) {
+            if (event.spell && event.spell->baseDamage <= 0 && event.result.finalDamage <= 0) continue;   // a hindrance, not a blow
             Systems::Rendering::Vector3 at{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
             if (event.kind == CombatEventKind::PlayerAttack) {
                 const auto* enemy = session_->encounter.FindEnemy(event.enemyId);
@@ -483,6 +729,9 @@ namespace LB::Engine {
                 at = { enemy->position.x, EnemyTop(*enemy), enemy->position.y };
             }
             session_->combatText.AddAttack(event, at);
+            if (event.kind == CombatEventKind::PlayerAttack && event.result.hit && event.result.extraDamage > 0) {
+                session_->combatText.Add("SNEAK ATTACK", { at.x, at.y + 0.35f, at.z }, { 1.0f, 0.82f, 0.30f, 1.0f }, 1.6f);
+            }
         }
     }
 
@@ -501,6 +750,10 @@ namespace LB::Engine {
         session_->camera.SnapTo({ session_->playerPosition.x, session_->playerPosition.y });
         session_->playerCombat = {};
         session_->casting = {};
+        session_->evadeSeconds = 0.0f;
+        session_->sneakWindowSeconds = 0.0f;
+        session_->order = {};
+        session_->picked.reset();
         session_->playerStatuses.Clear();
         session_->groundItems.clear();
         StartEncounter();
@@ -571,13 +824,24 @@ namespace LB::Engine {
             }
         }
 
-        if (dx == 0.0f && dy == 0.0f) return;
+        // The player's own movement replaces an order; without it, an order may walk them
+        WorldPoint direction{};
+        if (dx != 0.0f || dy != 0.0f) {
+            session_->order = {};
+            // dy is screen-down; the camera maps (right, up) onto the ground
+            const auto ground = session_->camera.ScreenToGround(dx, -dy);
+            direction = { ground.x, ground.y };
+        }
+        else if (const auto step = OrderStep()) {
+            direction = *step;
+        }
+        else {
+            if (session_->order.kind == OrderKind::Move) session_->order = {};   // arrived
+            return;
+        }
         const float hindrance = session_->playerStatuses.MovementMultiplier();
         if (hindrance <= 0.0f) return;                      // rooted
         if (session_->casting.active) CancelCast();         // moving breaks a cast (design-spells-system.md 4.3)
-
-        // dy is screen-down; the camera maps (right, up) onto the ground
-        const auto direction = session_->camera.ScreenToGround(dx, -dy);
         session_->playerFacingYaw = std::atan2(direction.x, direction.y);
 
         const float speed = session_->characterService.GetMovementSpeed(*session_->playerId).value_or(0.0f) * hindrance;

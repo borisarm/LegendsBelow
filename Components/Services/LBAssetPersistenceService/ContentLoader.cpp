@@ -328,6 +328,12 @@ namespace LB::Content {
             reader.ReadStringArray("scalingAttributes", spell.scalingAttributes);
             reader.ReadString("notes", spell.notes, false);
             reader.ReadFloat("projectileSpeed", spell.projectileSpeed, false);
+            reader.ReadFloat("dashTiles", spell.dashTiles, false);
+            reader.ReadFloat("evadeSeconds", spell.evadeSeconds, false);
+            reader.ReadBool("teleportBehindTarget", spell.teleportBehindTarget);
+            reader.ReadInt("cleansesStatuses", spell.cleansesStatuses, false);
+            if (spell.dashTiles < 0.0f || spell.evadeSeconds < 0.0f || spell.cleansesStatuses < 0) reader.Error("'dashTiles', 'evadeSeconds', and 'cleansesStatuses' must not be negative");
+            if (spell.teleportBehindTarget && spell.range <= 0.0f) reader.Error("'teleportBehindTarget' needs a 'range'");
 
             if (spell.level < 1) reader.Error("'level' must be at least 1");
             if (spell.projectileSpeed < 0.0f) reader.Error("'projectileSpeed' must not be negative");
@@ -408,6 +414,7 @@ namespace LB::Content {
             reader.ReadFloat("manaRegenPerSecond", definition.manaRegenPerSecond, false);
             reader.ReadInt("spellPowerBase", definition.spellPowerBase, false);
             reader.ReadString("startingWeapon", definition.startingWeapon, false);
+            reader.ReadDice("sneakAttackDice", definition.sneakAttackDice, false);
             reader.ReadStringArray("startingItems", definition.startingItems);
             if (definition.spellBar.size() > 4) reader.Error("'spellBar' holds at most 4 spells");
             if (definition.manaRegenPerSecond < 0.0f) reader.Error("'manaRegenPerSecond' must not be negative");
@@ -564,6 +571,19 @@ namespace LB::Content {
             reader.ReadFloat("keepAwayRange", enemy.keepAwayRange, false);
             reader.ReadString("spell", enemy.spell, false);
             reader.ReadInt("spellPower", enemy.spellPower, false);
+            reader.ReadString("rig", enemy.rig, false);
+            reader.ReadBool("staggerImmune", enemy.staggerImmune);
+            reader.ReadBool("boss", enemy.boss);
+            reader.ReadString("summon", enemy.summon, false);
+            reader.ReadInt("summonCount", enemy.summonCount, false);
+            reader.ReadInt("maxSummons", enemy.maxSummons, false);
+            reader.ReadFloat("summonCooldownSeconds", enemy.summonCooldownSeconds, false);
+            reader.ReadFloat("phaseTwoHealthFraction", enemy.phaseTwoHealthFraction, false);
+            if (enemy.rig != "Medium" && enemy.rig != "Large") reader.Error(std::format("'rig' must be Medium or Large, not '{}'", enemy.rig));
+            if (!enemy.summon.empty() && (enemy.summonCount < 1 || enemy.maxSummons < 1 || enemy.summonCooldownSeconds <= 0.0f)) {
+                reader.Error("a summoner needs a positive 'summonCount', 'maxSummons', and 'summonCooldownSeconds'");
+            }
+            if (enemy.phaseTwoHealthFraction < 0.0f || enemy.phaseTwoHealthFraction >= 1.0f) reader.Error("'phaseTwoHealthFraction' must be in [0, 1)");
 
             reader.ReadString("lootTable", enemy.lootTable, false);
             reader.ReadString("model", enemy.model, true);
@@ -595,6 +615,52 @@ namespace LB::Content {
             return enemy;
         }
 
+        RarityDefinition ReadRarity(EntryReader& reader) {
+            RarityDefinition rarity{};
+            reader.ReadString("id", rarity.key, true);
+            reader.ReadString("name", rarity.name, true);
+            reader.ReadInt("affixes", rarity.affixes, true);
+            reader.ReadFloat("weight", rarity.weight, true);
+            reader.ReadFloat("weightPerDepth", rarity.weightPerDepth, false);
+            if (const Json* color = reader.Nested("color", true, true)) {
+                if (color->size() != 3) reader.Error("'color' must be three numbers (display RGB, 0..1)");
+                else {
+                    for (std::size_t i = 0; i < 3; ++i) {
+                        if (!(*color)[i].is_number()) reader.Error("'color' must be three numbers (display RGB, 0..1)");
+                        else rarity.color[i] = (*color)[i].get<float>();
+                    }
+                }
+            }
+            if (rarity.affixes < 0 || rarity.affixes > 3) reader.Error("'affixes' must be in [0, 3]");
+            if (rarity.weight < 0.0f) reader.Error("'weight' must not be negative");
+            return rarity;
+        }
+
+        AffixDefinition ReadAffix(EntryReader& reader) {
+            AffixDefinition affix{};
+            String type;
+            std::vector<String> appliesTo;
+            reader.ReadString("id", affix.key, true);
+            reader.ReadString("name", affix.name, true);
+            reader.ReadString("type", type, true);
+            reader.ReadStringArray("appliesTo", appliesTo);
+            reader.ReadInt("damage", affix.damage, false);
+            reader.ReadInt("attackBonus", affix.attackBonus, false);
+            reader.ReadInt("armorClass", affix.armorClass, false);
+            reader.ReadInt("armor", affix.armor, false);
+            reader.ReadInt("spellPower", affix.spellPower, false);
+            reader.ReadFloat("manaRegen", affix.manaRegen, false);
+            if (type != "Prefix" && type != "Suffix") reader.Error(std::format("'type' must be Prefix or Suffix, not '{}'", type));
+            affix.prefix = type == "Prefix";
+            for (const auto& target : appliesTo) {
+                if (target == "Weapon") affix.onWeapons = true;
+                else if (target == "Armor") affix.onArmour = true;
+                else reader.Error(std::format("'appliesTo' lists '{}' (Weapon or Armor)", target));
+            }
+            if (!affix.onWeapons && !affix.onArmour) reader.Error("'appliesTo' must list Weapon, Armor, or both");
+            return affix;
+        }
+
         StatusDefinition ReadStatus(EntryReader& reader) {
             StatusDefinition status{};
             reader.ReadString("id", status.key, true);
@@ -622,6 +688,7 @@ namespace LB::Content {
             reader.ReadString("name", consumable.name, true);
             reader.ReadDice("healing", consumable.healing, false);
             reader.ReadInt("maxStack", consumable.maxStack, false);
+            reader.ReadString("ammoType", consumable.ammoType, false);
             reader.ReadString("model", consumable.model, true);
 
             if (consumable.maxStack < 1) reader.Error("'maxStack' must be at least 1");
@@ -647,7 +714,9 @@ namespace LB::Content {
                     LootEntry entry{};
                     itemReader.ReadString("item", entry.item, true);
                     itemReader.ReadInt("weight", entry.weight, false);
+                    itemReader.ReadDice("quantity", entry.quantity, false);
                     if (entry.weight < 1) itemReader.Error("'weight' must be at least 1");
+                    if (entry.quantity.count < 0 || entry.quantity.GetMaxRoll() < 1) itemReader.Error("'quantity' must be able to roll at least 1");
                     table.items.push_back(std::move(entry));
                 }
             }
@@ -736,7 +805,17 @@ namespace LB::Content {
                     if (it == weapons.end()) errors.push_back(std::format("classes.json: {}: unknown starting weapon '{}'", definition.key, definition.startingWeapon));
                     else if (!it->IsUsableBy(definition.characterClass)) errors.push_back(std::format("classes.json: {}: cannot wield its starting weapon '{}'", definition.key, definition.startingWeapon));
                 }
-                for (const auto& key : definition.startingItems) {
+                for (const auto& entry : definition.startingItems) {
+                    const auto colon = entry.find(':');
+                    const String key = entry.substr(0, colon);
+                    std::int32_t quantity = 1;
+                    if (colon != String::npos) {
+                        const auto text = std::string_view(entry).substr(colon + 1);
+                        const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), quantity);
+                        if (ec != std::errc{} || end != text.data() + text.size() || quantity < 1) {
+                            errors.push_back(std::format("classes.json: {}: starting item '{}' has a bad quantity (\"key:count\")", definition.key, entry));
+                        }
+                    }
                     const bool known = std::ranges::find(weapons, key, &WeaponDefinition::key) != weapons.end()
                                     || std::ranges::find(armour, key, &ArmorDefinition::key) != armour.end()
                                     || std::ranges::find(consumables, key, &ConsumableDefinition::key) != consumables.end();
@@ -744,6 +823,11 @@ namespace LB::Content {
                 }
             }
             for (const auto& enemy : enemies) {
+                if (!enemy.summon.empty()) {
+                    const auto summoned = std::ranges::find(enemies, enemy.summon, &EnemyDefinition::key);
+                    if (summoned == enemies.end()) errors.push_back(std::format("enemies.json: {}: unknown summon '{}'", enemy.key, enemy.summon));
+                    else if (!summoned->summon.empty()) errors.push_back(std::format("enemies.json: {}: its summon '{}' summons too", enemy.key, enemy.summon));
+                }
                 if (!enemy.IsCaster()) continue;
                 const auto* spell = findSpell(enemy.spell);
                 if (!spell) errors.push_back(std::format("enemies.json: {}: unknown spell '{}'", enemy.key, enemy.spell));
@@ -802,9 +886,10 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[8];
-        constexpr const char* files[8] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json" };
-        for (int i = 0; i < 8; ++i) {
+        String texts[10];
+        constexpr const char* files[10] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
+                                            "statuses.json", "rarities.json", "affixes.json" };
+        for (int i = 0; i < 10; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -813,12 +898,13 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                                     const String& classesJson, const String& enemiesJson,
-                                                    const String& consumablesJson, const String& lootJson, const String& statusesJson) {
+                                                    const String& consumablesJson, const String& lootJson, const String& statusesJson,
+                                                    const String& raritiesJson, const String& affixesJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -829,6 +915,17 @@ namespace LB::Content {
         auto consumables = ReadArray<ConsumableDefinition>(consumablesJson, "consumables.json", ReadConsumable, result.errors);
         auto lootTables = ReadArray<LootTableDefinition>(lootJson, "loot.json", ReadLootTable, result.errors);
         auto statuses = ReadArray<StatusDefinition>(statusesJson, "statuses.json", ReadStatus, result.errors);
+        auto rarities = ReadArray<RarityDefinition>(raritiesJson, "rarities.json", ReadRarity, result.errors);
+        auto affixes = ReadArray<AffixDefinition>(affixesJson, "affixes.json", ReadAffix, result.errors);
+        if (!rarities.empty() && std::ranges::none_of(rarities, [](const RarityDefinition& r) { return r.weight > 0.0f; })) {
+            result.errors.push_back("rarities.json: at least one rarity needs a positive 'weight'");
+        }
+        for (const auto& weapon : weapons) {
+            if (weapon.ammoType.empty()) continue;
+            if (!consumables.empty() && std::ranges::find(consumables, weapon.ammoType, &ConsumableDefinition::ammoType) == consumables.end()) {
+                result.errors.push_back(std::format("weapons.json: {}: no consumable is ammunition of type '{}'", weapon.key, weapon.ammoType));
+            }
+        }
 
         CheckClassRules(classes, spells, result.errors);
         CheckReferences(spells, statuses, classes, enemies, weapons, armour, consumables, result.errors);
@@ -847,6 +944,8 @@ namespace LB::Content {
         consumables_ = std::move(consumables);
         lootTables_ = std::move(lootTables);
         statuses_ = std::move(statuses);
+        rarities_ = std::move(rarities);
+        affixes_ = std::move(affixes);
         return result;
     }
 

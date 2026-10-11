@@ -37,6 +37,8 @@ export namespace LB::Engine {
     /// fitted to gameplay timings. All invalid when no animations are loaded (headless).
     /// </summary>
     struct EnemyClips {
+        // Rig_Large clips, for enemies on that rig (EnemyDefinition::rig); empty: they use these
+        std::shared_ptr<const EnemyClips> large;
         Systems::Rendering::AnimationId idle{};
         Systems::Rendering::AnimationId walk{};
         Systems::Rendering::AnimationId attack{};
@@ -71,6 +73,11 @@ export namespace LB::Engine {
         float hitFlashSeconds{0.0f};        // > 0 right after being hit
         Animator animator;
         StatusSet statuses;                 // slowed, rooted, frozen, burning
+        std::int32_t wave{1};               // the wave or depth it was scaled for
+        std::uint32_t group{0};             // its room's or wave's group: they notice the player together (0: alone)
+        std::uint32_t summoner{0};          // the enemy that raised it (it crumbles with it); 0: none
+        float summonSeconds{0.0f};          // until it raises enemies again (summoners)
+        bool phaseTwo{false};               // a boss below its phase-two health
 
         [[nodiscard]] bool IsDead() const noexcept { return state == EnemyState::Dead; }
 

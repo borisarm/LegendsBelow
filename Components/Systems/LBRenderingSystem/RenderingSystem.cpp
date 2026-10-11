@@ -409,7 +409,9 @@ namespace LB::Systems::Rendering {
         return BitmapFont::Measure(text, scale);
     }
 
-    AnimationLoadResult RenderingSystem::LoadAnimations(const std::filesystem::path& path) {
+    // Clips are named by the prefix and their name in the file (a rig's sets share clip names:
+    // "Large/Idle_A" beside "Idle_A")
+    AnimationLoadResult RenderingSystem::LoadAnimations(const std::filesystem::path& path, std::string_view prefix) {
         std::error_code ec;
         auto canonical = std::filesystem::weakly_canonical(path, ec);
         if (ec) canonical = path;
@@ -425,6 +427,7 @@ namespace LB::Systems::Rendering {
 
         AnimationLoadResult result;
         for (auto& clip : loaded.clips) {
+            clip.name = std::string(prefix) + clip.name;
             animations_.push_back(std::make_shared<const AnimationClip>(std::move(clip)));
             result.clips.push_back(static_cast<AnimationId>(animations_.size()));
         }

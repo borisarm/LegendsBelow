@@ -303,7 +303,8 @@ TEST(GameEngineModelTests, Enemies_AttackWithTheirMeleeClips) {
         << engine.GetInitializationError();
     const auto& rendering = engine.GetRendering();
     for (const auto& type : engine.GetContent()->GetEnemies()) {
-        ASSERT_TRUE(rendering.FindAnimation(type.attackAnimation).has_value()) << type.attackAnimation;
+        const auto name = (type.rig == "Large" ? std::string(GameEngine::LargeClipPrefix) : std::string{}) + type.attackAnimation;
+        ASSERT_TRUE(rendering.FindAnimation(name).has_value()) << name;
     }
     const auto id = *engine.SpawnEnemy(GameEngine::LightEnemy, { 1.0f, 0.0f });
 

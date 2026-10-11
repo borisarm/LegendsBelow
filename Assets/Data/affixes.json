@@ -1,0 +1,13 @@
+[
+  { "id": "affix_prefix_keen", "name": "Keen", "type": "Prefix", "appliesTo": ["Weapon"], "attackBonus": 1 },
+  { "id": "affix_prefix_brutal", "name": "Brutal", "type": "Prefix", "appliesTo": ["Weapon"], "damage": 2 },
+  { "id": "affix_prefix_vicious", "name": "Vicious", "type": "Prefix", "appliesTo": ["Weapon"], "damage": 1, "attackBonus": 1 },
+  { "id": "affix_prefix_stalwart", "name": "Stalwart", "type": "Prefix", "appliesTo": ["Armor"], "armor": 1 },
+  { "id": "affix_prefix_warding", "name": "Warding", "type": "Prefix", "appliesTo": ["Armor"], "armorClass": 1 },
+  { "id": "affix_prefix_runed", "name": "Runed", "type": "Prefix", "appliesTo": ["Weapon", "Armor"], "spellPower": 2 },
+  { "id": "affix_suffix_of_the_bear", "name": "of the Bear", "type": "Suffix", "appliesTo": ["Weapon"], "damage": 1 },
+  { "id": "affix_suffix_of_precision", "name": "of Precision", "type": "Suffix", "appliesTo": ["Weapon"], "attackBonus": 2 },
+  { "id": "affix_suffix_of_the_turtle", "name": "of the Turtle", "type": "Suffix", "appliesTo": ["Armor"], "armor": 1, "armorClass": 1 },
+  { "id": "affix_suffix_of_focus", "name": "of Focus", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "spellPower": 1, "manaRegen": 0.5 },
+  { "id": "affix_suffix_of_the_sage", "name": "of the Sage", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "manaRegen": 1.0 }
+]

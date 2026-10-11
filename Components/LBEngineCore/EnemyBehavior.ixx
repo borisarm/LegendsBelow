@@ -51,6 +51,11 @@ export namespace LB::Engine {
 
         void SetClips(const EnemyClips& clips) { clips_ = clips; }
 
+        // The clips of an enemy's rig
+        [[nodiscard]] const EnemyClips& ClipsOf(const Enemy& enemy) const noexcept {
+            return enemy.definition->rig == "Large" && clips_.large ? *clips_.large : clips_;
+        }
+
         /// <summary>
         /// A new step: the flow field toward the player is built again when first needed
         /// </summary>
@@ -66,26 +71,26 @@ export namespace LB::Engine {
             const auto& type = *enemy.definition;
             switch (state) {
             case EnemyState::Spawning:
-                enemy.animator.Play(clips_.spawn, false, clips_.spawnSeconds / SpawnSeconds, true, 0.0f);
+                enemy.animator.Play(ClipsOf(enemy).spawn, false, ClipsOf(enemy).spawnSeconds / SpawnSeconds, true, 0.0f);
                 break;
             case EnemyState::Idle:
-                enemy.animator.Play(clips_.idle, true);
+                enemy.animator.Play(ClipsOf(enemy).idle, true);
                 break;
             case EnemyState::Chasing:
                 break;   // walking or waiting in reach, decided every step
             case EnemyState::Attacking: {
                 enemy.impactDone = false;
                 // The whole clip spans the attack time, so its strike meets attackImpactFraction
-                const auto own = clips_.attacks.find(type.key);
-                const ClipInfo clip = own != clips_.attacks.end() ? own->second : ClipInfo{ clips_.attack, clips_.attackSeconds };
+                const auto own = ClipsOf(enemy).attacks.find(type.key);
+                const ClipInfo clip = own != ClipsOf(enemy).attacks.end() ? own->second : ClipInfo{ ClipsOf(enemy).attack, ClipsOf(enemy).attackSeconds };
                 enemy.animator.Play(clip.id, false, clip.seconds / type.attackTimeSeconds, true, 0.1f);
                 break;
             }
             case EnemyState::Staggered:
-                enemy.animator.Play(clips_.hit, false, clips_.hitSeconds / StaggerSeconds, true, 0.05f);
+                enemy.animator.Play(ClipsOf(enemy).hit, false, ClipsOf(enemy).hitSeconds / StaggerSeconds, true, 0.05f);
                 break;
             case EnemyState::Dead:
-                enemy.animator.Play(clips_.death, false, 1.0f, true, 0.1f);
+                enemy.animator.Play(ClipsOf(enemy).death, false, 1.0f, true, 0.1f);
                 break;
             }
         }
@@ -132,7 +137,7 @@ export namespace LB::Engine {
                     }
                 }
                 if (enemy.stateSeconds >= type.attackTimeSeconds) {
-                    enemy.recoverySeconds = type.attackRecoverySeconds;
+                    enemy.recoverySeconds = type.attackRecoverySeconds * (enemy.phaseTwo ? 0.5f : 1.0f);
                     Enter(enemy, EnemyState::Chasing);
                 }
                 return action;
@@ -165,7 +170,7 @@ export namespace LB::Engine {
                 enemy.position = MoveBody(enemy.position, away);
                 if (Distance(before, enemy.position) >= step * BackAwayProgress) {
                     TurnToward(enemy, away.x, away.y, dt);
-                    enemy.animator.Play(clips_.walk, true, speed / WalkAnimationSpeed);
+                    enemy.animator.Play(ClipsOf(enemy).walk, true, speed / WalkAnimationSpeed);
                     return EnemyAction::None;
                 }
                 enemy.position = before;   // cornered: stand and fight
@@ -180,14 +185,14 @@ export namespace LB::Engine {
                     Enter(enemy, EnemyState::Attacking);
                     return EnemyAction::None;
                 }
-                enemy.animator.Play(clips_.idle, true);
+                enemy.animator.Play(ClipsOf(enemy).idle, true);
                 return EnemyAction::None;
             }
 
             // Rooted: turn to face the player, but stay put
             if (speed <= 0.0f) {
                 TurnToward(enemy, dx, dy, dt);
-                enemy.animator.Play(clips_.idle, true);
+                enemy.animator.Play(ClipsOf(enemy).idle, true);
                 return EnemyAction::None;
             }
 
@@ -202,7 +207,7 @@ export namespace LB::Engine {
                 }
                 const auto waypoint = world_->NextWaypoint(enemy.position);
                 if (!waypoint) {
-                    enemy.animator.Play(clips_.idle, true);
+                    enemy.animator.Play(ClipsOf(enemy).idle, true);
                     return EnemyAction::None;
                 }
                 tx = waypoint->x - enemy.position.x;
@@ -212,7 +217,7 @@ export namespace LB::Engine {
             const float length = std::max(1e-4f, std::hypot(tx, ty));
             enemy.position = MoveBody(enemy.position, { tx / length * step, ty / length * step });
             TurnToward(enemy, tx, ty, dt);
-            enemy.animator.Play(clips_.walk, true, speed / WalkAnimationSpeed);
+            enemy.animator.Play(ClipsOf(enemy).walk, true, speed / WalkAnimationSpeed);
             return EnemyAction::None;
         }
 

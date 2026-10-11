@@ -121,6 +121,9 @@ namespace LB::Engine {
 
     // This step's spells: bursts boom (fire) or shatter, missiles ring where they land
     void GameEngine::PlaySpellSounds() {
+        for (const auto id : session_->encounter.GetPhaseChanges()) {
+            if (const auto* boss = session_->encounter.FindEnemy(id)) PlaySound(GameSound::LevelUp, boss->position);   // a toll: it grows stronger
+        }
         for (const auto& burst : session_->encounter.GetBursts()) {
             PlaySound(burst.damageType == LB::Combat::DamageType::Fire ? GameSound::FireBurst : GameSound::FrostBurst, burst.at);
         }

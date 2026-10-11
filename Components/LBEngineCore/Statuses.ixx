@@ -81,6 +81,23 @@ export namespace LB::Engine {
             });
         }
 
+        /// <summary>
+        /// Lift up to `count` hindrances (Debuff or Control statuses), oldest first
+        /// </summary>
+        void RemoveHindrances(std::int32_t count) {
+            for (auto it = active_.begin(); it != active_.end() && count > 0;) {
+                const auto& categories = it->definition->categories;
+                const bool hindrance = std::ranges::find(categories, "Debuff") != categories.end() || std::ranges::find(categories, "Control") != categories.end();
+                if (hindrance) {
+                    it = active_.erase(it);
+                    --count;
+                }
+                else {
+                    ++it;
+                }
+            }
+        }
+
         [[nodiscard]] const std::vector<ActiveStatus>& Active() const noexcept { return active_; }
 
         void Clear() noexcept { active_.clear(); }

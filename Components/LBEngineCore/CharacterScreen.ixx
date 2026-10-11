@@ -4,6 +4,7 @@ export module LB.Engine:CharacterScreen;
 import std;
 import LB.Core;
 import LB.Combat;
+import LB.RenderingSystem;
 import :Loot;
 
 export namespace LB::Engine {
@@ -32,6 +33,7 @@ export namespace LB::Engine {
         LB::AttributeType attribute{LB::AttributeType::Strength};
         ItemRef item{};
         LB::Combat::EquipmentSlot slot{LB::Combat::EquipmentSlot::None};
+        std::optional<Systems::Rendering::Color> color;   // a rolled item's rarity color
 
         [[nodiscard]] bool IsSelectable() const noexcept { return action != ScreenAction::None; }
     };

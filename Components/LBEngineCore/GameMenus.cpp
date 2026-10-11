@@ -98,6 +98,8 @@ namespace LB::Engine {
             return {
                 { "Warrior", MenuCommand::PlayWarrior, true, "sword and bow" },
                 { "Mage", MenuCommand::PlayMage, true, "wand and spells" },
+                { "Rogue", MenuCommand::PlayRogue, true, "dagger, bow, and stealth" },
+                { "Cleric", MenuCommand::PlayCleric, true, "mace, shield, and healing" },
                 { "Back", MenuCommand::Back },
             };
         default:
@@ -166,7 +168,11 @@ namespace LB::Engine {
             break;
         case MenuCommand::PlayWarrior:
         case MenuCommand::PlayMage:
-            options_.playerClass = command == MenuCommand::PlayMage ? LB::Character::CharacterClass::Mage : LB::Character::CharacterClass::Warrior;
+        case MenuCommand::PlayRogue:
+        case MenuCommand::PlayCleric:
+            options_.playerClass = command == MenuCommand::PlayMage ? LB::Character::CharacterClass::Mage
+                                 : command == MenuCommand::PlayRogue ? LB::Character::CharacterClass::Rogue
+                                 : command == MenuCommand::PlayCleric ? LB::Character::CharacterClass::Cleric : LB::Character::CharacterClass::Warrior;
             StartRun();
             CloseMenu();
             break;

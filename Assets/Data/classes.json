@@ -86,7 +86,7 @@
       { "level": 20, "hpGain": 10, "mpGain": 3, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
     ],
     "startingWeapon": "weapon_sword_rusted_shortsword_t1",
-    "startingItems": ["weapon_bow_worn_shortbow_t1"]
+    "startingItems": ["weapon_bow_worn_shortbow_t1", "consumable_ammo_arrow:30"]
   },
   {
     "id": "class_rogue",
@@ -146,7 +146,7 @@
       "Crossbow": 1,
       "Wand": -1
     },
-    "spellSchools": [],
+    "spellSchools": ["Utility"],
     "signatureAbilities": [
       "Sneak Attack",
       "Evasion",
@@ -173,7 +173,12 @@
       { "level": 18, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
       { "level": 19, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
       { "level": 20, "hpGain": 7, "mpGain": 5, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
-    ]
+    ],
+    "spellBar": ["spell_utility_evasion_l1", "spell_utility_shadowstep_l1"],
+    "manaRegenPerSecond": 1.5,
+    "startingWeapon": "weapon_dagger_rusted_dagger_t1",
+    "startingItems": ["weapon_bow_worn_shortbow_t1", "consumable_ammo_arrow:40"],
+    "sneakAttackDice": "2d6"
   },
   {
     "id": "class_mage",
@@ -360,6 +365,11 @@
       { "level": 18, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 0 },
       { "level": 19, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
       { "level": 20, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
-    ]
+    ],
+    "spellBar": ["spell_holy_smite_l1", "spell_holy_divine_light_l1", "spell_holy_minor_cure_l1", "spell_holy_turn_undead_l2"],
+    "manaRegenPerSecond": 2.0,
+    "spellPowerBase": 2,
+    "startingWeapon": "weapon_mace_iron_mace_t1",
+    "startingItems": ["armor_shield_wooden_shield_t1"]
   }
 ]

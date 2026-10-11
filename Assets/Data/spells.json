@@ -368,7 +368,7 @@
     "categories": ["Heal"],
     "requiredClass": "Cleric",
     "requiredLevel": 1,
-    "manaCost": 12,
+    "manaCost": 10,
     "castTimeSeconds": 0.8,
     "cooldownSeconds": 2.0,
     "range": 8.0,
@@ -390,7 +390,8 @@
     "range": 6.0,
     "baseHeal": 8,
     "powerCoefficient": 0.5,
-    "notes": "Removes one minor debuff on cast"
+    "notes": "Removes one minor debuff on cast",
+    "cleansesStatuses": 1
   },
   {
     "id": "spell_holy_radiant_surge_l2",
@@ -615,7 +616,8 @@
     "baseDamage": 12,
     "powerCoefficient": 0.8,
     "damageType": "Necrotic",
-    "appliedStatusIds": ["status_slow_basic"]
+    "appliedStatusIds": ["status_slow_basic"],
+    "projectileSpeed": 10.0
   },
   {
     "id": "spell_shadow_curse_of_frailty_l3",
@@ -717,5 +719,35 @@
     "cooldownSeconds": 20.0,
     "durationSeconds": 12.0,
     "notes": "Temporary HP buffer"
+  },
+  {
+    "id": "spell_utility_evasion_l1",
+    "name": "Evasion",
+    "school": "Utility",
+    "level": 1,
+    "categories": ["Utility"],
+    "requiredClass": "Rogue",
+    "requiredLevel": 1,
+    "manaCost": 4,
+    "castTimeSeconds": 0.0,
+    "cooldownSeconds": 5.0,
+    "dashTiles": 3.0,
+    "evadeSeconds": 0.5,
+    "notes": "A quick roll: no attack touches the rogue during it"
+  },
+  {
+    "id": "spell_utility_shadowstep_l1",
+    "name": "Shadowstep",
+    "school": "Utility",
+    "level": 1,
+    "categories": ["Utility"],
+    "requiredClass": "Rogue",
+    "requiredLevel": 1,
+    "manaCost": 5,
+    "castTimeSeconds": 0.2,
+    "cooldownSeconds": 8.0,
+    "range": 8.0,
+    "teleportBehindTarget": true,
+    "notes": "Out of the shadows behind an enemy: the next blow is a sneak attack"
   }
 ]

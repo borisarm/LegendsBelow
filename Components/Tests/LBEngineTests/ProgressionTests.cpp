@@ -157,13 +157,15 @@ TEST(GameEngineProgressTests, BagFull_ItemStaysOnTheFloor) {
     GameEngine engine;
     InitializeForCombat(engine);
     for (int i = 0; i < GameEngine::BagCapacity; ++i) engine.GiveItem("armor_head_leather_cap_t1");
-    for (int i = 0; i < 100 && std::ranges::none_of(engine.GetGroundItems(), [](const GroundItem& g) { return !g.IsGold(); }); ++i) {
+    // A piece of gear (potions and arrows would join the stacks already in the bag)
+    const auto gear = [&](const GroundItem& g) { return !g.IsGold() && engine.GetItemRolls().BaseOf(g.item).kind != ItemKind::Consumable; };
+    for (int i = 0; i < 100 && std::ranges::none_of(engine.GetGroundItems(), gear); ++i) {
         engine.DropLoot("loot_skeleton_minion", { 0.0f, 0.0f });
     }
 
     RunSteps(engine, 2);
 
-    EXPECT_TRUE(std::ranges::any_of(engine.GetGroundItems(), [](const GroundItem& g) { return !g.IsGold() && g.fullWarningShown; }));
+    EXPECT_TRUE(std::ranges::any_of(engine.GetGroundItems(), [&](const GroundItem& g) { return gear(g) && g.fullWarningShown; }));
 }
 
 TEST(GameEngineProgressTests, EquipWeapon_ChangesTheAttack) {

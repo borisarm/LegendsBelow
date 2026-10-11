@@ -430,7 +430,7 @@ export namespace LB::Systems::Rendering {
         /// drive joints by name, so they play on any skinned model with the same joint names.
         /// Loading the same file twice returns the same clips.
         /// </summary>
-        AnimationLoadResult LoadAnimations(const std::filesystem::path& path);
+        AnimationLoadResult LoadAnimations(const std::filesystem::path& path, std::string_view prefix = {});
 
         /// <summary>
         /// A loaded clip by handle, or null
@@ -476,6 +476,13 @@ export namespace LB::Systems::Rendering {
         /// <summary>
         /// Project a world point to the screen through the current camera
         /// </summary>
+        /// <summary>
+        /// The floor point under a screen pixel (the mouse), for this frame's camera
+        /// </summary>
+        [[nodiscard]] std::optional<Vector3> ScreenToFloor(float x, float y) const noexcept {
+            return IsometricCamera::ScreenToFloor(cameraView_, x, y, static_cast<float>(screenWidth_), static_cast<float>(screenHeight_));
+        }
+
         [[nodiscard]] ScreenPoint WorldToScreen(Vector3 point) const noexcept {
             return IsometricCamera::WorldToScreen(cameraView_, point, static_cast<float>(screenWidth_), static_cast<float>(screenHeight_));
         }

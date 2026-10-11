@@ -202,6 +202,8 @@ namespace LB::Engine {
         assets_.models.corner = load(CornerModel);
         assets_.models.player = load(PlayerModel);
         assets_.models.mage = load(MageModel);
+        assets_.models.rogue = load(RogueModel);
+        assets_.models.cleric = load(ClericModel);
         assets_.models.playerWeapon = load(PlayerWeaponModel);
         assets_.characterModels.clear();
 
@@ -228,6 +230,10 @@ namespace LB::Engine {
 
         for (const auto file : AnimationFiles) {
             const auto result = renderingSystem_.LoadAnimations(directory / file);
+            if (!result.Succeeded()) errors.push_back(result.error);
+        }
+        for (const auto file : LargeAnimationFiles) {
+            const auto result = renderingSystem_.LoadAnimations(directory / file, LargeClipPrefix);
             if (!result.Succeeded()) errors.push_back(result.error);
         }
         if (errors.empty()) {
@@ -306,14 +312,27 @@ namespace LB::Engine {
         player.death = info("Death_A");
         player.castLoop = info("Ranged_Magic_Spellcasting");
         player.castRelease = info("Ranged_Magic_Shoot");
+        player.dodge = info("Dodge_Forward");
+
+        // The large rig's clips (the golem's): no rising clip, it stands up idle
+        auto large = std::make_shared<EnemyClips>();
+        const std::string prefix(LargeClipPrefix);
+        large->idle = clip(prefix + "Idle_A");
+        large->walk = clip(prefix + "Walking_A", &large->walkSeconds);
+        large->attack = clip(prefix + "Melee_2H_Attack", &large->attackSeconds);
+        large->hit = clip(prefix + "Hit_A", &large->hitSeconds);
+        large->death = clip(prefix + "Death_A");
+        large->spawn = large->idle;
 
         assets_.enemyClips.attacks.clear();
         for (const auto& enemy : content_->GetEnemies()) {
             if (enemy.attackAnimation.empty()) continue;
+            const bool onLarge = enemy.rig == "Large";
             ClipInfo attack{};
-            attack.id = clip(enemy.attackAnimation, &attack.seconds);
-            assets_.enemyClips.attacks.emplace(enemy.key, attack);
+            attack.id = clip((onLarge ? prefix : std::string{}) + enemy.attackAnimation, &attack.seconds);
+            (onLarge ? large->attacks : assets_.enemyClips.attacks).emplace(enemy.key, attack);
         }
+        assets_.enemyClips.large = std::move(large);
     }
 
     bool GameEngine::LoadContent(const std::string& contentDirectory) {
@@ -481,6 +500,14 @@ namespace LB::Engine {
         attackMouse.deviceType = Systems::Input::InputDevice::Mouse;
         attackMouse.mouseButton = Systems::Input::MouseButton::Left;
         inputSystem_.RegisterAction(attackMouse);
+        RegisterKeyBinding(TacticalPauseAction, Systems::Input::Keys::Tab);
+        RegisterGamepadBinding(TacticalPauseAction, Systems::Input::GamepadButton::LeftThumb);
+        Systems::Input::InputAction order{};
+        order.name = std::string(OrderAction);
+        order.deviceType = Systems::Input::InputDevice::Mouse;
+        order.mouseButton = Systems::Input::MouseButton::Right;
+        inputSystem_.RegisterAction(order);
+
         Systems::Input::InputAction attackGamepad{};
         attackGamepad.name = std::string(AttackAction);
         attackGamepad.deviceType = Systems::Input::InputDevice::Gamepad;

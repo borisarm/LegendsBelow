@@ -112,6 +112,13 @@ export namespace LB::Engine {
         static constexpr std::string_view MapAction = "Map";
         static constexpr std::string_view MenuLeftAction = "MenuLeft";
         static constexpr std::string_view MenuRightAction = "MenuRight";
+        // The tactical pause (design-combat-system.md 2.1): Tab, gamepad left stick click
+        static constexpr std::string_view TacticalPauseAction = "TacticalPause";
+        // Orders: right click (the secondary action, design-ui-ux-and-audio.md 4.1); the target
+        // under the mouse is the enemy whose body is this close to the floor point under it
+        static constexpr std::string_view OrderAction = "Order";
+        static constexpr float PickRadius = 0.8f;
+        static constexpr float ArriveTiles = 0.25f;             // a move order is done this close
         // The spell bar's slots (keys 1-4; gamepad LB, RB, Y, B)
         static constexpr std::array<std::string_view, 4> SpellActions = { "Spell1", "Spell2", "Spell3", "Spell4" };
         static constexpr std::size_t SpellSlots = SpellActions.size();
@@ -141,6 +148,12 @@ export namespace LB::Engine {
         // clips), at the enemies' scale, holding the equipped weapon (and shield) in its hand slots
         static constexpr std::string_view PlayerModel = "Knight.glb";
         static constexpr std::string_view MageModel = "Mage.glb";
+        static constexpr std::string_view RogueModel = "Rogue_Hooded.glb";
+        static constexpr std::string_view ClericModel = "Cleric.gltf";   // the knight in its gold texture (knight_texture_alt_B)
+        // After a shadowstep, blows within this long are sneak attacks
+        static constexpr float SneakWindowSeconds = 2.0f;
+        // Struck from behind (flanked): from more than ~105 degrees off the way the enemy faces
+        static constexpr float FlankCosine = -0.25f;
         static constexpr float PlayerModelScale = 0.42f;
         // The sword lying on the floor as loot (the knight holds HeldModels)
         static constexpr std::string_view PlayerWeaponModel = "sword_common.glb";
@@ -162,9 +175,13 @@ export namespace LB::Engine {
             "lootSackA.glb", "coinsSmall.glb", "coinsMedium.glb", "coinsLarge.glb", "axe_common.glb",
             "dagger_common.glb", "hammer_common.glb", "staff_common.glb", "crossbow_common.glb", "shield_common.glb" };
         // Animation sets of the skinned characters (KayKit Rig_Medium), in the model directory
-        static constexpr std::array<std::string_view, 4> AnimationFiles = {
+        static constexpr std::array<std::string_view, 5> AnimationFiles = {
             "Animations/Rig_Medium_General.glb", "Animations/Rig_Medium_MovementBasic.glb", "Animations/Rig_Medium_CombatMelee.glb",
-            "Animations/Rig_Medium_CombatRanged.glb" };
+            "Animations/Rig_Medium_CombatRanged.glb", "Animations/Rig_Medium_MovementAdvanced.glb" };
+        // Rig_Large animation sets (the golem's), loaded with clip names under "Large/"
+        static constexpr std::array<std::string_view, 3> LargeAnimationFiles = {
+            "Animations/Rig_Large_General.glb", "Animations/Rig_Large_MovementBasic.glb", "Animations/Rig_Large_CombatMelee.glb" };
+        static constexpr std::string_view LargeClipPrefix = "Large/";
         // Run cycles are authored for this ground speed (tiles per second, at PlayerModelScale)
         static constexpr float RunAnimationSpeed = 4.0f;
 
@@ -175,6 +192,10 @@ export namespace LB::Engine {
         static constexpr std::string_view HeavyEnemy = "enemy_skeleton_warrior";
         static constexpr std::string_view RangedEnemy = "enemy_skeleton_rogue";
         static constexpr std::string_view CasterEnemy = "enemy_skeleton_mage";
+        static constexpr std::string_view BruteEnemy = "enemy_skeleton_golem";
+        static constexpr std::string_view BossEnemy = "enemy_necromancer";
+        // A boss guards the exit at the end of each tier of floors (design-dungeon-and-world.md 7.1-7.2)
+        static constexpr std::int32_t BossFloorInterval = 3;
         static constexpr float PlayerReach = 1.4f;              // tiles between centers
         // A bow or crossbow shot leaves this far through the attack time (drawn, or aimed); the
         // player stands still until then
@@ -503,9 +524,10 @@ export namespace LB::Engine {
             const auto& attributes = character->get().GetAttributes();
             const std::int32_t modifier = weapon.attributeScale == "DEX" ? attributes.GetDexterityModifier()
                                         : weapon.attributeScale == "STR" ? attributes.GetStrengthModifier() : 0;
-            attack.attackBonus = session_->characterService.GetAttackBonus(*session_->playerId, weapon.category).value_or(0);
+            const auto bonuses = EquippedBonuses();
+            attack.attackBonus = session_->characterService.GetAttackBonus(*session_->playerId, weapon.category).value_or(0) + bonuses.attackBonus;
             attack.damageDice = weapon.damageDice;
-            attack.damageBonus = weapon.damageBonus + static_cast<std::int32_t>(std::lround(static_cast<float>(modifier) * weapon.scaleFactor));
+            attack.damageBonus = weapon.damageBonus + static_cast<std::int32_t>(std::lround(static_cast<float>(modifier) * weapon.scaleFactor)) + bonuses.damage;
             attack.damageType = weapon.damageTypes.empty() ? LB::Combat::DamageType::Slashing : weapon.damageTypes.front();
             attack.critRangeMin = weapon.critRangeMin;
             attack.critMultiplier = weapon.critMultiplier;
@@ -528,6 +550,9 @@ export namespace LB::Engine {
                     defense.physicalArmor += armor->physicalAR + armor->armorBonus;
                 }
             }
+            const auto bonuses = EquippedBonuses();
+            defense.armorClass += bonuses.armorClass;
+            defense.physicalArmor += bonuses.armor;
             return defense;
         }
 
@@ -547,6 +572,56 @@ export namespace LB::Engine {
         /// How many of an item (by content key) the bag holds
         /// </summary>
         [[nodiscard]] std::int32_t CountItem(std::string_view key) const;
+
+        /// <summary>
+        /// What the equipped weapon and armour add (their affixes)
+        /// </summary>
+        [[nodiscard]] ItemBonuses EquippedBonuses() const;
+
+        /// <summary>
+        /// An item's name (a rolled one's, with its affixes)
+        /// </summary>
+        [[nodiscard]] std::string ItemName(ItemRef item) const;
+
+        /// <summary>
+        /// The run's rolled items (a Rolled ItemRef's rarity and affixes)
+        /// </summary>
+        [[nodiscard]] const ItemRolls& GetItemRolls() const noexcept { return session_->rolls; }
+
+        /// <summary>
+        /// The equipped weapon as an item (rolled or not)
+        /// </summary>
+        [[nodiscard]] ItemRef GetPlayerWeaponItem() const noexcept { return session_->playerWeaponItem; }
+
+        /// <summary>
+        /// Ammunition of a type in the bag (arrows for "Arrow")
+        /// </summary>
+        [[nodiscard]] std::int32_t AmmoCount(std::string_view ammoType) const;
+
+        /// <summary>
+        /// What the player was told to do (design-combat-system.md 2.1: orders given during the
+        /// tactical pause are carried out when it ends): walk to a point, go after an enemy and
+        /// attack it until it falls, or cast a spell at one once in range
+        /// </summary>
+        enum class OrderKind { None, Move, Attack, Cast };
+        struct PlayerOrder {
+            OrderKind kind{OrderKind::None};
+            WorldPoint point{};                       // Move
+            std::optional<std::uint32_t> target;      // Attack, Cast (empty Cast: straight ahead)
+            std::size_t slot{0};                      // Cast
+        };
+
+        [[nodiscard]] const PlayerOrder& GetPlayerOrder() const noexcept { return session_->order; }
+
+        /// <summary>
+        /// The enemy the orders would be about: under the mouse, or picked with the d-pad while paused
+        /// </summary>
+        [[nodiscard]] std::optional<std::uint32_t> GetPickedEnemy() const noexcept { return session_->picked; }
+
+        /// <summary>
+        /// Paused with Tab (or the left stick click): no menu, the game waits for orders
+        /// </summary>
+        [[nodiscard]] bool IsTacticallyPaused() const noexcept { return session_->paused && !menu_.IsOpen(); }
 
         /// <summary>
         /// The hero's class this run
@@ -609,10 +684,20 @@ export namespace LB::Engine {
         std::int32_t GiveItem(std::string_view key, std::int32_t quantity = 1);
 
         /// <summary>
+        /// Put an item (rolled or not) in the bag; returns how many fit
+        /// </summary>
+        std::int32_t GiveItemRef(ItemRef item, std::int32_t quantity = 1);
+
+        /// <summary>
         /// Equip a weapon or armour piece from the bag (what was in its slot goes back to the bag).
         /// Fails for items not in the bag, not usable by the player's class, or above their level.
         /// </summary>
         bool EquipItem(std::string_view key);
+
+        /// <summary>
+        /// Equip an item from the bag (rolled or not): what it replaces goes back to the bag
+        /// </summary>
+        bool EquipItemRef(ItemRef item);
 
         /// <summary>
         /// Take an armour piece off into the bag (fails when the bag is full)
@@ -717,13 +802,20 @@ export namespace LB::Engine {
         void UpdateCameraControls();
         void UpdatePlayerCombat(float elapsedSeconds);
         void UpdatePlayerCasting(float elapsedSeconds);
-        void StartCast(std::size_t slot);
+        void StartCast(std::size_t slot, std::optional<std::uint32_t> target = std::nullopt);
         void ReleaseCast();
         void CancelCast();
         void UpdatePlayerStatuses(float elapsedSeconds);
         void ApplySpellStatusesToPlayer(const Content::SpellDefinition& spell);
         const Content::ClassDefinition* PlayerClassDefinition() const;
-        void StartPlayerAttack();
+        Services::Combat::WeaponAttackProfile PlayerAttackAgainst(const Enemy* target) const;
+        void HealPlayer(std::int32_t amount);
+        void StartPlayerAttack(std::optional<std::uint32_t> aim = std::nullopt);
+        void UpdateOrders();
+        void FollowOrder();
+        std::optional<WorldPoint> OrderStep() const;
+        bool OrderTargetInReach(const Enemy& target) const;
+        void DrawOrderMarks();
         void ReleasePlayerAttack();
         void AnimatePlayer(float elapsedSeconds, bool moving);
         void MovePlayer(float elapsedSeconds);
@@ -804,6 +896,11 @@ export namespace LB::Engine {
         void WriteProgress(Systems::Persistence::SaveData& data) const;
         void ReadProgress(const Systems::Persistence::SaveData& data);
         std::string CanEquip(ItemRef item) const;
+        std::string ItemSaveKey(ItemRef item) const;
+        ItemRef ItemFromSaveKey(std::string_view text);
+        std::optional<Systems::Rendering::Color> RarityColorOf(ItemRef item) const;
+        bool SpendAmmo(std::string_view ammoType);
+        ItemRef RollDrop(ItemRef item);
 
         // The player's character; null before Initialize, without class content, or if it is gone
         [[nodiscard]] const LB::Character::Character* PlayerCharacter() const {
@@ -840,6 +937,8 @@ export namespace LB::Engine {
             Systems::Rendering::ModelId corner{};
             Systems::Rendering::ModelId player{};           // the knight (Warrior)
             Systems::Rendering::ModelId mage{};
+            Systems::Rendering::ModelId rogue{};
+            Systems::Rendering::ModelId cleric{};
             Systems::Rendering::ModelId playerWeapon{};
         };
 
@@ -866,6 +965,7 @@ export namespace LB::Engine {
             ClipInfo death;
             ClipInfo castLoop;      // a spell being cast
             ClipInfo castRelease;   // the spell leaving (and a wand's shot)
+            ClipInfo dodge;         // a rogue's evasion
         };
 
         struct Assets {
@@ -914,10 +1014,17 @@ export namespace LB::Engine {
             PlayerCombat playerCombat;
             Animator playerAnimator;
             PlayerCasting casting;
+            PlayerOrder order;
+            std::optional<std::uint32_t> picked;     // under the mouse, or cycled to while paused
             std::array<float, SpellSlots> spellCooldowns{};
             float manaCarry{0.0f};                   // regenerated mana not yet a whole point
+            float evadeSeconds{0.0f};                // no attack touches the player (an evasion)
+            float sneakWindowSeconds{0.0f};          // blows are sneak attacks (after a shadowstep)
             StatusSet playerStatuses;
             const Content::WeaponDefinition* playerWeapon{nullptr};   // into content_, which outlives the session
+            ItemRef playerWeaponItem{};              // the equipped weapon as an item (rolled or not)
+            std::map<LB::Combat::EquipmentSlot, ItemRef> wornItems;   // the equipped armour as items
+            ItemRolls rolls;                         // rolled items of this run
             Services::Inventory::InventoryService inventoryService;
             std::int32_t gold{0};
             std::vector<GroundItem> groundItems;

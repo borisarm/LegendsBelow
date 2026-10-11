@@ -51,11 +51,13 @@ export namespace LB::Engine {
         /// encounter's use of it)
         /// </summary>
         void Configure(const Content::EnemyDefinition* light, const Content::EnemyDefinition* heavy, const WorldMap& world,
-                       const Content::EnemyDefinition* ranged = nullptr, const Content::EnemyDefinition* caster = nullptr) {
+                       const Content::EnemyDefinition* ranged = nullptr, const Content::EnemyDefinition* caster = nullptr,
+                       const Content::EnemyDefinition* brute = nullptr) {
             light_ = light;
             heavy_ = heavy;
             ranged_ = ranged;
             caster_ = caster;
+            brute_ = brute;
             world_ = &world;
             behavior_.SetWorld(&world);
         }
@@ -89,6 +91,8 @@ export namespace LB::Engine {
 
         [[nodiscard]] static std::int32_t WaveCasters(std::int32_t wave) noexcept { return Waves::Casters(wave); }
 
+        [[nodiscard]] static std::int32_t WaveBrutes(std::int32_t wave) noexcept { return Waves::Brutes(wave); }
+
         /// <summary>
         /// Start a wave: its enemies rise at random spots at least MinimumSpawnDistance from the player
         /// </summary>
@@ -97,9 +101,11 @@ export namespace LB::Engine {
             waveTimerSeconds_ = 0.0f;
             if (!light_) return;
 
+            // A wave is one group: they notice the player together
+            const auto group = NextGroup();
             const auto spawnFacingPlayer = [&](const Content::EnemyDefinition& type) {
                 const auto at = Waves::WaveSpawnPoint(world_, player, enemies_, rng_);
-                Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, wave);
+                Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, wave, group);
             };
             const auto [lightCount, heavyCount] = Waves::Composition(wave);
             for (std::int32_t i = 0; i < heavyCount; ++i) spawnFacingPlayer(heavy_ ? *heavy_ : *light_);
@@ -110,13 +116,17 @@ export namespace LB::Engine {
             if (caster_) {
                 for (std::int32_t i = 0; i < Waves::Casters(wave); ++i) spawnFacingPlayer(*caster_);
             }
+            if (brute_) {
+                for (std::int32_t i = 0; i < Waves::Brutes(wave); ++i) spawnFacingPlayer(*brute_);
+            }
         }
 
         /// <summary>
         /// Add one enemy at a point, facing a yaw, as tough as a wave makes it. Without rising (the
         /// spawn animation) it is ready at once (tests, scripted placements).
         /// </summary>
-        std::uint32_t Spawn(const Content::EnemyDefinition& type, WorldPoint at, float facingYaw, bool rise = true, std::int32_t wave = 1) {
+        std::uint32_t Spawn(const Content::EnemyDefinition& type, WorldPoint at, float facingYaw, bool rise = true, std::int32_t wave = 1,
+                            std::uint32_t group = 0) {
             const auto scaling = Waves::ScalingFor(wave);
             Enemy enemy;
             enemy.id = nextId_++;
@@ -127,6 +137,9 @@ export namespace LB::Engine {
             enemy.hitPoints = enemy.maxHitPoints;
             enemy.bonusDamage = scaling.damage;
             enemy.experience = static_cast<std::int32_t>(std::lround(static_cast<float>(type.experience) * scaling.experience));
+            enemy.wave = wave;
+            enemy.group = group;
+            enemy.summonSeconds = type.summonCooldownSeconds * 0.5f;   // the first raising comes early
             behavior_.Enter(enemy, rise ? EnemyState::Spawning : EnemyState::Idle);
             enemies_.push_back(std::move(enemy));
             return enemies_.back().id;
@@ -142,7 +155,9 @@ export namespace LB::Engine {
             shots_.clear();
             wallHits_.clear();
             bursts_.clear();
+            phaseChanges_.clear();
             behavior_.BeginStep();
+            AlertGroups();
             for (auto& enemy : enemies_) {
                 UpdateStatuses(enemy, elapsedSeconds, events);
                 switch (behavior_.Update(enemy, elapsedSeconds, player)) {
@@ -161,6 +176,7 @@ export namespace LB::Engine {
                 behavior_.Separate(enemies_, player);
             }
             UpdateProjectiles(elapsedSeconds, player, events);
+            UpdateSummoners(elapsedSeconds, player);
 
             std::erase_if(enemies_, [](const Enemy& e) { return e.IsDead() && e.stateSeconds >= CorpseSeconds; });
 
@@ -184,7 +200,7 @@ export namespace LB::Engine {
             if (!world_) return ids;
             for (std::int32_t i = 0; i < count; ++i) {
                 const auto at = Waves::RoomSpawnPoint(*world_, room, player, enemies_, CharacterRadius, rng_);
-                ids.push_back(Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, depth));
+                ids.push_back(Spawn(type, at, std::atan2(player.x - at.x, player.y - at.y), true, depth, RoomGroup(room)));
             }
             return ids;
         }
@@ -236,6 +252,15 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// A spell striking an enemy at once (the player's smite); null when it is gone
+        /// </summary>
+        std::optional<CombatEvent> StrikeWithSpell(const SpellPayload& payload, std::uint32_t id) {
+            auto* enemy = Find(id);
+            if (!enemy || !enemy->IsTargetable()) return std::nullopt;
+            return SpellHit(*enemy, payload);
+        }
+
+        /// <summary>
         /// A spell bursting around a point (the player's frost nova): every enemy within its radius
         /// takes it. Returns the hits.
         /// </summary>
@@ -249,6 +274,11 @@ export namespace LB::Engine {
         /// Where spells burst in the last Update (and the last CastBurst)
         /// </summary>
         [[nodiscard]] const std::vector<SpellBurst>& GetBursts() const noexcept { return bursts_; }
+
+        /// <summary>
+        /// Bosses that turned to their second phase in the last Update
+        /// </summary>
+        [[nodiscard]] const std::vector<std::uint32_t>& GetPhaseChanges() const noexcept { return phaseChanges_; }
 
         /// <summary>
         /// The player's shot: an arrow or bolt leaving `from` (it starts just outside the shooter's
@@ -299,7 +329,7 @@ export namespace LB::Engine {
                     event.killed = true;
                     behavior_.Enter(enemy, EnemyState::Dead);
                 }
-                else if (enemy.state != EnemyState::Attacking) {
+                else if (enemy.state != EnemyState::Attacking && !enemy.definition->staggerImmune) {
                     behavior_.Enter(enemy, EnemyState::Staggered);
                 }
             }
@@ -445,6 +475,69 @@ export namespace LB::Engine {
             }
         }
 
+        // A room's group (rooms come first; waves draw new ones after them)
+        static std::uint32_t RoomGroup(std::int32_t room) noexcept { return static_cast<std::uint32_t>(room) + 1; }
+
+        std::uint32_t NextGroup() noexcept { return nextGroup_++; }
+
+        // Design-combat-system.md 9.3 (group dynamics): when one of a group notices the player, the
+        // rest come too
+        void AlertGroups() {
+            std::vector<std::uint32_t> alerted;
+            for (const auto& enemy : enemies_) {
+                if (enemy.group != 0 && (enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking || enemy.state == EnemyState::Staggered)) {
+                    alerted.push_back(enemy.group);
+                }
+            }
+            if (alerted.empty()) return;
+            for (auto& enemy : enemies_) {
+                if (enemy.state == EnemyState::Idle && std::ranges::find(alerted, enemy.group) != alerted.end()) behavior_.Enter(enemy, EnemyState::Chasing);
+            }
+        }
+
+        // Summoners raise enemies around them while fighting (twice as often in their second
+        // phase); a boss turns to its second phase below its phase-two health; what a summoner
+        // raised crumbles when it falls
+        void UpdateSummoners(float elapsedSeconds, const PlayerTarget& player) {
+            struct Raise { const Content::EnemyDefinition* type; WorldPoint at; std::int32_t wave; std::uint32_t group; std::uint32_t summoner; };
+            std::vector<Raise> raises;
+            for (auto& enemy : enemies_) {
+                const auto& type = *enemy.definition;
+                if (enemy.IsDead() || enemy.state == EnemyState::Spawning) continue;
+                if (!enemy.phaseTwo && type.phaseTwoHealthFraction > 0.0f && enemy.hitPoints <= static_cast<float>(enemy.maxHitPoints) * type.phaseTwoHealthFraction) {
+                    enemy.phaseTwo = true;
+                    enemy.summonSeconds = 0.0f;   // it raises at once
+                    phaseChanges_.push_back(enemy.id);
+                }
+                const auto* summoned = type.summon.empty() || !content_ ? nullptr : content_->FindEnemy(type.summon);
+                const bool fighting = enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking || enemy.state == EnemyState::Staggered;
+                if (!summoned || !fighting || !player.alive) continue;
+                enemy.summonSeconds -= elapsedSeconds;
+                if (enemy.summonSeconds > 0.0f) continue;
+                enemy.summonSeconds = type.summonCooldownSeconds * (enemy.phaseTwo ? 0.5f : 1.0f);
+
+                const auto alive = std::ranges::count_if(enemies_, [&](const Enemy& e) { return e.summoner == enemy.id && !e.IsDead(); });
+                const auto count = std::min<std::int64_t>(type.summonCount, type.maxSummons - alive);
+                for (std::int64_t i = 0; i < count; ++i) {
+                    const float angle = std::uniform_real_distribution<float>(0.0f, 2.0f * std::numbers::pi_v<float>)(rng_);
+                    WorldPoint at{ enemy.position.x + std::sin(angle) * 1.6f, enemy.position.y + std::cos(angle) * 1.6f };
+                    if (world_ && !world_->CircleFits(at, CharacterRadius)) at = enemy.position;
+                    raises.push_back({ summoned, at, enemy.wave, enemy.group, enemy.id });
+                }
+                if (count > 0) bursts_.push_back({ enemy.position, 1.8f, Services::Combat::DamageType::Shadow });
+            }
+            for (const auto& raise : raises) {
+                const auto id = Spawn(*raise.type, raise.at, std::atan2(player.position.x - raise.at.x, player.position.y - raise.at.y), true, raise.wave, raise.group);
+                Find(id)->summoner = raise.summoner;
+            }
+
+            for (auto& enemy : enemies_) {
+                if (enemy.summoner == 0 || enemy.IsDead()) continue;
+                const auto* master = FindEnemy(enemy.summoner);
+                if (!master || master->IsDead()) behavior_.Enter(enemy, EnemyState::Dead);
+            }
+        }
+
         void ApplyStatuses(StatusSet& statuses, const Content::SpellDefinition* spell) const {
             if (!spell || !content_) return;
             for (const auto& key : spell->appliedStatusIds) {
@@ -482,6 +575,9 @@ export namespace LB::Engine {
         const Content::EnemyDefinition* heavy_{nullptr};
         const Content::EnemyDefinition* ranged_{nullptr};
         const Content::EnemyDefinition* caster_{nullptr};
+        const Content::EnemyDefinition* brute_{nullptr};
+        std::uint32_t nextGroup_{1000};
+        std::vector<std::uint32_t> phaseChanges_;
         const Content::ContentDatabase* content_{nullptr};
         std::vector<SpellBurst> bursts_;
         const WorldMap* world_{nullptr};

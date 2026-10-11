@@ -98,6 +98,7 @@ export namespace LB::Services::Combat {
         DamageType damageType{DamageType::Slashing};
         std::int32_t critRangeMin{20};                  // natural rolls from this up to 20 crit (when they hit)
         float critMultiplier{1.5f};
+        LB::Dice extraDice{0, 6, 0};                    // rolled on a hit and added (a rogue's sneak attack); count 0: none
     };
 
     /// <summary>
@@ -119,6 +120,7 @@ export namespace LB::Services::Combat {
         std::int32_t totalRoll{0};                      // d20 + attack bonus
         std::int32_t rawDamage{0};                      // dice + bonus (x crit multiplier), before defenses
         std::int32_t finalDamage{0};                    // after armour and resistance; 0 on a miss
+        std::int32_t extraDamage{0};                    // of the raw damage, what the extra dice rolled
     };
 
     /// <summary>
@@ -236,6 +238,10 @@ export namespace LB::Services::Combat {
 
             result.critical = result.naturalRoll >= std::clamp(attack.critRangeMin, 2, 20);
             std::int32_t damage = std::max(0, RollDice(attack.damageDice) + attack.damageBonus);
+            if (attack.extraDice.count > 0) {
+                result.extraDamage = RollDice(attack.extraDice);
+                damage += result.extraDamage;
+            }
             if (result.critical) {
                 damage = static_cast<std::int32_t>(std::lround(static_cast<float>(damage) * std::max(1.0f, attack.critMultiplier)));
             }

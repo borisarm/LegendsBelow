@@ -290,6 +290,15 @@ namespace EngineTests {
             << engine.GetInitializationError();
     }
 
+    // Point the mouse at a floor point (through the last frame's camera) and right click it
+    inline void RightClickAt(GameEngine& engine, WorldPoint at) {
+        const auto screen = engine.GetRendering().WorldToScreen({ at.x, 0.0f, at.y });
+        engine.OnMouseMove(static_cast<std::int32_t>(std::lround(screen.x)), static_cast<std::int32_t>(std::lround(screen.y)));
+        engine.OnMouseButton(LB::Systems::Input::MouseButton::Right, true);
+        engine.Tick(OneSixtieth);
+        engine.OnMouseButton(LB::Systems::Input::MouseButton::Right, false);
+    }
+
     // A mage in the test arena, without waves
     inline void InitializeMage(GameEngine& engine) {
         ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{

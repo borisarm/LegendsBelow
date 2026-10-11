@@ -67,6 +67,7 @@ namespace LB::Engine {
         DrawPlayer(shade);
         DrawEnemies(shade);
         DrawProjectiles(shade);
+        DrawOrderMarks();
         DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
         DrawFloorProps(shade(1.0f, 1.0f, 1.0f));
         session_->torches.Draw(renderingSystem_, session_->walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
@@ -98,9 +99,34 @@ namespace LB::Engine {
         return 1.6f;
     }
 
+    // A ring of sparks under the picked enemy (gold), the order's target (red), and where a move
+    // order goes (green)
+    void GameEngine::DrawOrderMarks() {
+        const auto ring = [this](WorldPoint at, float radius, Systems::Rendering::Color color) {
+            constexpr int Sparks = 14;
+            for (int i = 0; i < Sparks; ++i) {
+                const float angle = static_cast<float>(i) / Sparks * 2.0f * std::numbers::pi_v<float>;
+                renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{
+                    { at.x + std::sin(angle) * radius, 0.06f, at.y + std::cos(angle) * radius }, 0.11f, color, true });
+            }
+        };
+        const auto& order = session_->order;
+        const auto* target = order.target ? session_->encounter.FindEnemy(*order.target) : nullptr;
+        if (target) ring(target->position, 0.45f, { 1.0f, 0.25f, 0.15f, 1.8f });
+        if (session_->picked && (!target || *session_->picked != target->id)) {
+            if (const auto* picked = session_->encounter.FindEnemy(*session_->picked)) ring(picked->position, 0.45f, { 1.0f, 0.75f, 0.25f, 1.6f });
+        }
+        if (order.kind == OrderKind::Move) ring(order.point, 0.3f, { 0.35f, 1.0f, 0.45f, 1.6f });
+    }
+
     // The hero's body: the knight, or the mage
     Systems::Rendering::ModelId GameEngine::PlayerBodyModel() const {
-        return session_->playerClass == LB::Character::CharacterClass::Mage ? assets_.models.mage : assets_.models.player;
+        switch (session_->playerClass) {
+        case LB::Character::CharacterClass::Mage: return assets_.models.mage;
+        case LB::Character::CharacterClass::Rogue: return assets_.models.rogue;
+        case LB::Character::CharacterClass::Cleric: return assets_.models.cleric;
+        default: return assets_.models.player;
+        }
     }
 
     /// <summary>
@@ -372,6 +398,12 @@ namespace LB::Engine {
                 player.pointsToSpend = character && character->get().GetUnspentAttributePoints() > 0;
                 const auto* classData = PlayerClassDefinition();
                 player.usesMana = classData && classData->resource == "Mana";
+                if (const auto* weapon = session_->playerWeapon; weapon && !weapon->ammoType.empty()) {
+                    const auto ammo = std::ranges::find(content_->GetConsumables(), weapon->ammoType, &Content::ConsumableDefinition::ammoType);
+                    std::string name = ammo != content_->GetConsumables().end() ? ammo->name : weapon->ammoType;
+                    std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+                    player.ammo = std::format("{} {}", name, AmmoCount(weapon->ammoType));
+                }
                 player.mana = status->currentManaPoints;
                 player.maxMana = status->maxManaPoints;
                 for (const auto& active : session_->playerStatuses.Active()) {
@@ -401,10 +433,27 @@ namespace LB::Engine {
             }
         }
         for (const auto& enemy : session_->encounter.GetEnemies()) {
+            const bool engaged = enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking || enemy.state == EnemyState::Staggered;
+            if (enemy.definition->boss && !enemy.IsDead() && engaged) {
+                hud.boss = HudModel::Boss{ enemy.definition->name, static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints), enemy.phaseTwo };
+                continue;   // its bar is across the top
+            }
             if (!enemy.IsTargetable() || enemy.hitPoints >= enemy.maxHitPoints) continue;
             hud.enemyBars.push_back({ { enemy.position.x, EnemyTop(enemy), enemy.position.y },
                                       static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints) });
         }
+        // The tactical pause and the order in hand
+        if (IsTacticallyPaused()) hud.hint = "PAUSED - right click or arrows + Space: target   1-4: cast at it   Tab: resume";
+        const auto& order = session_->order;
+        const auto* target = order.target ? session_->encounter.FindEnemy(*order.target) : nullptr;
+        if (order.kind == OrderKind::Move) hud.order = "Order: move";
+        else if (order.kind == OrderKind::Attack && target) hud.order = std::format("Order: attack {}", target->definition->name);
+        else if (order.kind == OrderKind::Cast) {
+            const auto bar = GetSpellBar();
+            const auto spell = order.slot < bar.size() ? bar[order.slot]->name : std::string("spell");
+            hud.order = target ? std::format("Order: {} at {}", spell, target->definition->name) : std::format("Order: {}", spell);
+        }
+
         if (session_->depth > 0) hud.banner = std::format("DEPTH {}", session_->depth);
         else if (session_->encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_->encounter.GetWave());
 

@@ -57,18 +57,38 @@ export namespace LB::Content {
         std::vector<String> scalingAttributes;
         String notes;
         float projectileSpeed{0.0f};                  // tiles per second of a bolt; 0: not a missile
+        float dashTiles{0.0f};                        // the caster rolls this far (a dodge)
+        float evadeSeconds{0.0f};                     // ... and no attack touches them this long
+        bool teleportBehindTarget{false};             // the caster steps behind the target (within range)
+        std::int32_t cleansesStatuses{0};             // hindrances (Debuff, Control) it removes from the caster
 
         /// <summary>
-        /// A missile (projectileSpeed, flying `range` tiles; with a radius it bursts where it
-        /// lands) or a burst around the caster (no range, a radius)
+        /// How it is cast: a missile (projectileSpeed, flying `range` tiles; with a radius it bursts
+        /// where it lands), a burst around the caster (no range, a radius), an instant strike on
+        /// a target in range (no speed, no radius), a burst at a target (range and radius), a heal
+        /// of the caster (healing, no damage), a dodge, or a step behind a target
         /// </summary>
         [[nodiscard]] bool IsMissile() const noexcept { return projectileSpeed > 0.0f && range > 0.0f; }
         [[nodiscard]] bool IsBurstAroundCaster() const noexcept { return projectileSpeed <= 0.0f && range <= 0.0f && radius > 0.0f; }
+        [[nodiscard]] bool IsTargetedStrike() const noexcept { return projectileSpeed <= 0.0f && range > 0.0f && radius <= 0.0f && baseDamage > 0 && !teleportBehindTarget; }
+        [[nodiscard]] bool IsTargetedBurst() const noexcept { return projectileSpeed <= 0.0f && range > 0.0f && radius > 0.0f; }
+        [[nodiscard]] bool IsHeal() const noexcept { return baseHeal > 0 && baseDamage <= 0; }
+        [[nodiscard]] bool IsDash() const noexcept { return dashTiles > 0.0f; }
+        [[nodiscard]] bool IsShadowstep() const noexcept { return teleportBehindTarget && range > 0.0f; }
 
         /// <summary>
-        /// The game can cast it: a damaging missile or burst (the other kinds are not built yet)
+        /// Needs an enemy to aim at (a strike, a burst at a target, a step behind one)
         /// </summary>
-        [[nodiscard]] bool IsCastable() const noexcept { return (IsMissile() || IsBurstAroundCaster()) && baseDamage > 0; }
+        [[nodiscard]] bool NeedsTarget() const noexcept { return !IsHeal() && (IsTargetedStrike() || IsTargetedBurst() || IsShadowstep()); }
+
+        /// <summary>
+        /// The game can cast it (buffs, summons, and the like are not built yet)
+        /// </summary>
+        [[nodiscard]] bool IsCastable() const noexcept {
+            const bool affects = baseDamage > 0 || !appliedStatusIds.empty();
+            return IsHeal() || IsDash() || IsShadowstep() || IsTargetedStrike()
+                || ((IsMissile() || IsBurstAroundCaster() || IsTargetedBurst()) && affects);
+        }
 
         [[nodiscard]] bool HasCategory(SpellCategory category) const {
             return std::ranges::find(categories, category) != categories.end();
@@ -165,6 +185,7 @@ export namespace LB::Content {
         float manaRegenPerSecond{0.0f};               // mana recovered per second (design-spells-system.md 4.1)
         std::int32_t spellPowerBase{0};               // SP_Base (design-character-system.md 4.2)
         String startingWeapon;                        // weapon key, equipped at the start (empty: none)
+        LB::Dice sneakAttackDice{0, 6, 0};            // extra on blows against the unaware or helpless (count 0: none)
         std::vector<String> startingItems;            // item keys put in the bag at the start
         ClassProgression progression;                 // levels 1..ClassProgression::MaxLevel
 
@@ -234,6 +255,16 @@ export namespace LB::Content {
         String spell;
         std::int32_t spellPower{0};
 
+        // Size, toughness, and boss mechanics
+        String rig{"Medium"};                         // KayKit rig its model and clips use: Medium or Large
+        bool staggerImmune{false};                    // hits do not make it reel
+        bool boss{false};                             // a floor's boss: its health bar tops the screen
+        String summon;                                // enemy key it raises while fighting (empty: none)
+        std::int32_t summonCount{2};                  // raised at a time
+        std::int32_t maxSummons{4};                   // of its raised enemies alive at once
+        float summonCooldownSeconds{8.0f};
+        float phaseTwoHealthFraction{0.0f};           // below this share of its health: raises and attacks twice as often (0: one phase)
+
         // Movement and awareness
         float movementSpeed{3.0f};                    // tiles per second
         float aggroRange{8.0f};                       // tiles; notices the player within this distance
@@ -266,6 +297,46 @@ export namespace LB::Content {
         LB::Dice healing{};                           // hit points restored (0d0: none)
         std::int32_t maxStack{10};
         String model;                                 // how it lies on the floor
+        String ammoType;                              // ammunition for weapons of this ammoType ("Arrow", "Bolt"); empty: not ammunition
+
+        [[nodiscard]] bool IsAmmunition() const noexcept { return !ammoType.empty(); }
+    };
+
+    /// <summary>
+    /// A rarity tier (Assets/Data/rarities.json, design-loot-and-progression.md 3.1, 4.2-4.3): how
+    /// many affixes it brings, its color, and its drop weight, which changes with depth
+    /// </summary>
+    struct RarityDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "rarity_rare"
+        String name;                                  // "Rare"
+        std::int32_t affixes{0};
+        std::array<float, 3> color{1.0f, 1.0f, 1.0f}; // display (sRGB) color of its names
+        float weight{0.0f};                           // at depth 1
+        float weightPerDepth{0.0f};                   // added for each floor deeper (never below 0)
+
+        [[nodiscard]] float WeightAt(std::int32_t depth) const noexcept {
+            return std::max(0.0f, weight + weightPerDepth * static_cast<float>(std::max(0, depth - 1)));
+        }
+    };
+
+    /// <summary>
+    /// An affix (Assets/Data/affixes.json, design-loot-and-progression.md 3.2): a prefix or suffix
+    /// of an item's name and what it adds while the item is worn or wielded
+    /// </summary>
+    struct AffixDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "affix_prefix_keen"
+        String name;                                  // "Keen", "of the Bear"
+        bool prefix{true};                            // a prefix (before the name) or a suffix (after)
+        bool onWeapons{false};
+        bool onArmour{false};
+        std::int32_t damage{0};                       // added to the weapon's damage
+        std::int32_t attackBonus{0};
+        std::int32_t armorClass{0};
+        std::int32_t armor{0};                        // flat physical armour
+        std::int32_t spellPower{0};
+        float manaRegen{0.0f};                        // mana per second
     };
 
     /// <summary>
@@ -274,6 +345,7 @@ export namespace LB::Content {
     struct LootEntry {
         String item;                                  // weapon, armour, or consumable key
         std::int32_t weight{1};
+        LB::Dice quantity{0, 1, 1};                   // how many drop (ammunition comes in handfuls); 1 by default
     };
 
     /// <summary>
@@ -329,7 +401,7 @@ export namespace LB::Content {
     public:
         /// <summary>
         /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json,
-        /// loot.json, and statuses.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// loot.json, statuses.json, rarities.json, and affixes.json from a directory (UTF-8 path). On any error the database is left empty and
         /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
@@ -342,7 +414,7 @@ export namespace LB::Content {
         ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                        const String& classesJson = "[]", const String& enemiesJson = "[]",
                                        const String& consumablesJson = "[]", const String& lootJson = "[]",
-                                       const String& statusesJson = "[]");
+                                       const String& statusesJson = "[]", const String& raritiesJson = "[]", const String& affixesJson = "[]");
 
         void Clear() {
             spells_.clear();
@@ -353,6 +425,8 @@ export namespace LB::Content {
             consumables_.clear();
             lootTables_.clear();
             statuses_.clear();
+            rarities_.clear();
+            affixes_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
@@ -368,6 +442,10 @@ export namespace LB::Content {
         [[nodiscard]] const std::vector<ConsumableDefinition>& GetConsumables() const noexcept { return consumables_; }
         [[nodiscard]] const std::vector<LootTableDefinition>& GetLootTables() const noexcept { return lootTables_; }
         [[nodiscard]] const std::vector<StatusDefinition>& GetStatuses() const noexcept { return statuses_; }
+        [[nodiscard]] const std::vector<RarityDefinition>& GetRarities() const noexcept { return rarities_; }
+        [[nodiscard]] const std::vector<AffixDefinition>& GetAffixes() const noexcept { return affixes_; }
+        [[nodiscard]] const RarityDefinition* FindRarity(std::string_view key) const { return FindByKey(rarities_, key); }
+        [[nodiscard]] const AffixDefinition* FindAffix(std::string_view key) const { return FindByKey(affixes_, key); }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
         [[nodiscard]] const SpellDefinition* FindSpell(std::string_view key) const { return FindByKey(spells_, key); }
@@ -431,6 +509,8 @@ export namespace LB::Content {
         std::vector<ConsumableDefinition> consumables_;
         std::vector<LootTableDefinition> lootTables_;
         std::vector<StatusDefinition> statuses_;
+        std::vector<RarityDefinition> rarities_;
+        std::vector<AffixDefinition> affixes_;
     };
 
 } // namespace LB::Content
