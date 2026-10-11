@@ -41,6 +41,13 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// Ranged enemies joining a wave: one from the second wave, two from the fifth
+        /// </summary>
+        [[nodiscard]] static std::int32_t Shooters(std::int32_t wave) noexcept {
+            return wave < 2 ? 0 : std::min(1 + (wave - 2) / 3, 2);
+        }
+
+        /// <summary>
         /// A random spot in the world's first room away from the player and the other enemies (the
         /// farthest candidate when none qualifies); the player's spot without a world
         /// </summary>

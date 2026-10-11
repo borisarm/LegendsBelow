@@ -31,6 +31,13 @@ namespace LB::Engine {
         }
     }
 
+    // A puff of stone dust where an arrow or bolt strikes a wall
+    void GameEngine::EmitProjectileEffects() {
+        for (const auto at : session_->encounter.GetWallHits()) {
+            session_->effects.Emit(ParticleEffect::Footstep, { at.x, ProjectileSet::FlightHeight, at.y }, 8);
+        }
+    }
+
     void GameEngine::EmitHealingEffect() {
         session_->effects.Emit(ParticleEffect::Healing, { session_->playerPosition.x, 0.1f, session_->playerPosition.y }, 34);
     }

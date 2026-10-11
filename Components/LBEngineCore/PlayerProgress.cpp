@@ -103,6 +103,7 @@ namespace LB::Engine {
         if (!session_->playerId) return;
         session_->inventoryService.CreateInventory(*session_->playerId, BagCapacity);
         GiveItem(HealingPotion, StartingPotions);
+        GiveItem(StartingBow);
     }
 
     // Why the player cannot equip an item, or empty when they can
@@ -435,6 +436,7 @@ namespace LB::Engine {
             case LB::Combat::WeaponType::Mace: return ModelOf("hammer_common.glb");
             case LB::Combat::WeaponType::Staff: return ModelOf("staff_common.glb");
             case LB::Combat::WeaponType::Crossbow: return ModelOf("crossbow_common.glb");
+            case LB::Combat::WeaponType::Bow: return ModelOf("bow_withString.gltf");
             default: return ModelOf("lootSackA.glb");
             }
         }
@@ -443,11 +445,29 @@ namespace LB::Engine {
         return ModelOf("lootSackA.glb");
     }
 
-    // The model of the equipped weapon's category, held in the knight's hand
-    Systems::Rendering::ModelId GameEngine::HeldWeaponModel() const {
-        if (!session_->playerWeapon) return assets_.models.playerWeapon;
-        const auto model = ItemModel(GroundItem{ 0, { ItemKind::Weapon, session_->playerWeapon->id } });
-        return model == assets_.characterModels.at("lootSackA.glb") ? assets_.models.playerWeapon : model;
+    // The model of the equipped weapon's category, held in the knight's hand (a sword without one)
+    std::string_view GameEngine::HeldWeaponFile() const {
+        if (!session_->playerWeapon) return HeldSword;
+        switch (session_->playerWeapon->category) {
+        case LB::Combat::WeaponType::Axe: return "axe_1handed.gltf";
+        case LB::Combat::WeaponType::Dagger: return "dagger.gltf";
+        case LB::Combat::WeaponType::Mace: return "Skeleton_Mace.gltf";
+        case LB::Combat::WeaponType::Staff:
+        case LB::Combat::WeaponType::Wand: return "staff.gltf";
+        case LB::Combat::WeaponType::Bow: return "bow_withString.gltf";
+        case LB::Combat::WeaponType::Crossbow: return "crossbow_1handed.gltf";
+        default: return HeldSword;
+        }
+    }
+
+    // A shield is worn (drawn on the knight's left arm)
+    bool GameEngine::PlayerHoldsShield() const {
+        if (!session_->playerId) return false;
+        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
+            const auto* armor = content_->FindArmor(worn.armorId);
+            if (armor && armor->category == LB::Combat::ArmorCategory::Shield) return true;
+        }
+        return false;
     }
 
     // Loot lies on the floor turning slowly, weapons laid flat, so it catches the eye
@@ -466,8 +486,8 @@ namespace LB::Engine {
             }
 
             Systems::Rendering::ModelRenderData draw{ ItemModel(item), { item.position.x, 0.02f, item.position.y }, spin, ModelScale, tint };
-            if (item.item.kind == ItemKind::Weapon) {
-                // Blades point up in the props: lay them on their side, a little above the floor
+            if (item.item.kind == ItemKind::Weapon && content_->FindWeapon(item.item.id)->category != LB::Combat::WeaponType::Bow) {
+                // Blades point up in the props (the bow already lies flat): lay them on their side, a little above the floor
                 draw.transform = Systems::Rendering::Matrix4::RotationX(std::numbers::pi_v<float> * 0.5f)
                                * Systems::Rendering::Matrix4::Translation({ 0.0f, 0.12f, 0.0f });
             }

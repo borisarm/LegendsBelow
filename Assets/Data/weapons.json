@@ -169,7 +169,9 @@
     "isTwoHanded": false,
     "specialProperties": [],
     "affixSlots": 1,
-    "ammoType": "Arrow"
+    "ammoType": "Arrow",
+    "range": 8.0,
+    "projectileSpeed": 12.0
   },
   {
     "id": "weapon_crossbow_light_crossbow_t1",
@@ -189,7 +191,9 @@
     "isTwoHanded": false,
     "specialProperties": [],
     "affixSlots": 1,
-    "ammoType": "Bolt"
+    "ammoType": "Bolt",
+    "range": 9.0,
+    "projectileSpeed": 15.0
   },
   {
     "id": "weapon_staff_apprentices_staff_t1",

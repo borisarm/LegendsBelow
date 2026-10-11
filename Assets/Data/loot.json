@@ -32,6 +32,10 @@
       {
         "item": "weapon_axe_splintered_hatchet_t1",
         "weight": 1
+      },
+      {
+        "item": "weapon_bow_worn_shortbow_t1",
+        "weight": 1
       }
     ]
   },
@@ -120,7 +124,28 @@
       {
         "item": "weapon_sword_iron_longsword_t1",
         "weight": 1
+      },
+      {
+        "item": "weapon_bow_worn_shortbow_t1",
+        "weight": 2
+      },
+      {
+        "item": "weapon_crossbow_light_crossbow_t1",
+        "weight": 1
       }
+    ]
+  },
+  {
+    "id": "loot_skeleton_rogue",
+    "goldChance": 0.8,
+    "gold": "1d8",
+    "itemChance": 0.3,
+    "items": [
+      { "item": "consumable_potion_healing_minor", "weight": 5 },
+      { "item": "weapon_bow_worn_shortbow_t1", "weight": 3 },
+      { "item": "weapon_crossbow_light_crossbow_t1", "weight": 2 },
+      { "item": "armor_hands_leather_gloves_t1", "weight": 2 },
+      { "item": "armor_feet_leather_boots_t1", "weight": 2 }
     ]
   }
 ]

@@ -89,6 +89,10 @@ export namespace LB::Content {
         std::vector<String> specialProperties;
         std::int32_t affixSlots{0};
         String ammoType;                              // ranged weapons only
+        float range{0.0f};                            // tiles a shot flies (bows and crossbows); 0: melee
+        float projectileSpeed{0.0f};                  // tiles per second of the arrow or bolt
+
+        [[nodiscard]] bool IsRanged() const noexcept { return range > 0.0f; }
 
         [[nodiscard]] bool IsUsableBy(CharacterClass characterClass) const {
             return std::ranges::find(allowedClasses, characterClass) != allowedClasses.end();
@@ -198,7 +202,14 @@ export namespace LB::Content {
         float attackRecoverySeconds{0.0f};            // pause before the next attack
         float attackRange{1.0f};                      // tiles between centers
         String attackAnimation;                       // clip played for the attack (empty: a generic one)
-        float attackImpactFraction{0.45f};            // when the hit lands, as a fraction of attackTimeSeconds
+        float attackImpactFraction{0.45f};            // when the hit lands (or the shot leaves), as a fraction of attackTimeSeconds
+
+        // Ranged attackers (projectileSpeed > 0) shoot a projectile that flies attackRange tiles
+        // instead of striking, only at a player in sight, and back away from one closer than
+        // keepAwayRange (design-combat-system.md 9.1, Kite)
+        float projectileSpeed{0.0f};                  // tiles per second; 0: melee
+        String projectileModel;                       // the arrow or bolt drawn in flight
+        float keepAwayRange{0.0f};                    // tiles; 0: holds its ground
 
         // Movement and awareness
         float movementSpeed{3.0f};                    // tiles per second
@@ -211,6 +222,8 @@ export namespace LB::Content {
         String mainHandModel;                         // optional, held at the right hand slot
         String offHandModel;                          // optional, held at the left hand slot
         float modelScale{0.5f};
+
+        [[nodiscard]] bool IsRanged() const noexcept { return projectileSpeed > 0.0f; }
 
         [[nodiscard]] float GetResistance(DamageType type) const {
             auto it = resistances.find(type);

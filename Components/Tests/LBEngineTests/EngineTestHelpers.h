@@ -206,14 +206,38 @@ namespace EngineTests {
         GameEngine engine;
         const LB::Content::EnemyDefinition* minion{nullptr};
         const LB::Content::EnemyDefinition* warrior{nullptr};
+        const LB::Content::EnemyDefinition* crossbowman{nullptr};
         WorldMap world = WorldMap::Arena(GameEngine::ArenaHalfWidth, GameEngine::ArenaHalfHeight);
 
         EncounterContent() {
             engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false });
             minion = engine.GetContent()->FindEnemy(GameEngine::LightEnemy);
             warrior = engine.GetContent()->FindEnemy(GameEngine::HeavyEnemy);
+            crossbowman = engine.GetContent()->FindEnemy(GameEngine::RangedEnemy);
         }
     };
+
+    // Facing -X (yaw is measured from +Z toward +X)
+    constexpr float FacingWest = -std::numbers::pi_v<float> * 0.5f;
+
+    // A projectile for ProjectileSet tests (no attack: impacts are only reported)
+    inline Projectile TestShot(WorldPoint from, WorldPoint direction, float speed, float range, ProjectileSide side = ProjectileSide::Enemies) {
+        Projectile shot{};
+        shot.side = side;
+        shot.position = from;
+        shot.direction = direction;
+        shot.speed = speed;
+        shot.rangeLeft = range;
+        return shot;
+    }
+
+    // The test arena split by a wall at x 0..2 (cell column 6), open only along its north edge
+    inline WorldMap WalledArena() {
+        const auto arena = WorldMap::Arena(GameEngine::ArenaHalfWidth, GameEngine::ArenaHalfHeight);
+        auto layout = arena.Layout();
+        for (std::int32_t y = 2; y < layout.height - 1; ++y) layout.cells[static_cast<std::size_t>(y * layout.width + 6)] = 0;
+        return WorldMap(layout, arena.Origin());
+    }
 
     inline Encounter MakeEncounter(const EncounterContent& content) {
         Encounter encounter(CombatSeed);

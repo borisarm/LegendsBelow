@@ -7,6 +7,7 @@
     <ClCompile Include="Enemies.ixx" />
     <ClCompile Include="EnemyBehavior.ixx" />
     <ClCompile Include="Waves.ixx" />
+    <ClCompile Include="Projectiles.ixx" />
     <ClCompile Include="World.ixx" />
     <ClCompile Include="DungeonFloor.cpp" />
     <ClCompile Include="Effects.cpp" />

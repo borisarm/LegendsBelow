@@ -270,7 +270,8 @@ TEST(GameEngineProgressTests, CharacterScreen_EquipFromTheBag) {
 
     TapKey(engine, Keys::FromChar('I'));
     engine.Tick(OneSixtieth);
-    for (int i = 0; i < 6 && (!engine.GetCharacterScreen().Selected() || engine.GetCharacterScreen().Selected()->action != ScreenAction::Equip); ++i) {
+    // The cap (the starting bow is in the bag too)
+    for (int i = 0; i < 10 && (!engine.GetCharacterScreen().Selected() || engine.GetCharacterScreen().Selected()->text.find("Cap") == std::string::npos); ++i) {
         TapKey(engine, Keys::Down);
         engine.Tick(OneSixtieth);
     }

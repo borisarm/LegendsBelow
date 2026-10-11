@@ -12,6 +12,7 @@ export import :World;
 export import :Animator;
 export import :Enemies;
 export import :EnemyBehavior;
+export import :Projectiles;
 export import :Waves;
 export import :Encounter;
 export import :Loot;

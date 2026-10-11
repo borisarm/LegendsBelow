@@ -32,6 +32,8 @@ export namespace LB::Engine {
         MenuMove,
         MenuConfirm,
         Equip,
+        Shoot,          // a bow or crossbow loosing (the player's or an enemy's)
+        ArrowHitsWall,  // an arrow or bolt striking stone
         Count
     };
 
@@ -132,6 +134,8 @@ export namespace LB::Engine {
         inline constexpr std::string_view MenuMove[] = { "bookFlip1", "bookFlip2", "bookFlip3" };
         inline constexpr std::string_view MenuConfirm[] = { "bookPlace1" };
         inline constexpr std::string_view Equip[] = { "beltHandle1", "beltHandle2" };
+        inline constexpr std::string_view Shoot[] = { "clothBelt", "clothBelt2" };
+        inline constexpr std::string_view ArrowHitsWall[] = { "impactWood_light_000", "impactWood_light_001", "impactWood_light_002", "impactWood_light_003", "impactWood_light_004" };
     }
 
     inline SoundRecipe SoundBank::RecipeFor(GameSound sound) noexcept {
@@ -157,6 +161,8 @@ export namespace LB::Engine {
         case GameSound::MenuMove: return { MenuMove, 0.4f, true };
         case GameSound::MenuConfirm: return { MenuConfirm, 0.6f, true };
         case GameSound::Equip: return { Equip, 0.7f, true };
+        case GameSound::Shoot: return { Shoot, 0.8f };
+        case GameSound::ArrowHitsWall: return { ArrowHitsWall, 0.6f };
         default: return {};
         }
     }

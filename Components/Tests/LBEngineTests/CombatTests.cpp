@@ -278,16 +278,18 @@ TEST(GameEngineModelTests, Enemies_AnimatedAndHoldingTheirWeapons) {
 TEST(GameEngineModelTests, Player_SwingsTheSword) {
     GameEngine engine;
     InitializeWithModels(engine);
-    engine.Tick(OneSixtieth);
-    const auto restingSword = DrawsOf(engine, "sword_common");
+    RunSteps(engine, 2);
+    const auto restingSword = DrawsOf(engine, "sword_1handed");
     ASSERT_EQ(restingSword.size(), 1u);
-    ASSERT_TRUE(restingSword[0].transform.has_value());
-    EXPECT_TRUE(DrawsOf(engine, "character_knight")[0].partPoses.size() == 1u);
+    ASSERT_TRUE(restingSword[0].transform.has_value());   // in the knight's right hand slot
+    const auto& rendering = engine.GetRendering();
+    EXPECT_EQ(DrawsOf(engine, "Knight")[0].animation.current.clip, *rendering.FindAnimation("Idle_A"));
 
     TapKey(engine, Keys::Space);
     RunSteps(engine, 15);
 
-    const auto swinging = DrawsOf(engine, "sword_common");
+    EXPECT_EQ(DrawsOf(engine, "Knight")[0].animation.current.clip, *rendering.FindAnimation("Melee_1H_Attack_Slice_Diagonal"));
+    const auto swinging = DrawsOf(engine, "sword_1handed");
     ASSERT_EQ(swinging.size(), 1u);
     const auto rest = restingSword[0].transform->Translation();
     const auto now = swinging[0].transform->Translation();

@@ -65,7 +65,8 @@ export namespace LB::Systems::Rendering {
     /// </summary>
     class IsometricCamera {
     public:
-        static constexpr float PitchDegrees = 40.0f;
+        // Low enough that the KayKit characters' short legs show below their bodies
+        static constexpr float PitchDegrees = 32.0f;
         static constexpr float DefaultYawDegrees = 45.0f;
         static constexpr float FieldOfViewDegrees = 30.0f;
         static constexpr float DeadZoneRadius = 1.5f;       // world tiles

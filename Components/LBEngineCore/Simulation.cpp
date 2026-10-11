@@ -54,14 +54,19 @@ namespace LB::Engine {
             session_->gameTimeSeconds += elapsedSeconds;
             // Attacks first: a swing that starts this step roots the player at once
             UpdatePlayerCombat(static_cast<float>(elapsedSeconds));
+            const auto before = session_->playerPosition;
             MovePlayer(static_cast<float>(elapsedSeconds));
+            const bool moving = Distance(before, session_->playerPosition) > 1e-4f;
             UpdateEncounter(static_cast<float>(elapsedSeconds));
+            AnimatePlayer(static_cast<float>(elapsedSeconds), moving);
             UpdateQuickUse();
             if (session_->dungeonMode) session_->minimap.Reveal(session_->world, session_->playerPosition);
             UpdateGroundItems(static_cast<float>(elapsedSeconds));
             UpdateCombatTexts(static_cast<float>(elapsedSeconds));
             EmitCombatEffects();
+            EmitProjectileEffects();
             PlayCombatSounds();
+            PlayProjectileSounds();
         }
 
         if (session_->playerId) {
@@ -81,7 +86,7 @@ namespace LB::Engine {
 
     // Waves start once there is a player to fight (and enemies are enabled)
     void GameEngine::StartEncounter() {
-        session_->encounter.Configure(content_->FindEnemy(LightEnemy), content_->FindEnemy(HeavyEnemy), session_->world);
+        session_->encounter.Configure(content_->FindEnemy(LightEnemy), content_->FindEnemy(HeavyEnemy), session_->world, content_->FindEnemy(RangedEnemy));
         session_->encounter.SetClips(assets_.enemyClips);
         session_->encounter.Reset();
         if (session_->spawnEnemies && session_->playerId && !session_->dungeonMode) {
@@ -90,54 +95,140 @@ namespace LB::Engine {
     }
 
     /// <summary>
-    /// The player's melee attack: Attack (left mouse, Space, gamepad A) swings the weapon,
-    /// again and again while held. A swing turns toward the nearest enemy in reach and strikes
-    /// it part way through (Encounter::AttackImpactFraction); the player stands still until
-    /// then. A downed player gets back up after PlayerRespawnSeconds and the waves restart.
+    /// The player's attack: Attack (left mouse, Space, gamepad A) swings the weapon, or draws and
+    /// looses a shot with a bow or crossbow, again and again while held. A swing turns toward the
+    /// nearest enemy in reach and strikes it part way through (Encounter::AttackImpactFraction);
+    /// a shot turns toward the nearest enemy in range and in sight (design-combat-system.md 7.4),
+    /// or straight ahead without one, and leaves at ShotReleaseFraction as an arrow or bolt that
+    /// hits whatever it reaches. The player stands still until the strike or the shot. A downed
+    /// player gets back up after PlayerRespawnSeconds and the waves restart.
     /// </summary>
     void GameEngine::UpdatePlayerCombat(float elapsedSeconds) {
         if (!session_->playerId) return;
-        session_->playerCombat.hitFlashSeconds = std::max(0.0f, session_->playerCombat.hitFlashSeconds - elapsedSeconds);
+        auto& combat = session_->playerCombat;
+        combat.hitFlashSeconds = std::max(0.0f, combat.hitFlashSeconds - elapsedSeconds);
 
         if (!IsPlayerAlive()) {
-            session_->playerCombat.swinging = false;
-            session_->playerCombat.deadSeconds += elapsedSeconds;
-            if (session_->playerCombat.deadSeconds >= PlayerRespawnSeconds) {
+            combat.swinging = false;
+            combat.deadSeconds += elapsedSeconds;
+            if (combat.deadSeconds >= PlayerRespawnSeconds) {
                 RespawnPlayer();
             }
             return;
         }
 
         const float attackSeconds = PlayerAttackSeconds();
-        if (session_->playerCombat.swinging) {
-            session_->playerCombat.swingSeconds += elapsedSeconds;
-            if (!session_->playerCombat.impactDone && session_->playerCombat.swingSeconds >= attackSeconds * Encounter::AttackImpactFraction) {
-                session_->playerCombat.impactDone = true;
-                if (session_->playerCombat.target) {
-                    if (auto event = session_->encounter.StrikeEnemy(*session_->playerCombat.target, GetPlayerAttackProfile(), session_->playerPosition, PlayerReach)) {
-                        session_->combatEvents.push_back(*event);
-                        if (event->killed) {
-                            OnEnemyKilled(*session_->encounter.FindEnemy(event->enemyId));
-                        }
-                    }
-                }
+        if (combat.swinging) {
+            combat.swingSeconds += elapsedSeconds;
+            const float impact = combat.shooting ? ShotReleaseFraction : Encounter::AttackImpactFraction;
+            if (!combat.impactDone && combat.swingSeconds >= attackSeconds * impact) {
+                combat.impactDone = true;
+                ReleasePlayerAttack();
             }
-            if (session_->playerCombat.swingSeconds >= attackSeconds) {
-                session_->playerCombat.swinging = false;
+            if (combat.swingSeconds >= attackSeconds) {
+                combat.swinging = false;
             }
         }
 
         const std::string attack(AttackAction);
-        if (!session_->playerCombat.swinging && (inputSystem_.IsActionTriggered(attack) || inputSystem_.IsActionDown(attack))) {
-            session_->playerCombat.swinging = true;
-            session_->playerCombat.swingSeconds = 0.0f;
-            PlaySound(GameSound::Swing, session_->playerPosition);
-            session_->playerCombat.impactDone = false;
-            session_->playerCombat.target = session_->encounter.FindTarget(session_->playerPosition, PlayerReach);
-            if (const auto* target = session_->playerCombat.target ? session_->encounter.FindEnemy(*session_->playerCombat.target) : nullptr) {
-                session_->playerFacingYaw = std::atan2(target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y);
-            }
+        if (!combat.swinging && (inputSystem_.IsActionTriggered(attack) || inputSystem_.IsActionDown(attack))) {
+            StartPlayerAttack();
         }
+    }
+
+    // A swing or a shot begins: pick the target, face it, and start the attack's animation
+    void GameEngine::StartPlayerAttack() {
+        auto& combat = session_->playerCombat;
+        const auto* weapon = session_->playerWeapon;
+        combat.swinging = true;
+        combat.swingSeconds = 0.0f;
+        combat.impactDone = false;
+        combat.hurtSeconds = 0.0f;
+        combat.shooting = weapon && weapon->IsRanged();
+        combat.target = combat.shooting ? session_->encounter.FindTarget(session_->playerPosition, weapon->range, true)
+                                        : session_->encounter.FindTarget(session_->playerPosition, PlayerReach);
+        if (const auto* target = combat.target ? session_->encounter.FindEnemy(*combat.target) : nullptr) {
+            session_->playerFacingYaw = std::atan2(target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y);
+        }
+        if (!combat.shooting) PlaySound(GameSound::Swing, session_->playerPosition);
+
+        // The whole clip spans the attack (a bow's draw spans it until the arrow leaves)
+        const auto& clips = assets_.playerClips;
+        const float attackSeconds = PlayerAttackSeconds();
+        ClipInfo clip = clips.slash;
+        float spanSeconds = attackSeconds;
+        if (combat.shooting && weapon->category == LB::Combat::WeaponType::Bow) {
+            clip = clips.bowDraw;
+            spanSeconds = attackSeconds * ShotReleaseFraction;
+        }
+        else if (combat.shooting) {
+            clip = clips.shoot;
+        }
+        else if (weapon && weapon->category == LB::Combat::WeaponType::Dagger) {
+            clip = clips.stab;
+        }
+        else if (weapon && weapon->isTwoHanded) {
+            clip = clips.slashTwoHanded;
+        }
+        session_->playerAnimator.Play(clip.id, false, clip.seconds / spanSeconds, true, 0.08f);
+    }
+
+    // The strike lands on the target picked at the start (if it is still in reach), or the shot
+    // leaves toward the target where it stands now (straight ahead without one)
+    void GameEngine::ReleasePlayerAttack() {
+        auto& combat = session_->playerCombat;
+        if (!combat.shooting) {
+            if (!combat.target) return;
+            if (auto event = session_->encounter.StrikeEnemy(*combat.target, GetPlayerAttackProfile(), session_->playerPosition, PlayerReach)) {
+                session_->combatEvents.push_back(*event);
+                if (event->killed) {
+                    OnEnemyKilled(*session_->encounter.FindEnemy(event->enemyId));
+                }
+            }
+            return;
+        }
+
+        const auto& weapon = *session_->playerWeapon;
+        auto direction = Forward(session_->playerFacingYaw);
+        if (const auto* target = combat.target ? session_->encounter.FindEnemy(*combat.target) : nullptr; target && target->IsTargetable()) {
+            direction = { target->position.x - session_->playerPosition.x, target->position.y - session_->playerPosition.y };
+            session_->playerFacingYaw = std::atan2(direction.x, direction.y);
+        }
+        const auto model = weapon.category == LB::Combat::WeaponType::Crossbow ? BoltModel : ArrowModel;
+        session_->encounter.Shoot(GetPlayerAttackProfile(), session_->playerPosition, direction, weapon.projectileSpeed, weapon.range,
+                                  std::string(model), PlayerRadius);
+        PlaySound(GameSound::Shoot, session_->playerPosition);
+
+        if (weapon.category == LB::Combat::WeaponType::Bow) {
+            const auto& release = assets_.playerClips.bowRelease;
+            const float rest = PlayerAttackSeconds() * (1.0f - ShotReleaseFraction);
+            session_->playerAnimator.Play(release.id, false, release.seconds / rest, true, 0.05f);
+        }
+    }
+
+    // The player's animation for this step: the attack plays out (started by StartPlayerAttack),
+    // else running, a flinch from a hit, standing, or lying dead
+    void GameEngine::AnimatePlayer(float elapsedSeconds, bool moving) {
+        auto& combat = session_->playerCombat;
+        auto& animator = session_->playerAnimator;
+        const auto& clips = assets_.playerClips;
+        combat.hurtSeconds = std::max(0.0f, combat.hurtSeconds - elapsedSeconds);
+
+        if (!IsPlayerAlive()) {
+            animator.Play(clips.death.id, false, 1.0f, false, 0.1f);
+        }
+        else if (combat.swinging) {
+            // the attack's clip
+        }
+        else if (moving) {
+            const float speed = session_->characterService.GetMovementSpeed(*session_->playerId).value_or(RunAnimationSpeed);
+            animator.Play(clips.run.id, true, speed / RunAnimationSpeed);
+        }
+        else if (combat.hurtSeconds <= 0.0f) {
+            const bool bow = session_->playerWeapon && session_->playerWeapon->category == LB::Combat::WeaponType::Bow;
+            animator.Play(bow ? clips.bowIdle.id : clips.idle.id, true);
+        }
+        animator.Update(elapsedSeconds);
     }
 
     /// <summary>
@@ -146,13 +237,20 @@ namespace LB::Engine {
     void GameEngine::UpdateEncounter(float elapsedSeconds) {
         if (!session_->playerId) return;
 
-        const PlayerTarget target{ session_->playerPosition, IsPlayerAlive(), GetPlayerDefense() };
+        const PlayerTarget target{ session_->playerPosition, IsPlayerAlive(), GetPlayerDefense(), PlayerRadius };
         if (session_->dungeonMode) {
             UpdateFloorInteractions();
         }
         const auto wave = session_->encounter.GetWave();
         for (const auto& event : session_->encounter.Update(elapsedSeconds, target)) {
             session_->combatEvents.push_back(event);
+            // The player's arrows and bolts arrive during the enemies' step
+            if (event.kind == CombatEventKind::PlayerAttack) {
+                if (event.killed) {
+                    if (const auto* enemy = session_->encounter.FindEnemy(event.enemyId)) OnEnemyKilled(*enemy);
+                }
+                continue;
+            }
             if (!event.result.hit || event.result.finalDamage <= 0 || !IsPlayerAlive()) continue;
 
             session_->characterService.DamageCharacter(*session_->playerId, event.result.finalDamage);
@@ -160,6 +258,12 @@ namespace LB::Engine {
             if (!IsPlayerAlive()) {
                 session_->playerCombat.swinging = false;
                 session_->playerCombat.deadSeconds = 0.0f;
+            }
+            else if (!session_->playerCombat.swinging) {
+                // A flinch (it does not interrupt anything: an attack keeps playing)
+                const auto& hit = assets_.playerClips.hit;
+                session_->playerAnimator.Play(hit.id, false, 1.0f, true, 0.05f);
+                session_->playerCombat.hurtSeconds = hit.seconds;
             }
         }
 

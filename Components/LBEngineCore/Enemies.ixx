@@ -17,8 +17,8 @@ export namespace LB::Engine {
     enum class EnemyState {
         Spawning,    // rising from the ground; cannot act or be hit
         Idle,        // has not noticed the player (or the player is down)
-        Chasing,     // closing in, or waiting in reach for the next attack
-        Attacking,   // winding up and swinging; the hit lands part way through
+        Chasing,     // closing in (or backing away, for ranged enemies), or waiting in reach for the next attack
+        Attacking,   // winding up and swinging (or aiming); the hit lands (or the shot leaves) part way through
         Staggered,   // reeling from a hit (not while attacking)
         Dead         // corpse, removed after a while
     };
@@ -104,6 +104,17 @@ export namespace LB::Engine {
         WorldPoint position{};
         bool alive{true};
         Services::Combat::DefenseProfile defense{};
+        float radius{0.375f};               // the body projectiles hit (tiles)
+    };
+
+    /// <summary>
+    /// What an enemy's step ends with: nothing, a melee strike landing on the player, or a shot
+    /// leaving toward them
+    /// </summary>
+    enum class EnemyAction {
+        None,
+        Strike,
+        Shoot
     };
 
 } // namespace LB::Engine

@@ -203,13 +203,16 @@ namespace LB::Engine {
         for (const auto file : PropModels) {
             assets_.characterModels[std::string(file)] = load(file);
         }
+        for (const auto file : HeldModels) {
+            assets_.characterModels[std::string(file)] = load(file);
+        }
         for (const auto& consumable : content_->GetConsumables()) {
             if (!assets_.characterModels.contains(consumable.model)) assets_.characterModels[consumable.model] = load(consumable.model);
         }
 
-        // Enemy bodies and the weapons they hold, by file name
+        // Enemy bodies, the weapons they hold, and what they shoot, by file name
         for (const auto& enemy : content_->GetEnemies()) {
-            for (const auto& file : { enemy.model, enemy.mainHandModel, enemy.offHandModel }) {
+            for (const auto& file : { enemy.model, enemy.mainHandModel, enemy.offHandModel, enemy.projectileModel }) {
                 if (!file.empty() && !assets_.characterModels.contains(file)) assets_.characterModels[file] = load(file);
             }
         }
@@ -219,7 +222,7 @@ namespace LB::Engine {
             if (!result.Succeeded()) errors.push_back(result.error);
         }
         if (errors.empty()) {
-            ResolveEnemyClips(errors);
+            ResolveClips(errors);
         }
 
         if (!errors.empty()) {
@@ -230,6 +233,7 @@ namespace LB::Engine {
             assets_.models = {};
             assets_.characterModels.clear();
             assets_.enemyClips = {};
+            assets_.playerClips = {};
             return false;
         }
         assets_.models.loaded = true;
@@ -253,9 +257,10 @@ namespace LB::Engine {
         return true;
     }
 
-    // Enemy animation clips by name (KayKit Rig_Medium). Each enemy type names its attack clip
-    // (CombatMelee set); the overhand Throw is the fallback for types that do not.
-    void GameEngine::ResolveEnemyClips(std::vector<std::string>& errors) {
+    // Animation clips by name (KayKit Rig_Medium): the player's, and the enemies'. Each enemy type
+    // names its attack clip (CombatMelee or CombatRanged set); the overhand Throw is the fallback
+    // for types that do not.
+    void GameEngine::ResolveClips(std::vector<std::string>& errors) {
         const auto clip = [&](std::string_view name, float* seconds = nullptr) {
             const auto id = renderingSystem_.FindAnimation(name);
             if (!id) {
@@ -272,6 +277,24 @@ namespace LB::Engine {
         assets_.enemyClips.hit = clip("Hit_A", &assets_.enemyClips.hitSeconds);
         assets_.enemyClips.death = clip("Death_A");
         assets_.enemyClips.spawn = clip("Spawn_Ground", &assets_.enemyClips.spawnSeconds);
+
+        const auto info = [&](std::string_view name) {
+            ClipInfo result{};
+            result.id = clip(name, &result.seconds);
+            return result;
+        };
+        auto& player = assets_.playerClips;
+        player.idle = info("Idle_A");
+        player.bowIdle = info("Ranged_Bow_Idle");
+        player.run = info("Running_A");
+        player.slash = info("Melee_1H_Attack_Slice_Diagonal");
+        player.slashTwoHanded = info("Melee_2H_Attack_Slice");
+        player.stab = info("Melee_1H_Attack_Stab");
+        player.bowDraw = info("Ranged_Bow_Draw");
+        player.bowRelease = info("Ranged_Bow_Release");
+        player.shoot = info("Ranged_1H_Shoot");
+        player.hit = info("Hit_A");
+        player.death = info("Death_A");
 
         assets_.enemyClips.attacks.clear();
         for (const auto& enemy : content_->GetEnemies()) {

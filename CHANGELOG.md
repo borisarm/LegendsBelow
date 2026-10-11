@@ -4,6 +4,18 @@ All notable changes to LegendsBelow. Dates are commit dates.
 
 ## [Unreleased]
 
+### Added
+- Ranged combat (design-combat-system.md 7.4 line of sight, 9.1 Kite):
+  - **Projectiles** (`:Projectiles`, `ProjectileSet`, `Projectile`, `ProjectileSide`, `ProjectileTarget`, `ProjectileImpact`): arrows and bolts fly at chest height along their heading, swept in 0.1-tile steps so fast ones cannot pass through a body, hit the first body of the other side, and stick in walls for 1.5 s (fading out). They carry the shooter's attack and are resolved when they arrive, so they can be dodged. `Encounter` owns them: `Shoot` (the player's), `GetProjectiles`, `GetShots` and `GetWallHits` (this step's enemy shots and wall strikes); `Update` now also returns the player's projectile hits (`CombatEventKind::PlayerAttack`).
+  - **Skeleton Crossbowman** (`enemy_skeleton_rogue`: KayKit Skeleton Rogue with the skeletons' crossbow and arrow, `loot_skeleton_rogue`): shoots only at a player in sight, from up to 7 tiles; while reloading it backs away from a player closer than 3.5 tiles unless a wall is behind it. `EnemyBehavior::Update` returns an `EnemyAction` (`None`, `Strike`, `Shoot`). Crossbowmen join the arena's waves from the second (`Encounter::WaveShooters`; `Configure` takes the ranged type) and the dungeon's combat rooms from depth 2 (and every elite room).
+  - **Content**: enemies gain `projectileSpeed`, `projectileModel`, and `keepAwayRange` (`EnemyDefinition::IsRanged`); weapons gain `range` and `projectileSpeed` (`WeaponDefinition::IsRanged`), required for bows and crossbows and refused for anything else. The Worn Shortbow shoots 8 tiles, the Light Crossbow 9. Shortbows and crossbows drop from minions, crossbowmen, and chests.
+  - **The player's bows and crossbows**: Attack draws and looses a shot at the nearest enemy in range and in sight (straight ahead without one), leaving at `GameEngine::ShotReleaseFraction` of the attack time; the player stands still until then. The starting bow (`GameEngine::StartingBow`) is in the bag from the start. `GameEngine::GetPlayerWeapon` is public.
+  - Sounds: `GameSound::Shoot` (cloth whip) for every shot, `GameSound::ArrowHitsWall` (wood knock) where one strikes stone, with a puff of dust there; crossbowmen aim quietly.
+- The player is the animated KayKit Adventurers knight (`Knight.glb`, at the skeletons' scale on the same Rig_Medium) instead of the rigid Dungeon Pack knight: it idles, runs, slashes (one-handed, two-handed, or stabs with a dagger), draws and releases a bow or shoots a crossbow (the CombatRanged animation set is loaded), flinches when hit, and falls. The equipped weapon is drawn in its hand slot (KayKit Adventurers sword, axe, dagger, staff, bow, and crossbow; the skeletons' mace), a worn shield on its left arm, and crossbows turned to a pistol grip (`GameEngine::PistolGripModels`).
+
+### Changed
+- The camera looks down at 32 degrees (from 40): the KayKit characters' short legs were hidden under their heads and bodies.
+
 ### Build
 - MSVC static analysis: `-p:LBStaticAnalysis=true` (`Scripts/Test.ps1 -StaticAnalysis`) compiles with `/analyze` and fails on findings; it is a fourth CI job. Fixed what it found: root-parameter and sampler arrays filled in element by element are value-initialized, and `CharacterService`'s class-rules lookups check the rules separately before taking a reference. GoogleTest's macros trip C6326 and C6262, which are off in the test projects only.
 - The engine tests are split by area into eleven files (from one 3,650-line `test.cpp`), with their shared setup and helpers in `EngineTestHelpers.h`; the same 227 tests.

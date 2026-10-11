@@ -1,5 +1,6 @@
-// EnemyBehavior.ixx - How one enemy acts each step (Tier 1 AI): its state machine and animations,
-// closing in on the player around walls, turning, attacking on a timer, and keeping bodies apart
+// EnemyBehavior.ixx - How one enemy acts each step (Tier 1 AI, and kiting for ranged enemies): its
+// state machine and animations, closing in on the player around walls, turning, attacking on a
+// timer, and keeping bodies apart
 export module LB.Engine:EnemyBehavior;
 
 import std;
@@ -14,8 +15,10 @@ export namespace LB::Engine {
     /// <summary>
     /// The enemies' behavior (design-combat-system.md 9.1, Tier 1): notice the player in sight,
     /// close in (straight when in sight, else along a flow field around the walls), attack when in
-    /// reach and facing them, reel from hits, die. Decides when a strike lands; the encounter
-    /// resolves it. Rendering-independent: without clips the animations are simply invalid.
+    /// reach and facing them, reel from hits, die. Ranged enemies only shoot at a player in sight
+    /// (7.4) and, while reloading, back away from one closer than their keepAwayRange (9.1 Tier 3,
+    /// Kite). Decides when a strike lands or a shot leaves; the encounter resolves them.
+    /// Rendering-independent: without clips the animations are simply invalid.
     /// </summary>
     class EnemyBehavior {
     public:
@@ -38,6 +41,8 @@ export namespace LB::Engine {
         static constexpr int SeparationPasses = 4;
         // Walk cycles are authored for this ground speed (tiles per second)
         static constexpr float WalkAnimationSpeed = 2.0f;
+        // Backing away that gains less than this share of a step means a wall is behind
+        static constexpr float BackAwayProgress = 0.3f;
 
         /// <summary>
         /// The world enemies move in (kept by reference; null: open ground, always in sight)
@@ -86,10 +91,11 @@ export namespace LB::Engine {
         }
 
         /// <summary>
-        /// One step of an enemy. Returns true when its attack's strike lands on the player this step
-        /// (in reach at the impact moment); the caller resolves the attack.
+        /// One step of an enemy. Returns Strike when its melee attack lands on the player this step
+        /// (in reach at the impact moment), Shoot when a ranged enemy's shot leaves; the caller
+        /// resolves the strike or launches the shot.
         /// </summary>
-        [[nodiscard]] bool Update(Enemy& enemy, float dt, const PlayerTarget& player) {
+        [[nodiscard]] EnemyAction Update(Enemy& enemy, float dt, const PlayerTarget& player) {
             enemy.stateSeconds += dt;
             enemy.hitFlashSeconds = std::max(0.0f, enemy.hitFlashSeconds - dt);
             enemy.animator.Update(dt);
@@ -102,27 +108,32 @@ export namespace LB::Engine {
             switch (enemy.state) {
             case EnemyState::Spawning:
                 if (enemy.stateSeconds >= SpawnSeconds) Enter(enemy, EnemyState::Idle);
-                return false;
+                return EnemyAction::None;
 
             case EnemyState::Dead:
-                return false;
+                return EnemyAction::None;
 
             case EnemyState::Staggered:
                 if (enemy.stateSeconds >= StaggerSeconds) Enter(enemy, EnemyState::Chasing);
-                return false;
+                return EnemyAction::None;
 
             case EnemyState::Attacking: {
                 TurnToward(enemy, dx, dy, dt);
-                bool strikes = false;
+                auto action = EnemyAction::None;
                 if (!enemy.impactDone && enemy.stateSeconds >= type.attackTimeSeconds * type.attackImpactFraction) {
                     enemy.impactDone = true;
-                    strikes = player.alive && distance <= type.attackRange + AttackReachSlack;
+                    if (type.IsRanged()) {
+                        if (player.alive) action = EnemyAction::Shoot;
+                    }
+                    else if (player.alive && distance <= type.attackRange + AttackReachSlack) {
+                        action = EnemyAction::Strike;
+                    }
                 }
                 if (enemy.stateSeconds >= type.attackTimeSeconds) {
                     enemy.recoverySeconds = type.attackRecoverySeconds;
                     Enter(enemy, EnemyState::Chasing);
                 }
-                return strikes;
+                return action;
             }
 
             case EnemyState::Idle:
@@ -133,31 +144,45 @@ export namespace LB::Engine {
             enemy.recoverySeconds = std::max(0.0f, enemy.recoverySeconds - dt);
             if (!player.alive) {
                 if (enemy.state != EnemyState::Idle) Enter(enemy, EnemyState::Idle);
-                return false;
+                return EnemyAction::None;
             }
             const bool inSight = !world_ || world_->LineOfSight(enemy.position, player.position);
             if (enemy.state == EnemyState::Idle) {
-                if (distance > type.aggroRange || !inSight) return false;
+                if (distance > type.aggroRange || !inSight) return EnemyAction::None;
                 Enter(enemy, EnemyState::Chasing);
             }
 
-            // In reach: face the player and attack when ready
-            if (distance <= type.attackRange) {
+            // Too close while reloading: a ranged enemy backs away, unless a wall is behind it
+            if (type.IsRanged() && distance < type.keepAwayRange && enemy.recoverySeconds > 0.0f && distance > 0.0f) {
+                const float step = type.movementSpeed * dt;
+                const WorldPoint away{ -dx / distance * step, -dy / distance * step };
+                const auto before = enemy.position;
+                enemy.position = MoveBody(enemy.position, away);
+                if (Distance(before, enemy.position) >= step * BackAwayProgress) {
+                    TurnToward(enemy, away.x, away.y, dt);
+                    enemy.animator.Play(clips_.walk, true, type.movementSpeed / WalkAnimationSpeed);
+                    return EnemyAction::None;
+                }
+                enemy.position = before;   // cornered: stand and fight
+            }
+
+            // In reach (in sight, for a shot): face the player and attack when ready
+            if (distance <= type.attackRange && (inSight || !type.IsRanged())) {
                 TurnToward(enemy, dx, dy, dt);
                 const auto forward = Forward(enemy.facingYaw);
                 const bool facing = distance <= 0.0f || (forward.x * dx + forward.y * dy) / distance >= AttackConeCosine;
                 if (enemy.recoverySeconds <= 0.0f && facing) {
                     Enter(enemy, EnemyState::Attacking);
-                    return false;
+                    return EnemyAction::None;
                 }
                 enemy.animator.Play(clips_.idle, true);
-                return false;
+                return EnemyAction::None;
             }
 
             // Close in: straight at the player when in sight (stopping a little inside reach), else
             // along the flow field around the walls
             float tx = dx, ty = dy;
-            float step = std::min(type.movementSpeed * dt, distance - type.attackRange * 0.9f);
+            float step = std::min(type.movementSpeed * dt, std::max(0.0f, distance - type.attackRange * 0.9f));
             if (!inSight && world_) {
                 if (!flowFieldReady_) {
                     world_->BuildFlowField(player.position);
@@ -166,7 +191,7 @@ export namespace LB::Engine {
                 const auto waypoint = world_->NextWaypoint(enemy.position);
                 if (!waypoint) {
                     enemy.animator.Play(clips_.idle, true);
-                    return false;
+                    return EnemyAction::None;
                 }
                 tx = waypoint->x - enemy.position.x;
                 ty = waypoint->y - enemy.position.y;
@@ -176,7 +201,7 @@ export namespace LB::Engine {
             enemy.position = MoveBody(enemy.position, { tx / length * step, ty / length * step });
             TurnToward(enemy, tx, ty, dt);
             enemy.animator.Play(clips_.walk, true, type.movementSpeed / WalkAnimationSpeed);
-            return false;
+            return EnemyAction::None;
         }
 
         /// <summary>

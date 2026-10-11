@@ -625,7 +625,7 @@ namespace {
 }
 
 TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
-    ASSERT_EQ(content_.GetEnemies().size(), 2u);
+    ASSERT_EQ(content_.GetEnemies().size(), 3u);   // and the crossbowman (RangedWeaponsAndCrossbowmen)
 
     const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
     ASSERT_NE(minion, nullptr);
@@ -789,4 +789,82 @@ TEST(LootValidationTests, ItemChanceWithoutItems_Rejected) {
     auto result = LoadLoot(content, "[]", Array(R"({"id":"loot_a","itemChance":0.5,"items":[]})"));
 
     EXPECT_TRUE(AnyErrorContains(result, "'items' must list at least one item")) << ErrorsOf(result);
+}
+
+// ============================================================================
+// Ranged Combat Tests
+// ============================================================================
+
+namespace {
+    std::string RangedEnemy(std::string_view speed, std::string_view model, std::string_view keepAway) {
+        std::string enemy = EnemyWith("attackRange", "6.0");
+        if (!speed.empty()) enemy.insert(enemy.size() - 1, std::format(",\"projectileSpeed\":{}", speed));
+        if (!model.empty()) enemy.insert(enemy.size() - 1, std::format(",\"projectileModel\":\"{}\"", model));
+        if (!keepAway.empty()) enemy.insert(enemy.size() - 1, std::format(",\"keepAwayRange\":{}", keepAway));
+        return enemy;
+    }
+}
+
+TEST(RangedContentTests, RangedEnemy_LoadsItsShot) {
+    ContentDatabase content;
+    auto result = LoadEnemies(content, Array(RangedEnemy("9.0", "Bolt.gltf", "3.0")));
+
+    ASSERT_TRUE(result.Succeeded());
+    const auto& enemy = content.GetEnemies().front();
+    EXPECT_TRUE(enemy.IsRanged());
+    EXPECT_FLOAT_EQ(enemy.projectileSpeed, 9.0f);
+    EXPECT_EQ(enemy.projectileModel, "Bolt.gltf");
+    EXPECT_FLOAT_EQ(enemy.keepAwayRange, 3.0f);
+}
+
+TEST(RangedContentTests, MeleeEnemy_NotRanged) {
+    ContentDatabase content;
+    ASSERT_TRUE(LoadEnemies(content, Array(ValidEnemy)).Succeeded());
+    EXPECT_FALSE(content.GetEnemies().front().IsRanged());
+}
+
+TEST(RangedContentTests, InconsistentRangedEnemies_Rejected) {
+    const std::string cases[] = {
+        RangedEnemy("9.0", "", ""),                 // no model to draw the shot
+        RangedEnemy("", "Bolt.gltf", ""),           // a model but no speed
+        RangedEnemy("-1.0", "Bolt.gltf", ""),
+        RangedEnemy("9.0", "Bolt.gltf", "6.0"),     // keeps away beyond its own range
+    };
+    for (const auto& enemy : cases) {
+        ContentDatabase content;
+        EXPECT_FALSE(LoadEnemies(content, Array(enemy)).Succeeded()) << enemy;
+    }
+}
+
+TEST(RangedContentTests, Bow_NeedsRangeAndSpeed_SwordHasNone) {
+    const std::string bow = R"({"id":"weapon_bow","name":"B","category":"Bow","allowedClasses":["Warrior"],"damageDice":"1d6","damageType":["Piercing"],"attackTimeSeconds":1.0)";
+    {
+        ContentDatabase content;
+        ASSERT_TRUE(content.LoadFromJson("[]", "[" + bow + R"(,"range":8.0,"projectileSpeed":12.0})" + "]", "[]").Succeeded());
+        EXPECT_TRUE(content.GetWeapons().front().IsRanged());
+        EXPECT_FLOAT_EQ(content.GetWeapons().front().range, 8.0f);
+    }
+    {
+        ContentDatabase content;
+        EXPECT_FALSE(content.LoadFromJson("[]", "[" + bow + "}]", "[]").Succeeded());
+    }
+    {
+        ContentDatabase content;
+        std::string sword = ValidWeapon;
+        sword.insert(sword.size() - 1, R"(,"range":3.0)");
+        EXPECT_FALSE(content.LoadFromJson("[]", "[" + sword + "]", "[]").Succeeded());
+    }
+}
+
+TEST_F(ShippedContentTests, RangedWeaponsAndCrossbowmen) {
+    for (const auto& weapon : content_.GetWeapons()) {
+        const bool shoots = weapon.category == WeaponType::Bow || weapon.category == WeaponType::Crossbow;
+        EXPECT_EQ(weapon.IsRanged(), shoots) << weapon.key;
+    }
+    const auto* crossbowman = content_.FindEnemy("enemy_skeleton_rogue");
+    ASSERT_NE(crossbowman, nullptr);
+    EXPECT_TRUE(crossbowman->IsRanged());
+    EXPECT_EQ(crossbowman->projectileModel, "Skeleton_Arrow.gltf");
+    EXPECT_GT(crossbowman->keepAwayRange, 0.0f);
+    EXPECT_LT(crossbowman->keepAwayRange, crossbowman->attackRange);
 }

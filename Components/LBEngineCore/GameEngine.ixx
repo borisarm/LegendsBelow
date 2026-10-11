@@ -128,25 +128,48 @@ export namespace LB::Engine {
         static constexpr std::string_view FloorVariantModel = "tileBrickA_small.glb";
         static constexpr std::string_view WallModel = "wall.glb";
         static constexpr std::string_view CornerModel = "pillar.glb";
-        static constexpr std::string_view PlayerModel = "character_knight.gltf";
+        // The player: the KayKit Adventurers knight on the Rig_Medium (the skeletons' rig and
+        // clips), at the enemies' scale, holding the equipped weapon (and shield) in its hand slots
+        static constexpr std::string_view PlayerModel = "Knight.glb";
+        static constexpr float PlayerModelScale = 0.42f;
+        // The sword lying on the floor as loot (the knight holds HeldModels)
         static constexpr std::string_view PlayerWeaponModel = "sword_common.glb";
+        // Weapons and the shield in the knight's hands, and the arrows and bolts it shoots
+        // (KayKit Adventurers; the mace is the skeletons')
+        static constexpr std::string_view HeldSword = "sword_1handed.gltf";
+        static constexpr std::string_view HeldShield = "shield_round.gltf";
+        static constexpr std::string_view ArrowModel = "arrow_bow.gltf";
+        static constexpr std::string_view BoltModel = "arrow_crossbow.gltf";
+        static constexpr std::array<std::string_view, 10> HeldModels = {
+            HeldSword, "axe_1handed.gltf", "dagger.gltf", "Skeleton_Mace.gltf", "staff.gltf", "bow_withString.gltf",
+            "crossbow_1handed.gltf", HeldShield, ArrowModel, BoltModel };
+        // Held like a pistol (see HeldTransform)
+        static constexpr std::array<std::string_view, 2> PistolGripModels = { "crossbow_1handed.gltf", "Skeleton_Crossbow.gltf" };
         // Font of the HUD and the damage numbers (Assets/Fonts, SIL Open Font License)
         static constexpr std::string_view UiFont = "MedievalSharp-Regular.ttf";
-        static constexpr std::string_view PlayerSwordArmPart = "character_knightArmRight";
         // Props for loot on the floor and the weapon categories the knight can hold
         static constexpr std::array<std::string_view, 10> PropModels = {
             "lootSackA.glb", "coinsSmall.glb", "coinsMedium.glb", "coinsLarge.glb", "axe_common.glb",
             "dagger_common.glb", "hammer_common.glb", "staff_common.glb", "crossbow_common.glb", "shield_common.glb" };
         // Animation sets of the skinned characters (KayKit Rig_Medium), in the model directory
-        static constexpr std::array<std::string_view, 3> AnimationFiles = {
-            "Animations/Rig_Medium_General.glb", "Animations/Rig_Medium_MovementBasic.glb", "Animations/Rig_Medium_CombatMelee.glb" };
+        static constexpr std::array<std::string_view, 4> AnimationFiles = {
+            "Animations/Rig_Medium_General.glb", "Animations/Rig_Medium_MovementBasic.glb", "Animations/Rig_Medium_CombatMelee.glb",
+            "Animations/Rig_Medium_CombatRanged.glb" };
+        // Run cycles are authored for this ground speed (tiles per second, at PlayerModelScale)
+        static constexpr float RunAnimationSpeed = 4.0f;
 
         // Combat in the test arena: the player's starting weapon (weapons.json) and the enemies of
         // the waves (enemies.json)
         static constexpr std::string_view StartingWeapon = "weapon_sword_rusted_shortsword_t1";
         static constexpr std::string_view LightEnemy = "enemy_skeleton_minion";
         static constexpr std::string_view HeavyEnemy = "enemy_skeleton_warrior";
+        static constexpr std::string_view RangedEnemy = "enemy_skeleton_rogue";
         static constexpr float PlayerReach = 1.4f;              // tiles between centers
+        // A bow or crossbow shot leaves this far through the attack time (drawn, or aimed); the
+        // player stands still until then
+        static constexpr float ShotReleaseFraction = 0.5f;
+        // In the bag from the start, to switch to on the character screen
+        static constexpr std::string_view StartingBow = "weapon_bow_worn_shortbow_t1";
         static constexpr float PlayerRespawnSeconds = 3.0f;     // after going down
 
         // Loot: the potion the quick-use button drinks, the bag size, and how close the player
@@ -449,7 +472,8 @@ export namespace LB::Engine {
         }
 
         /// <summary>
-        /// True while the player's weapon swing plays (attacks repeat while Attack is held)
+        /// True while the player's attack plays: a weapon swing, or drawing and loosing a shot with
+        /// a bow or crossbow (attacks repeat while Attack is held)
         /// </summary>
         [[nodiscard]] bool IsPlayerAttacking() const noexcept { return session_->playerCombat.swinging; }
 
@@ -623,7 +647,7 @@ export namespace LB::Engine {
         bool LoadContent(const std::string& contentDirectory);
         bool LoadModels(const std::string& modelDirectory);
         bool LoadFonts(const std::string& fontDirectory);
-        void ResolveEnemyClips(std::vector<std::string>& errors);
+        void ResolveClips(std::vector<std::string>& errors);
         void ConfigureClassRules();
         bool SpawnPlayer();
         void SetPaused(bool paused);
@@ -640,6 +664,9 @@ export namespace LB::Engine {
         void Update(double elapsedSeconds);
         void UpdateCameraControls();
         void UpdatePlayerCombat(float elapsedSeconds);
+        void StartPlayerAttack();
+        void ReleasePlayerAttack();
+        void AnimatePlayer(float elapsedSeconds, bool moving);
         void MovePlayer(float elapsedSeconds);
         void UpdateEncounter(float elapsedSeconds);
         void UpdateCombatTexts(float elapsedSeconds);
@@ -652,11 +679,13 @@ export namespace LB::Engine {
         void DrawArenaModels(const Shade& shade);
         void DrawPlayer(const Shade& shade);
         void DrawEnemies(const Shade& shade);
+        void DrawProjectiles(const Shade& shade);
         void DrawHud();
-        Systems::Rendering::Matrix4 SwordArmPose() const noexcept;
         static Systems::Rendering::Color HitTint(const Shade& shade, float flashSeconds);
         float EnemyTop(const Enemy& enemy) const;
         float PlayerTop() const;
+        std::optional<Systems::Rendering::Matrix4> HeldTransform(Systems::Rendering::ModelId body, std::string_view file, const char* slot,
+                                                                 const Systems::Rendering::AnimationState& animation) const;
         // A loaded prop, character, or weapon model by file (invalid when not loaded)
         Systems::Rendering::ModelId ModelOf(std::string_view file) const;
 
@@ -687,10 +716,12 @@ export namespace LB::Engine {
         void UpdateMusic(float elapsedSeconds);
         void PlaySound(GameSound sound, std::optional<WorldPoint> at = std::nullopt);
         void PlayCombatSounds();
+        void PlayProjectileSounds();
         void UpdateSounds(float elapsedSeconds, bool running);
 
         // When and where effects play (Effects.cpp)
         void EmitCombatEffects();
+        void EmitProjectileEffects();
         void EmitHealingEffect();
         void EmitLevelUpEffect();
         void EmitChestEffect(WorldPoint chest);
@@ -706,7 +737,8 @@ export namespace LB::Engine {
         void DrawGroundItems(const Systems::Rendering::Color& tint);
         void DrawCharacterScreen();
         Systems::Rendering::ModelId ItemModel(const GroundItem& item) const;
-        Systems::Rendering::ModelId HeldWeaponModel() const;
+        std::string_view HeldWeaponFile() const;
+        bool PlayerHoldsShield() const;
         void WriteProgress(Systems::Persistence::SaveData& data) const;
         void ReadProgress(const Systems::Persistence::SaveData& data);
         std::string CanEquip(ItemRef item) const;
@@ -756,10 +788,26 @@ export namespace LB::Engine {
             using is_transparent = void;
             [[nodiscard]] std::size_t operator()(std::string_view text) const noexcept { return std::hash<std::string_view>{}(text); }
         };
+        // Clips the player plays (KayKit Rig_Medium); all invalid without animations (headless)
+        struct PlayerClips {
+            ClipInfo idle;
+            ClipInfo bowIdle;       // standing with a bow
+            ClipInfo run;
+            ClipInfo slash;         // one-handed weapons
+            ClipInfo slashTwoHanded;
+            ClipInfo stab;          // daggers
+            ClipInfo bowDraw;       // until the arrow leaves
+            ClipInfo bowRelease;    // after it
+            ClipInfo shoot;         // a crossbow
+            ClipInfo hit;
+            ClipInfo death;
+        };
+
         struct Assets {
             WorldModels models;
             std::unordered_map<std::string, Systems::Rendering::ModelId, StringHash, std::equal_to<>> characterModels;   // enemy bodies, weapons, props by file
             EnemyClips enemyClips{};
+            PlayerClips playerClips{};
             bool soundsLoaded{false};
             bool musicLoaded{false};
             MenuArt menuArt;
@@ -767,10 +815,12 @@ export namespace LB::Engine {
 
         // The player's side of combat
         struct PlayerCombat {
-            bool swinging{false};
+            bool swinging{false};                  // attacking: a swing, or a shot being drawn and loosed
             float swingSeconds{0.0f};
-            bool impactDone{false};                // this swing's strike has been resolved
-            std::optional<std::uint32_t> target;   // enemy picked when the swing started
+            bool impactDone{false};                // this swing's strike has been resolved (or the shot has left)
+            bool shooting{false};                  // this attack is a shot (a bow or crossbow)
+            std::optional<std::uint32_t> target;   // enemy picked when the attack started
+            float hurtSeconds{0.0f};               // the flinch from a hit still playing
             float hitFlashSeconds{0.0f};
             float deadSeconds{0.0f};               // time spent down
         };
@@ -786,6 +836,7 @@ export namespace LB::Engine {
             WorldPoint playerPosition{};
             float playerFacingYaw{0.0f};             // radians around the vertical axis; 0 faces +Z (south)
             PlayerCombat playerCombat;
+            Animator playerAnimator;
             const Content::WeaponDefinition* playerWeapon{nullptr};   // into content_, which outlives the session
             Services::Inventory::InventoryService inventoryService;
             std::int32_t gold{0};

@@ -178,7 +178,7 @@ TEST(GameEngineModelTests, Render_DrawsArenaAndPlayerFromModels) {
     EXPECT_GT(DrawsOf(engine, "tileBrickA_small").size(), 0u);
     EXPECT_EQ(DrawsOf(engine, "wall").size(), walls);
     EXPECT_EQ(DrawsOf(engine, "pillar").size(), 4u);
-    EXPECT_EQ(DrawsOf(engine, "character_knight").size(), 1u);
+    EXPECT_EQ(DrawsOf(engine, "Knight").size(), 1u);
     EXPECT_TRUE(engine.GetRendering().GetQueuedMeshes().empty());
 }
 
@@ -220,9 +220,9 @@ TEST(GameEngineModelTests, Player_StandsAtPositionFacingWalkDirection) {
 
     HoldKeysFor(engine, { Keys::FromChar('D') }, 20);
 
-    const auto draws = DrawsOf(engine, "character_knight");
+    const auto draws = DrawsOf(engine, "Knight");
     ASSERT_EQ(draws.size(), 1u);
-    const auto& knight = ModelNamed(engine, "character_knight");
+    const auto& knight = ModelNamed(engine, "Knight");
     EXPECT_FLOAT_EQ(draws[0].position.x, engine.GetPlayerPosition().x);
     EXPECT_FLOAT_EQ(draws[0].position.z, engine.GetPlayerPosition().y);
     EXPECT_NEAR(draws[0].position.y + knight.boundsMin.y * draws[0].scale, 0.0f, 1e-5);
@@ -255,11 +255,12 @@ TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
 
     EXPECT_FALSE(ok);
     const auto& error = engine.GetInitializationError();
-    // Arena (4), knight and sword (2), dungeon props (4), loot and held-weapon props (10), the potion (1),
-    // enemy bodies and weapons (5), animation sets (3)
-    EXPECT_NE(error.find("29 problems"), std::string::npos) << error;
+    // Arena (4), the knight and the loot sword (2), dungeon props (4), loot props (10), weapons and the
+    // shield in the knight's hands and its arrows and bolts (10), the potion (1), enemy bodies, weapons
+    // and shots (8), animation sets (4)
+    EXPECT_NE(error.find("43 problems"), std::string::npos) << error;
     EXPECT_NE(error.find("wall.glb"), std::string::npos) << error;
-    EXPECT_NE(error.find("character_knight.gltf"), std::string::npos) << error;
+    EXPECT_NE(error.find("Knight.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Skeleton_Minion.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Rig_Medium_General.glb"), std::string::npos) << error;
     std::filesystem::remove_all(empty);
@@ -372,7 +373,7 @@ TEST(GameEngineBatchingTests, Arena_FewDrawCalls) {
 
     // One instanced draw per part of each model: floor tiles (2 models), wall, pillar, knight, sword
     std::size_t expected = 0;
-    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight", "sword_common" }) {
+    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "Knight", "sword_1handed" }) {
         expected += ModelNamed(engine, name).parts.size();
     }
     expected += 1;                         // the HUD's overlay batch
@@ -392,7 +393,7 @@ TEST(GameEngineBatchingTests, FadedWalls_TwoExtraPassesPerPart) {
     const auto& rendering = engine.GetRendering();
     const auto wallParts = ModelNamed(engine, "wall").parts.size();
     std::size_t expected = 0;
-    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "character_knight", "sword_common" }) {
+    for (std::string_view name : { "tileBrickB_small", "tileBrickA_small", "wall", "pillar", "Knight", "sword_1handed" }) {
         expected += ModelNamed(engine, name).parts.size();
     }
     bool pillarFaded = false;

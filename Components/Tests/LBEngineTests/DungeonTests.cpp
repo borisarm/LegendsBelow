@@ -199,13 +199,23 @@ TEST(GameEngineDungeonTests, Playthrough_FightThroughToTheSecondFloor) {
     InitializeDungeon(engine);
     const auto& layout = engine.GetWorld().Layout();
 
-    // Clear the critical path room by room (as a careful player would), swinging at whatever is in
-    // reach and drinking a potion when low; after a fall, set out again from the entrance
+    // Clear the critical path room by room (as a careful player would), going after the nearest
+    // enemy (crossbowmen back away) and swinging at whatever is in reach, drinking a potion when
+    // low; after a fall, set out again from the entrance
     std::string trace;
     const auto fightUntilCleared = [&](std::int32_t room) {
         engine.OnKeyDown(Keys::Space);
         for (int i = 0; i < 60 * 60 && engine.IsPlayerAlive() && !engine.GetRoomStates()[static_cast<std::size_t>(room)].cleared; ++i) {
-            SteerToward(engine, engine.GetWorld().RoomCenter(room));
+            auto goal = engine.GetWorld().RoomCenter(room);
+            float nearest = std::numeric_limits<float>::max();
+            for (const auto& enemy : engine.GetEncounter().GetEnemies()) {
+                const float distance = Encounter::Distance(enemy.position, engine.GetPlayerPosition());
+                if (enemy.IsTargetable() && distance < nearest) {
+                    nearest = distance;
+                    goal = enemy.position;
+                }
+            }
+            SteerToward(engine, goal);
             if (PlayerHitPoints(engine) * 10 < PlayerMaxHitPoints(engine) * 4) TapKey(engine, Keys::FromChar('R'));
             engine.Tick(OneSixtieth);
         }

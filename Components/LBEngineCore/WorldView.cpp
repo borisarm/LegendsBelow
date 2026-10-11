@@ -11,12 +11,16 @@ import LB.RenderingSystem;
 
 namespace LB::Engine {
 
-    namespace {
-        // Smooth 0 -> 1 between edge0 and edge1
-        float SmoothStep(float edge0, float edge1, float x) noexcept {
-            const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-            return t * t * (3.0f - 2.0f * t);
+    // A held model in a hand slot. Crossbows are built with the barrel along +Z, but the KayKit
+    // shooting clips hold the fist like a pistol grip (the slot's +X forward, +Y up): a quarter
+    // turn around the grip aims them (and lets them hang toward the floor at rest).
+    std::optional<Systems::Rendering::Matrix4> GameEngine::HeldTransform(Systems::Rendering::ModelId body, std::string_view file, const char* slot,
+                                                                        const Systems::Rendering::AnimationState& animation) const {
+        auto transform = renderingSystem_.GetJointTransform(body, slot, animation);
+        if (transform && std::ranges::find(PistolGripModels, file) != PistolGripModels.end()) {
+            transform = Systems::Rendering::Matrix4::RotationY(std::numbers::pi_v<float> * 0.5f) * *transform;
         }
+        return transform;
     }
 
     Systems::Rendering::ModelId GameEngine::ModelOf(std::string_view file) const {
@@ -62,6 +66,7 @@ namespace LB::Engine {
         DrawArena(shade);
         DrawPlayer(shade);
         DrawEnemies(shade);
+        DrawProjectiles(shade);
         DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
         DrawFloorProps(shade(1.0f, 1.0f, 1.0f));
         session_->torches.Draw(renderingSystem_, session_->walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
@@ -88,9 +93,42 @@ namespace LB::Engine {
     float GameEngine::PlayerTop() const {
         if (assets_.models.loaded) {
             const auto* knight = renderingSystem_.GetModel(assets_.models.player);
-            return (knight->boundsMax.y - knight->boundsMin.y) * ModelScale + 0.1f;
+            return (knight->boundsMax.y - knight->boundsMin.y) * PlayerModelScale + 0.1f;
         }
         return 1.6f;
+    }
+
+    /// <summary>
+    /// Arrows and bolts at chest height along their heading (models lie along +Z with the tip
+    /// forward; one built upright, like the skeletons' arrow, has its tip down and is tipped over
+    /// onto it), fading out of the walls they stuck in; thin boxes without models
+    /// </summary>
+    void GameEngine::DrawProjectiles(const Shade& shade) {
+        using Systems::Rendering::Matrix4;
+        for (const auto& projectile : session_->encounter.GetProjectiles()) {
+            const Systems::Rendering::Vector3 at{ projectile.position.x, ProjectileSet::FlightHeight, projectile.position.y };
+            auto tint = shade(1.0f, 1.0f, 1.0f);
+            tint.a = ProjectileSet::Opacity(projectile);
+
+            const auto model = assets_.models.loaded ? ModelOf(projectile.model) : Systems::Rendering::InvalidModelId;
+            if (const auto* shape = model != Systems::Rendering::InvalidModelId ? renderingSystem_.GetModel(model) : nullptr) {
+                Systems::Rendering::ModelRenderData draw{ model, at, projectile.Yaw(), PlayerModelScale, tint };
+                if (shape->boundsMax.y - shape->boundsMin.y > shape->boundsMax.z - shape->boundsMin.z) {
+                    draw.transform = Matrix4::RotationX(-std::numbers::pi_v<float> * 0.5f);   // -Y (the tip) to +Z
+                }
+                renderingSystem_.DrawModel(draw);
+                continue;
+            }
+
+            Systems::Rendering::MeshRenderData shaft{};
+            shaft.shape = Systems::Rendering::MeshShape::Box;
+            shaft.position = at;
+            shaft.size = { 0.04f, 0.04f, 0.45f };
+            shaft.yawRadians = projectile.Yaw();
+            shaft.color = shade(0.62f, 0.50f, 0.34f);
+            shaft.color.a = tint.a;
+            renderingSystem_.DrawMesh(shaft);
+        }
     }
 
     // The world with primitives: one floor slab per tile (top at height 0) and wall blocks
@@ -178,76 +216,35 @@ namespace LB::Engine {
         session_->walls.Draw(renderingSystem_, tint, ModelScale);
     }
 
-    // The sword arm's pose at the shoulder during a swing: a horizontal slash that reads from
-    // above. The arm lifts forward (around X, negative raises it) while winding back to the
-    // knight's right (around Y), sweeps across the front through the impact, then settles.
-    Systems::Rendering::Matrix4 GameEngine::SwordArmPose() const noexcept {
-        using Systems::Rendering::Matrix4;
-        if (!session_->playerCombat.swinging) return {};
-
-        constexpr float lifted = -1.0f;
-        constexpr float windUp = -1.1f;     // toward the knight's right
-        constexpr float followThrough = 1.0f;
-        const float phase = session_->playerCombat.swingSeconds / PlayerAttackSeconds();
-        const float impact = Encounter::AttackImpactFraction;
-        const float windUpEnd = impact * 0.65f;
-
-        float pitch = 0.0f;
-        float sweep = 0.0f;
-        if (phase < windUpEnd) {
-            const float t = SmoothStep(0.0f, windUpEnd, phase);
-            pitch = lifted * t;
-            sweep = windUp * t;
-        }
-        else if (phase < impact) {
-            pitch = lifted;
-            sweep = windUp + (followThrough - windUp) * SmoothStep(windUpEnd, impact, phase);
-        }
-        else {
-            const float t = 1.0f - SmoothStep(impact, 1.0f, phase);
-            pitch = lifted * t;
-            sweep = followThrough * t;
-        }
-        return Matrix4::RotationX(pitch) * Matrix4::RotationY(sweep);
-    }
-
     // Red flash on characters that were just hit (tints multiply, so green and blue drop)
     Systems::Rendering::Color GameEngine::HitTint(const Shade& shade, float flashSeconds) {
         const float flash = std::clamp(flashSeconds / Encounter::HitFlashSeconds, 0.0f, 1.0f);
         return shade(1.0f, 1.0f - 0.65f * flash, 1.0f - 0.65f * flash);
     }
 
-    // Placeholder hero: a body, a head, and a visor showing where they face (or the knight model)
+    // The knight posed by its animation, with the weapon in its right hand (a bow in its left) and
+    // a worn shield on its left arm; or a placeholder hero: a body, a head, and a visor showing
+    // where they face
     void GameEngine::DrawPlayer(const Shade& shade) {
         if (!session_->playerId) return;
 
         if (assets_.models.loaded) {
             // Feet on the floor, facing the walk direction (glTF characters face +Z)
-            using Systems::Rendering::Matrix4;
-            const auto* knight = renderingSystem_.GetModel(assets_.models.player);
-            const float feet = -knight->boundsMin.y * ModelScale;
-            Systems::Rendering::ModelRenderData body{
-                assets_.models.player, { session_->playerPosition.x, feet, session_->playerPosition.y }, session_->playerFacingYaw, ModelScale, HitTint(shade, session_->playerCombat.hitFlashSeconds) };
-
-            // Down: tip over backwards around the feet, lifted so the back rests on the floor
-            if (!IsPlayerAlive()) {
-                const float fall = SmoothStep(0.0f, 0.6f, session_->playerCombat.deadSeconds);
-                body.transform = Matrix4::RotationX(-1.5f * fall) * Matrix4::Translation({ 0.0f, 0.35f * fall, 0.0f });
-            }
-
-            // The sword arm swings at the shoulder; the sword sits in its fist, blade forward
-            const auto arm = knight->FindPartIndex(PlayerSwordArmPart);
-            const auto armPose = SwordArmPose();
-            if (arm) {
-                body.partPoses.push_back({ *arm, armPose });
-                constexpr Systems::Rendering::Vector3 fist{ -0.195f, -0.43f, 0.0f };   // in the arm's space
-                Systems::Rendering::ModelRenderData sword{ HeldWeaponModel(), body.position, body.yawRadians, ModelScale, body.tint };
-                sword.transform = Matrix4::RotationX(std::numbers::pi_v<float> * 0.5f) * Matrix4::Translation(fist)
-                                * armPose * knight->parts[*arm].transform;
-                if (body.transform) *sword.transform = *sword.transform * *body.transform;
-                renderingSystem_.DrawModel(sword);
-            }
+            const Systems::Rendering::Vector3 position{ session_->playerPosition.x, 0.0f, session_->playerPosition.y };
+            const auto tint = HitTint(shade, session_->playerCombat.hitFlashSeconds);
+            Systems::Rendering::ModelRenderData body{ assets_.models.player, position, session_->playerFacingYaw, PlayerModelScale, tint };
+            body.animation = session_->playerAnimator.GetState();
             renderingSystem_.DrawModel(body);
+
+            const auto weapon = HeldWeaponFile();
+            const bool bow = session_->playerWeapon && session_->playerWeapon->category == LB::Combat::WeaponType::Bow;
+            std::vector<std::pair<std::string_view, const char*>> held{ { weapon, bow ? "handslot.l" : "handslot.r" } };
+            if (!bow && PlayerHoldsShield()) held.emplace_back(HeldShield, "handslot.l");
+            for (const auto& [file, slot] : held) {
+                Systems::Rendering::ModelRenderData item{ ModelOf(file), position, session_->playerFacingYaw, PlayerModelScale, tint };
+                item.transform = HeldTransform(body.model, file, slot, body.animation);
+                if (item.transform) renderingSystem_.DrawModel(item);
+            }
             return;
         }
 
@@ -304,7 +301,7 @@ namespace LB::Engine {
                 for (const auto& [file, slot] : { std::pair{ &type.mainHandModel, "handslot.r" }, std::pair{ &type.offHandModel, "handslot.l" } }) {
                     if (file->empty()) continue;
                     Systems::Rendering::ModelRenderData held{ ModelOf(*file), position, enemy.facingYaw, type.modelScale, tint };
-                    held.transform = renderingSystem_.GetJointTransform(body.model, slot, body.animation);
+                    held.transform = HeldTransform(body.model, *file, slot, body.animation);
                     if (held.transform) renderingSystem_.DrawModel(held);
                 }
                 continue;

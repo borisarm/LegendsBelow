@@ -119,8 +119,15 @@ namespace LB::Engine {
         }
     }
 
+    // This step's shots: enemies loosing (the player's own are heard as they leave), and arrows and
+    // bolts striking walls
+    void GameEngine::PlayProjectileSounds() {
+        for (const auto at : session_->encounter.GetShots()) PlaySound(GameSound::Shoot, at);
+        for (const auto at : session_->encounter.GetWallHits()) PlaySound(GameSound::ArrowHitsWall, at);
+    }
+
     // Each step: advance playback; while the game runs, footsteps as the player walks, and the
-    // sounds of enemies starting to rise or to swing
+    // sounds of enemies starting to rise or to swing (aiming is quiet: the shot is heard)
     void GameEngine::UpdateSounds(float elapsedSeconds, bool running) {
         audioSystem_.Update(elapsedSeconds);
         UpdateMusic(elapsedSeconds);
@@ -147,7 +154,7 @@ namespace LB::Engine {
             const auto before = heard.find(enemy.id);
             const bool entered = before == heard.end() || before->second != enemy.state;
             if (entered && enemy.state == EnemyState::Spawning) PlaySound(GameSound::EnemyRises, enemy.position);
-            if (entered && enemy.state == EnemyState::Attacking) PlaySound(GameSound::EnemySwing, enemy.position);
+            if (entered && enemy.state == EnemyState::Attacking && !enemy.definition->IsRanged()) PlaySound(GameSound::EnemySwing, enemy.position);
             now.emplace(enemy.id, enemy.state);
         }
         heard = std::move(now);

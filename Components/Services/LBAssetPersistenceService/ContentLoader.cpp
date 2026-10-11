@@ -354,9 +354,15 @@ namespace LB::Content {
             reader.ReadStringArray("specialProperties", weapon.specialProperties);
             reader.ReadInt("affixSlots", weapon.affixSlots, false);
             reader.ReadString("ammoType", weapon.ammoType, false);
+            reader.ReadFloat("range", weapon.range, false);
+            reader.ReadFloat("projectileSpeed", weapon.projectileSpeed, false);
 
             if (weapon.attackTimeSeconds <= 0.0f) reader.Error("'attackTimeSeconds' must be positive");
             if (weapon.critMultiplier < 1.0f) reader.Error("'critMultiplier' must be at least 1");
+            // Bows and crossbows shoot: they need a range and a projectile speed; nothing else does
+            const bool shoots = weapon.category == WeaponType::Bow || weapon.category == WeaponType::Crossbow;
+            if (shoots && (weapon.range <= 0.0f || weapon.projectileSpeed <= 0.0f)) reader.Error("bows and crossbows need a positive 'range' and 'projectileSpeed'");
+            if (!shoots && (weapon.range != 0.0f || weapon.projectileSpeed != 0.0f)) reader.Error("only bows and crossbows have a 'range' or 'projectileSpeed'");
             return weapon;
         }
 
@@ -543,6 +549,9 @@ namespace LB::Content {
             reader.ReadFloat("attackImpactFraction", enemy.attackImpactFraction, false);
             reader.ReadFloat("movementSpeed", enemy.movementSpeed, true);
             reader.ReadFloat("aggroRange", enemy.aggroRange, false);
+            reader.ReadFloat("projectileSpeed", enemy.projectileSpeed, false);
+            reader.ReadString("projectileModel", enemy.projectileModel, false);
+            reader.ReadFloat("keepAwayRange", enemy.keepAwayRange, false);
 
             reader.ReadString("lootTable", enemy.lootTable, false);
             reader.ReadString("model", enemy.model, true);
@@ -563,6 +572,12 @@ namespace LB::Content {
             if (enemy.movementSpeed <= 0.0f) reader.Error("'movementSpeed' must be positive");
             if (enemy.aggroRange < 0.0f) reader.Error("'aggroRange' must not be negative");
             if (enemy.modelScale <= 0.0f) reader.Error("'modelScale' must be positive");
+            if (enemy.projectileSpeed < 0.0f) reader.Error("'projectileSpeed' must not be negative");
+            if (enemy.IsRanged() && enemy.projectileModel.empty()) reader.Error("a ranged enemy ('projectileSpeed') needs a 'projectileModel'");
+            if (!enemy.IsRanged() && !enemy.projectileModel.empty()) reader.Error("'projectileModel' needs a 'projectileSpeed'");
+            if (enemy.keepAwayRange < 0.0f || (enemy.keepAwayRange > 0.0f && enemy.keepAwayRange >= enemy.attackRange)) {
+                reader.Error("'keepAwayRange' must be between 0 and 'attackRange'");
+            }
             return enemy;
         }
 
