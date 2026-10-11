@@ -241,7 +241,7 @@ TEST_F(PersistenceSystemTests, GetAllSaveSlots_MultipleSaves_ReturnsAll) {
 
     auto slots = system.GetAllSaveSlots();
 
-    EXPECT_EQ(slots.size(), 3);
+    EXPECT_EQ(slots.size(), 3u);
 }
 
 TEST_F(PersistenceSystemTests, GetAllSaveSlots_NoSaves_ReturnsEmpty) {

@@ -107,7 +107,9 @@ namespace LB::Engine {
 
     // Why the player cannot equip an item, or empty when they can
     std::string GameEngine::CanEquip(ItemRef item) const {
-        const auto& character = session_.characterService.GetCharacter(*session_.playerId)->get();
+        const auto* player = PlayerCharacter();
+        if (!player) return "No character";
+        const auto& character = *player;
         std::int32_t requiredLevel = 1;
         bool allowed = false;
         if (item.kind == ItemKind::Weapon) {
@@ -166,7 +168,9 @@ namespace LB::Engine {
         if (!session_.playerId || item.kind != ItemKind::Consumable || CountItem(key) == 0 || !IsPlayerAlive()) return false;
 
         const auto* consumable = content_->FindConsumable(item.id);
-        const auto& character = session_.characterService.GetCharacter(*session_.playerId)->get();
+        const auto* player = PlayerCharacter();
+        if (!consumable || !player) return false;
+        const auto& character = *player;
         if (consumable->healing.count > 0 && character.GetCurrentHitPoints() >= character.GetMaxHitPoints()) {
             return false;   // no waste at full health
         }
@@ -251,9 +255,11 @@ namespace LB::Engine {
 
     std::vector<ScreenRow> GameEngine::BuildScreenRows() const {
         std::vector<ScreenRow> rows;
-        if (!session_.playerId) return rows;
-        const auto status = *session_.characterService.GetCharacterStatus(*session_.playerId);
-        const auto& character = session_.characterService.GetCharacter(*session_.playerId)->get();
+        const auto playerStatus = session_.playerId ? session_.characterService.GetCharacterStatus(*session_.playerId) : std::nullopt;
+        const auto* player = PlayerCharacter();
+        if (!playerStatus || !player) return rows;
+        const auto& status = *playerStatus;
+        const auto& character = *player;
         const auto heading = [&](std::string text) { rows.push_back(ScreenRow{ std::move(text), {}, ScreenAction::None, true, true }); };
         const auto info = [&](std::string text, std::string detail = {}) { rows.push_back(ScreenRow{ std::move(text), std::move(detail) }); };
 
@@ -459,7 +465,9 @@ namespace LB::Engine {
     // ------------------------------------------------------------------------------------------
 
     void GameEngine::WriteProgress(Systems::Persistence::SaveData& data) const {
-        const auto& character = session_.characterService.GetCharacter(*session_.playerId)->get();
+        const auto* player = PlayerCharacter();
+        if (!player) return;
+        const auto& character = *player;
         const auto& a = character.GetAttributes();
         data["player.level"] = std::format("{}", character.GetLevel());
         data["player.experience"] = std::format("{}", character.GetExperience());

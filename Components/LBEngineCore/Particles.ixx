@@ -69,7 +69,8 @@ export namespace LB::Engine {
 
     /// <summary>
     /// A pool of particles: spawned by the game, moved each step, removed when their lifetime
-    /// ends. Bounded: past MaxParticles the oldest make room.
+    /// ends. Bounded: past MaxParticles the oldest make room (in constant time: a deque, oldest
+    /// first).
     /// </summary>
     class ParticleField {
     public:
@@ -77,7 +78,7 @@ export namespace LB::Engine {
 
         void Spawn(const Particle& particle) {
             if (particles_.size() >= MaxParticles) {
-                particles_.erase(particles_.begin());
+                particles_.pop_front();
             }
             particles_.push_back(particle);
         }
@@ -96,14 +97,14 @@ export namespace LB::Engine {
 
         void Clear() noexcept { particles_.clear(); }
 
-        [[nodiscard]] const std::vector<Particle>& GetParticles() const noexcept { return particles_; }
+        [[nodiscard]] const std::deque<Particle>& GetParticles() const noexcept { return particles_; }
 
         [[nodiscard]] std::size_t Count(ParticleEffect effect) const noexcept {
             return static_cast<std::size_t>(std::ranges::count(particles_, effect, &Particle::effect));
         }
 
     private:
-        std::vector<Particle> particles_;
+        std::deque<Particle> particles_;
     };
 
 } // namespace LB::Engine

@@ -397,7 +397,7 @@ export namespace LB::Services::Combat {
         /// Execute a full combat action with all calculations
         /// This is a convenience method that combines attack roll and damage
         /// </summary>
-        CombatActionResult ExecuteAttack(const AttackParams& params) const {
+        CombatActionResult ExecuteAttack([[maybe_unused]] const AttackParams& params) const {
             CombatActionResult result{};
 
             // This would integrate with CharacterService to get actual character data

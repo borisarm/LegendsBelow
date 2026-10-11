@@ -327,7 +327,7 @@ export namespace LB::Services::Inventory {
         /// Get total weight (if implementing weight system)
         /// Placeholder for future weight mechanics
         /// </summary>
-        float GetTotalWeight(CharacterId characterId) const {
+        float GetTotalWeight([[maybe_unused]] CharacterId characterId) const {
             // Future: implement weight system
             return 0.0f;
         }

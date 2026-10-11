@@ -54,8 +54,8 @@ TEST(RenderingSystemTests, BeginFrame_ClearsQueues) {
 
     // Stats should be reset
     const auto& stats = system.GetStats();
-    EXPECT_EQ(stats.drawCalls, 0);
-    EXPECT_EQ(stats.spritesRendered, 0);
+    EXPECT_EQ(stats.drawCalls, 0u);
+    EXPECT_EQ(stats.spritesRendered, 0u);
 }
 
 TEST(RenderingSystemTests, BeginFrame_BeforeInitialize_NoError) {
@@ -98,7 +98,7 @@ TEST(RenderingSystemTests, DrawSprite_ValidSprite_Queued) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_EQ(stats.spritesRendered, 1);
+    EXPECT_EQ(stats.spritesRendered, 1u);
 }
 
 TEST(RenderingSystemTests, DrawSprite_MultipleSprites_AllQueued) {
@@ -114,7 +114,7 @@ TEST(RenderingSystemTests, DrawSprite_MultipleSprites_AllQueued) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_EQ(stats.spritesRendered, 10);
+    EXPECT_EQ(stats.spritesRendered, 10u);
 }
 
 TEST(RenderingSystemTests, DrawSprite_BeforeInitialize_NoError) {
@@ -165,7 +165,7 @@ TEST(RenderingSystemTests, DrawText_ValidText_Queued) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_EQ(stats.textRendered, 1);
+    EXPECT_EQ(stats.textRendered, 1u);
 }
 
 TEST(RenderingSystemTests, DrawText_MultipleTexts_AllQueued) {
@@ -181,7 +181,7 @@ TEST(RenderingSystemTests, DrawText_MultipleTexts_AllQueued) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_EQ(stats.textRendered, 5);
+    EXPECT_EQ(stats.textRendered, 5u);
 }
 
 TEST(RenderingSystemTests, DrawText_BeforeInitialize_NoError) {
@@ -222,7 +222,7 @@ TEST(RenderingSystemTests, DrawRectangle_MultipleRects_AllQueued) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_EQ(stats.spritesRendered, 2);
+    EXPECT_EQ(stats.spritesRendered, 2u);
 }
 
 // ============================================================================
@@ -272,9 +272,9 @@ TEST(RenderingSystemTests, GetStats_InitialState_AllZero) {
 
     const auto& stats = system.GetStats();
 
-    EXPECT_EQ(stats.drawCalls, 0);
-    EXPECT_EQ(stats.spritesRendered, 0);
-    EXPECT_EQ(stats.textRendered, 0);
+    EXPECT_EQ(stats.drawCalls, 0u);
+    EXPECT_EQ(stats.spritesRendered, 0u);
+    EXPECT_EQ(stats.textRendered, 0u);
 }
 
 TEST(RenderingSystemTests, GetStats_AfterRendering_UpdatedCorrectly) {
@@ -291,8 +291,8 @@ TEST(RenderingSystemTests, GetStats_AfterRendering_UpdatedCorrectly) {
     system.EndFrame();
 
     const auto& stats = system.GetStats();
-    EXPECT_EQ(stats.spritesRendered, 1);
-    EXPECT_EQ(stats.textRendered, 1);
+    EXPECT_EQ(stats.spritesRendered, 1u);
+    EXPECT_EQ(stats.textRendered, 1u);
     EXPECT_GT(stats.drawCalls, 0u);
 }
 

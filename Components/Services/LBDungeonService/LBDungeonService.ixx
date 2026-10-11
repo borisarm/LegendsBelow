@@ -21,7 +21,6 @@ export namespace LB::Services::Dungeon {
     using LB::Dungeon::DungeonRoom;
     using LB::Dungeon::Dungeon;
     using LB::Dungeon::Encounter;
-    using LB::Dungeon::LootDrop;
     using LB::Dungeon::DungeonGenerationParams;
     using LB::Dungeon::FloorLayout;
     using LB::Dungeon::FloorGenerationParams;
@@ -263,28 +262,6 @@ export namespace LB::Services::Dungeon {
         }
 
         /// <summary>
-        /// Generate loot for a room
-        /// </summary>
-        [[nodiscard]] std::vector<LootDrop> GenerateLoot(RoomType roomType, int32_t dungeonLevel) const {
-            std::vector<LootDrop> loot;
-
-            int32_t lootCount = getLootCount(roomType);
-
-            for (int32_t i = 0; i < lootCount; ++i) {
-                LootDrop drop{};
-                drop.itemId = generateNextItemId();
-                drop.itemName = "Item_" + std::to_string(drop.itemId);
-                drop.dropChance = getLootDropChance(roomType);
-                drop.minQuantity = 1;
-                drop.maxQuantity = getMaxLootQuantity(roomType);
-
-                loot.push_back(drop);
-            }
-
-            return loot;
-        }
-
-        /// <summary>
         /// Get available directions from current room
         /// </summary>
         [[nodiscard]] std::vector<Direction> GetAvailableDirections(Id dungeonId) const {
@@ -376,7 +353,6 @@ export namespace LB::Services::Dungeon {
         mutable Id nextRoomId_{1};
         mutable Id nextEncounterId_{1};
         mutable Id nextEnemyId_{1000};
-        mutable Id nextItemId_{2000};
 
         [[nodiscard]] Id generateNextDungeonId() const {
             return nextDungeonId_++;
@@ -392,10 +368,6 @@ export namespace LB::Services::Dungeon {
 
         [[nodiscard]] Id generateNextEnemyId() const {
             return nextEnemyId_++;
-        }
-
-        [[nodiscard]] Id generateNextItemId() const {
-            return nextItemId_++;
         }
 
         [[nodiscard]] int32_t rollRoomCount(int32_t min, int32_t max) const {
@@ -500,34 +472,6 @@ export namespace LB::Services::Dungeon {
             }
         }
 
-        [[nodiscard]] int32_t getLootCount(RoomType roomType) const {
-            switch (roomType) {
-                case RoomType::Treasure: return 3;
-                case RoomType::Boss: return 5;
-                case RoomType::Elite: return 2;
-                case RoomType::Combat: return 1;
-                default: return 0;
-            }
-        }
-
-        [[nodiscard]] float getLootDropChance(RoomType roomType) const {
-            switch (roomType) {
-                case RoomType::Treasure: return 1.0f;
-                case RoomType::Boss: return 1.0f;
-                case RoomType::Elite: return 0.8f;
-                case RoomType::Combat: return 0.5f;
-                default: return 0.0f;
-            }
-        }
-
-        [[nodiscard]] int32_t getMaxLootQuantity(RoomType roomType) const {
-            switch (roomType) {
-                case RoomType::Treasure: return 5;
-                case RoomType::Boss: return 3;
-                case RoomType::Elite: return 2;
-                default: return 1;
-            }
-        }
     };
 
 } // namespace LB::Services::Dungeon

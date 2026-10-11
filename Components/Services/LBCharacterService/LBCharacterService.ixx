@@ -737,7 +737,7 @@ export namespace LB::Services::Character {
         /// Equip weapon to character
         /// Placeholder for equipment system integration
         /// </summary>
-        bool EquipWeapon(CharacterId characterId, LB::Id weaponId) {
+        bool EquipWeapon(CharacterId characterId, [[maybe_unused]] LB::Id weaponId) {
             auto it = characters_.find(characterId);
             if (it == characters_.end()) {
                 return false;

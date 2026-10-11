@@ -292,7 +292,7 @@ export namespace LB::Services::Progression {
             const String& abilityName,
             int32_t level,
             CharacterClass characterClass,
-            const Attributes& attributes) noexcept {
+            [[maybe_unused]] const Attributes& attributes) noexcept {
 
             // Check level requirement
             auto abilities = GetAbilitiesForLevelRange(characterClass, 1, level);

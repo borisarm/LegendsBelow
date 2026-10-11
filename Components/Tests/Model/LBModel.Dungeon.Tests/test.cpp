@@ -108,7 +108,7 @@ TEST(DirectionTests, FourUniqueDirections) {
     directions.insert(static_cast<int>(Direction::South));
     directions.insert(static_cast<int>(Direction::West));
 
-    EXPECT_EQ(directions.size(), 4);
+    EXPECT_EQ(directions.size(), 4u);
 }
 
 // ============================================================================
@@ -234,7 +234,7 @@ TEST(DirectionNavigationTests, AllDirections_Reachable) {
         Direction::West
     };
 
-    EXPECT_EQ(directions.size(), 4);
+    EXPECT_EQ(directions.size(), 4u);
 }
 
 TEST(DirectionNavigationTests, OppositeDirections_TwoStepsApart) {

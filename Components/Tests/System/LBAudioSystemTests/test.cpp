@@ -29,7 +29,7 @@ TEST(AudioSystemTests, Initialize_SetsDefaultVolumes) {
 TEST(AudioSystemTests, Shutdown_StopsAllAudio) {
     AudioSystem system;
     system.Initialize();
-    auto sourceId = system.PlaySound("test_sound");
+    system.PlaySound("test_sound");   // something to stop
 
     system.Shutdown();
 

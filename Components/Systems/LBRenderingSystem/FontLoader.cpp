@@ -13,6 +13,7 @@ module;
 #pragma warning(pop)
 
 #include <algorithm>
+#include <memory>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -91,12 +92,14 @@ namespace LB::Systems::Rendering::Detail {
             glyph.advance = static_cast<float>(advance) * scale;
 
             BakedGlyph bitmap{ c };
-            unsigned char* sdf = stbtt_GetCodepointSDF(&info, scale, static_cast<int>(c), padding, 128,
-                                                       128.0f / static_cast<float>(padding),
-                                                       &bitmap.width, &bitmap.height, &bitmap.offsetX, &bitmap.offsetY);
+            // Owned from the start: freed even if copying it out throws
+            const auto freeSdf = [](unsigned char* bitmap) { stbtt_FreeSDF(bitmap, nullptr); };
+            const std::unique_ptr<unsigned char, decltype(freeSdf)> sdf(
+                stbtt_GetCodepointSDF(&info, scale, static_cast<int>(c), padding, 128, 128.0f / static_cast<float>(padding),
+                                      &bitmap.width, &bitmap.height, &bitmap.offsetX, &bitmap.offsetY),
+                freeSdf);
             if (sdf) {
-                bitmap.distance.assign(sdf, sdf + static_cast<std::size_t>(bitmap.width * bitmap.height));
-                stbtt_FreeSDF(sdf, nullptr);
+                bitmap.distance.assign(sdf.get(), sdf.get() + static_cast<std::size_t>(bitmap.width * bitmap.height));
             }
             font.glyphs[c] = glyph;
             if (!bitmap.distance.empty()) baked.push_back(std::move(bitmap));

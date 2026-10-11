@@ -180,8 +180,10 @@ namespace LB::Systems::Rendering::Detail {
             int width = 0;
             int height = 0;
             int channels = 0;
-            stbi_uc* pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(encoded.data()), static_cast<int>(encoded.size()),
-                                                    &width, &height, &channels, 4);
+            // Owned from the start: freed even if copying it out throws
+            const std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
+                stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(encoded.data()), static_cast<int>(encoded.size()), &width, &height, &channels, 4),
+                &stbi_image_free);
             if (!pixels) {
                 error = std::format("image could not be decoded ({})", stbi_failure_reason());
                 return nullptr;
@@ -191,8 +193,7 @@ namespace LB::Systems::Rendering::Detail {
             ModelTexture::MipLevel top;
             top.width = static_cast<std::uint32_t>(width);
             top.height = static_cast<std::uint32_t>(height);
-            top.pixels.assign(pixels, pixels + std::size_t{ top.width } * top.height * 4);
-            stbi_image_free(pixels);
+            top.pixels.assign(pixels.get(), pixels.get() + std::size_t{ top.width } * top.height * 4);
             texture->mips.push_back(std::move(top));
             BuildMipChain(*texture);
 

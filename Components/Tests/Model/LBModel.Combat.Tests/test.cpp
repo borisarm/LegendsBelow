@@ -143,7 +143,7 @@ TEST(EquipmentSlotTests, AllSlots_UniqueValues) {
     slotValues.insert(static_cast<int>(EquipmentSlot::Necklace));
 
     // All 10 slots should have unique values
-    EXPECT_EQ(slotValues.size(), 10);
+    EXPECT_EQ(slotValues.size(), 10u);
 }
 
 // ============================================================================

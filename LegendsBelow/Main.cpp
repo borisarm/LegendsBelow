@@ -80,6 +80,20 @@ namespace
         return ToUtf8(path + L"Assets\\" + folder);
     }
 
+    // Runs a cleanup when it goes out of scope, so every return path undoes what was set up
+    template<typename Cleanup>
+    class ScopeExit
+    {
+    public:
+        explicit ScopeExit(Cleanup cleanup) : m_cleanup(std::move(cleanup)) {}
+        ~ScopeExit() { m_cleanup(); }
+        ScopeExit(const ScopeExit&) = delete;
+        ScopeExit& operator=(const ScopeExit&) = delete;
+
+    private:
+        Cleanup m_cleanup;
+    };
+
     // Translate a WM_*BUTTONDOWN/UP message into an engine mouse event
     void ForwardMouseButton(GameEngine* engine, UINT message, LPARAM lParam, bool down)
     {
@@ -110,6 +124,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
     // Initialize COM for WIC usage
     if (FAILED(CoInitializeEx(nullptr, COINITBASE_MULTITHREADED)))
         return 1;
+    const ScopeExit uninitializeCom([] { CoUninitialize(); });
 
     // Initialize the GameRuntime
     HRESULT hr = XGameRuntimeInitialize();
@@ -120,10 +135,12 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
             std::ignore = MessageBoxW(nullptr, L"Game Runtime is not installed on this system or needs updating.", g_szAppName, MB_ICONERROR | MB_OK);
         }
         return 1;
-
     }
+    const ScopeExit uninitializeRuntime([] { XGameRuntimeUninitialize(); });
 
+    // Released before the runtime and COM (guards run in reverse order), on every path
     g_engine = std::make_unique<GameEngine>();
+    const ScopeExit releaseEngine([] { g_engine.reset(); });
 
     // Register class and create window
     {
@@ -176,8 +193,6 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
             std::ignore = MessageBoxW(hwnd, FromUtf8(g_engine->GetInitializationError()).c_str(), g_szAppName, MB_ICONERROR | MB_OK);
             // Destroy the window first: it holds a pointer to the engine
             DestroyWindow(hwnd);
-            g_engine.reset();
-            XGameRuntimeUninitialize();
             return 1;
         }
     }
@@ -196,11 +211,6 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
             g_engine->Tick();
         }
     }
-
-
-    g_engine.reset();
-
-    XGameRuntimeUninitialize();
 
     return static_cast<int>(msg.wParam);
 }

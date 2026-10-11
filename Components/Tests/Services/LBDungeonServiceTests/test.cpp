@@ -214,58 +214,6 @@ TEST(DungeonServiceTests, GenerateEncounter_DifferentLevels_ScalesCR) {
 }
 
 // ============================================================================
-// Loot Generation Tests
-// ============================================================================
-
-TEST(DungeonServiceTests, GenerateLoot_TreasureRoom_MultipleLoot) {
-    DungeonService service;
-
-    auto loot = service.GenerateLoot(RoomType::Treasure, 1);
-
-    EXPECT_GT(loot.size(), size_t(0));
-}
-
-TEST(DungeonServiceTests, GenerateLoot_BossRoom_MoreLoot) {
-    DungeonService service;
-
-    auto treasureLoot = service.GenerateLoot(RoomType::Treasure, 1);
-    auto bossLoot = service.GenerateLoot(RoomType::Boss, 1);
-
-    EXPECT_GE(bossLoot.size(), treasureLoot.size());
-}
-
-TEST(DungeonServiceTests, GenerateLoot_EmptyRoom_NoLoot) {
-    DungeonService service;
-
-    auto loot = service.GenerateLoot(RoomType::Empty, 1);
-
-    EXPECT_EQ(loot.size(), size_t(0));
-}
-
-TEST(DungeonServiceTests, LootDrop_ShouldDrop_RespectsProbability) {
-    LootDrop guaranteedDrop{};
-    guaranteedDrop.dropChance = 1.0f;
-
-    LootDrop neverDrop{};
-    neverDrop.dropChance = 0.0f;
-
-    EXPECT_TRUE(guaranteedDrop.ShouldDrop());
-    EXPECT_FALSE(neverDrop.ShouldDrop());
-}
-
-TEST(DungeonServiceTests, LootDrop_RollQuantity_WithinRange) {
-    LootDrop drop{};
-    drop.minQuantity = 1;
-    drop.maxQuantity = 5;
-
-    for (int i = 0; i < 10; ++i) {
-        int32_t quantity = drop.RollQuantity();
-        EXPECT_GE(quantity, 1);
-        EXPECT_LE(quantity, 5);
-    }
-}
-
-// ============================================================================
 // Navigation Tests
 // ============================================================================
 

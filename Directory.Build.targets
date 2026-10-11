@@ -9,4 +9,41 @@
           BeforeTargets="SetModuleDependencies"
           DependsOnTargets="VcpkgTripletSelection;VcpkgInstallManifestDependencies"
           Condition="'$(VcpkgEnabled)' == 'true' and '$(VcpkgEnableManifest)' == 'true'" />
+  <!--
+    Warnings: every project builds at /W4 with warnings as errors. Headers included with angle
+    brackets (vcpkg, DirectXTK12, stb, fastgltf, GoogleTest) are external code, compiled without
+    warnings. Imported after the projects' own settings, so it applies everywhere.
+    -p:LBWarningsAsErrors=false keeps /W4 but reports instead of failing.
+  -->
+  <PropertyGroup>
+    <LBWarningsAsErrors Condition="'$(LBWarningsAsErrors)' == ''">true</LBWarningsAsErrors>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>$(LBWarningsAsErrors)</TreatWarningAsError>
+      <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <!--
+    AddressSanitizer: -p:LBAddressSanitizer=true instruments every project (out-of-bounds reads,
+    use after free, ...). MSVC's ASan cannot be combined with the runtime checks (/RTC) or
+    edit-and-continue, and the STL's container annotations must stay off because the vcpkg
+    libraries are built without ASan (they would fail the linker's annotate_vector check).
+    The tests then need the ASan runtime (clang_rt.asan_dynamic-x86_64.dll, in the MSVC
+    bin\Hostx64\x64 folder) on PATH. See Scripts/Test.ps1 -AddressSanitizer.
+  -->
+  <ItemDefinitionGroup Condition="'$(LBAddressSanitizer)' == 'true'">
+    <ClCompile>
+      <AdditionalOptions>/fsanitize=address %(AdditionalOptions)</AdditionalOptions>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PreprocessorDefinitions>_DISABLE_STL_ANNOTATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(LBAddressSanitizer)' == 'true'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
 </Project>

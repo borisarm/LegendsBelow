@@ -25,6 +25,8 @@ x64\Debug\LBEngineTests.exe --gtest_filter=GameEngineTests.Initialize_Headless_S
 
 Every component has its own GoogleTest executable in `x64/<Config>/` (`LBEngineTests`, `LBCombatServiceTests`, `LBModel.Core.Tests`, ...). Engine tests locate the shipped `Assets/Data`, `Assets/Models`, and `Assets/Fonts` by walking up from the current directory, so run them from inside the repo. Test projects use headers and `pch.h`, not modules.
 
+`Scripts/Test.ps1` builds the solution and runs every test executable, failing on any build error, test failure, or AddressSanitizer report (`-Configuration Release`, `-NoBuild`, `-AddressSanitizer`). It is what CI runs (`.github/workflows/build.yml`: Debug, Release, and Debug under ASan on each push and pull request). `-AddressSanitizer` rebuilds everything instrumented (`-p:LBAddressSanitizer=true`) and puts the toolset's ASan runtime on `PATH`; run a plain build afterwards to get normal binaries back. GoogleTest here is 1.8.1: flags like `--gtest_brief` do not exist (it prints its help and exits 0).
+
 ## Architecture
 
 Layers (see `Documentation/architecture.md`, the source of truth, including known deviations):
@@ -48,6 +50,8 @@ Model    (LB.Core, LB.Character, LB.Combat, LB.Inventory, LB.Dungeon)
 ## Conventions
 
 The detailed rules and an error-to-fix table are in `.github/copilot-instructions.md`. The ones that most often break the build:
+
+- Every project compiles at `/W4` with warnings as errors (set once in `Directory.Build.targets`, after the projects' own settings). Headers included with angle brackets are external and compiled without warnings; ours are not. Unused parameters of placeholder APIs get `[[maybe_unused]]`; gtest comparisons against unsigned values need unsigned literals (`EXPECT_EQ(v.size(), 3u)`). `-p:LBWarningsAsErrors=false` reports without failing.
 
 - Everything except LBGameEditor and test projects is a C++20 module (`.ixx`, module names `LB.Xxx`). Module projects have no precompiled headers.
 - Partition files: `export module LB.Engine:Name;`, import siblings as `import :Name;`, re-export from the primary interface. Internal (non-exported) partitions must be `.cpp` files with `<CompileAs>CompileAsCppModuleInternalPartition</CompileAs>` (else C7622). New files must be added to the `.vcxproj` (and `.filters`).

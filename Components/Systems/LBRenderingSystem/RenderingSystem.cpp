@@ -224,13 +224,13 @@ namespace LB::Systems::Rendering {
                 // Particles over everything already drawn (depth-tested): dust blended first, then the
                 // glowing ones adding their light on top
                 for (const bool glowing : { false, true }) {
-                    std::vector<float> packed;
+                    std::vector<float> sprites;
                     for (const auto& particle : particleQueue_) {
                         if (particle.glowing != glowing) continue;
-                        packed.insert(packed.end(), { particle.position.x, particle.position.y, particle.position.z, particle.size,
+                        sprites.insert(sprites.end(), { particle.position.x, particle.position.y, particle.position.z, particle.size,
                                                       particle.color.r, particle.color.g, particle.color.b, particle.color.a });
                     }
-                    gpu_->renderer.DrawParticles(packed.data(), packed.size() / 8, glowing);
+                    gpu_->renderer.DrawParticles(sprites.data(), sprites.size() / 8, glowing);
                 }
             }
 

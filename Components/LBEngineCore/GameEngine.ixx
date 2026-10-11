@@ -646,6 +646,13 @@ export namespace LB::Engine {
         void ReadProgress(const Systems::Persistence::SaveData& data);
         std::string CanEquip(ItemRef item) const;
 
+        // The player's character; null before Initialize, without class content, or if it is gone
+        [[nodiscard]] const LB::Character::Character* PlayerCharacter() const {
+            if (!session_.playerId) return nullptr;
+            const auto character = session_.characterService.GetCharacter(*session_.playerId);
+            return character ? &character->get() : nullptr;
+        }
+
         [[nodiscard]] float PlayerAttackSeconds() const noexcept {
             return session_.playerWeapon ? session_.playerWeapon->attackTimeSeconds : 1.0f;
         }
