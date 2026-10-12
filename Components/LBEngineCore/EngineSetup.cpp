@@ -51,6 +51,7 @@ namespace LB::Engine {
 
         inputSystem_.Initialize();
         RegisterDefaultBindings();
+        ApplyBindingProfile();
 
         // Gamepads are read from the platform only with a real window; headless runs
         // (tests, tools) stay deterministic and receive input through the On* methods
@@ -86,7 +87,7 @@ namespace LB::Engine {
         SubscribeToEvents();
         {
             const auto& clips = assets_.playerClips;
-            session_->allies.SetClips(AllyClips{ clips.idle, clips.run, clips.slashTwoHanded, clips.bowDraw, clips.hit, clips.death });
+            session_->allies.SetClips(AllyClips{ clips.idle, clips.run, clips.slashTwoHanded, clips.bowDraw, clips.hit, clips.death, clips.castRelease });
         }
         session_->dungeonMode = options_.dungeon;
         session_->baseSeed = options_.randomSeed ? *options_.randomSeed : std::random_device{}();
@@ -557,6 +558,10 @@ namespace LB::Engine {
         RegisterKeyBinding(DropAction, Systems::Input::Keys::FromChar('X'));
         RegisterKeyBinding(DropAction, Systems::Input::Keys::Delete);
         RegisterGamepadBinding(DropAction, Systems::Input::GamepadButton::X);
+        RegisterKeyBinding(AllyStanceAction, Systems::Input::Keys::FromChar('G'));
+        RegisterGamepadBinding(AllyStanceAction, Systems::Input::GamepadButton::DPadDown);
+        RegisterKeyBinding(AllyFocusAction, Systems::Input::Keys::FromChar('T'));
+        RegisterGamepadBinding(AllyFocusAction, Systems::Input::GamepadButton::DPadRight);
         RegisterGamepadBinding(InteractAction, Systems::Input::GamepadButton::DPadUp);
         RegisterKeyBinding(TacticalPauseAction, Systems::Input::Keys::Tab);
         RegisterGamepadBinding(TacticalPauseAction, Systems::Input::GamepadButton::LeftThumb);

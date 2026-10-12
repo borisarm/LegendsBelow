@@ -21,8 +21,10 @@ namespace LB::Systems::Rendering::Detail
     {
         Opaque,        // depth-tested and written, no blending
         DepthOnly,     // faded instances, first: depth only, so each shows its nearest surface
-        Transparent    // faded instances, second: premultiplied alpha blend where depth matches
+        Transparent,   // faded instances, second: premultiplied alpha blend where depth matches
+        Shadow         // into the key light's shadow map: depth only, both faces, biased
     };
+    inline constexpr int ModelPassCount = 4;
 
     // The scene's directional lights and ambient light, shared by the model shader and the
     // primitives' effect
@@ -98,6 +100,14 @@ namespace LB::Systems::Rendering::Detail
             m_frame.ambientColor = lights.ambient;
         }
 
+        // The key light's view and projection, for the shadow pass and for sampling its shadow
+        // map; strength 0 turns the shadows off
+        void SetShadow(const DirectX::XMFLOAT4X4& lightViewProjection, float strength, float texel) noexcept
+        {
+            m_frame.shadowViewProjection = lightViewProjection;
+            m_frame.shadowParams = DirectX::XMFLOAT4(strength > 0.0f ? 1.0f : 0.0f, texel, strength, 0.0f);
+        }
+
         // This frame's point lights: x, y, z, radius, r, g, b (color times intensity) each
         void SetPointLights(const float* lights, std::size_t count) noexcept
         {
@@ -133,20 +143,26 @@ namespace LB::Systems::Rendering::Detail
             m_paletteAddress = palette.GpuAddress();
         }
 
-        // Bind the root signature, texture heap, per-frame constants, and the skin palette
-        void BeginPass(ID3D12GraphicsCommandList* commandList)
+        // Bind the root signature, texture heap, per-frame constants, the shadow map, and the
+        // skin palette. The shadow pass sees the world from the key light instead of the camera
+        // (and leaves the shadow map out: it is being written).
+        void BeginPass(ID3D12GraphicsCommandList* commandList, bool shadowPass = false)
         {
             if (!m_rootSignature || !m_resources.IsReady()) return;
             if (m_paletteAddress == 0)
                 SetSkinPalette(nullptr, 0);
 
             auto frame = m_resources.Allocate(sizeof(FrameConstants), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
-            std::memcpy(frame.Memory(), &m_frame, sizeof(FrameConstants));
+            auto constants = m_frame;
+            if (shadowPass)
+                constants.viewProjection = m_frame.shadowViewProjection;
+            std::memcpy(frame.Memory(), &constants, sizeof(FrameConstants));
 
             m_resources.BindHeap(commandList);
             commandList->SetGraphicsRootSignature(m_rootSignature.Get());
             commandList->SetGraphicsRootConstantBufferView(RootFrame, frame.GpuAddress());
             commandList->SetGraphicsRootShaderResourceView(RootPalette, m_paletteAddress);
+            commandList->SetGraphicsRootDescriptorTable(RootShadowMap, m_resources.GpuHandle(shadowPass ? 0 : GpuResources::ShadowSlot));
             commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             m_boundPipeline = nullptr;
         }
@@ -250,6 +266,8 @@ namespace LB::Systems::Rendering::Detail
             DirectX::XMFLOAT4 pointLightPosition[MaxPointLights]{};
             DirectX::XMFLOAT4 pointLightColor[MaxPointLights]{};
             DirectX::XMFLOAT4 pointLightCount{};
+            DirectX::XMFLOAT4X4 shadowViewProjection{};
+            DirectX::XMFLOAT4 shadowParams{};
         };
 
         // Per-part root constants (cbuffer Material)
@@ -298,6 +316,7 @@ namespace LB::Systems::Rendering::Detail
         static constexpr UINT RootMaterial = 1;    // b1: cbuffer Material (root constants)
         static constexpr UINT RootTexture = 2;     // t0: base color texture (descriptor table)
         static constexpr UINT RootPalette = 3;     // t1: skin palette (root SRV)
+        static constexpr UINT RootShadowMap = 4;   // t2: the key light's shadow map (descriptor table)
 
         // ModelVertex must match the input layout shared with GeometricPrimitive
         static_assert(sizeof(ModelVertex) == sizeof(DirectX::VertexPositionNormalTexture));
@@ -308,18 +327,29 @@ namespace LB::Systems::Rendering::Detail
             auto device = m_device.GetD3DDevice();
 
             const CD3DX12_DESCRIPTOR_RANGE textureRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-            CD3DX12_ROOT_PARAMETER parameters[4]{};
+            const CD3DX12_DESCRIPTOR_RANGE shadowRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+            CD3DX12_ROOT_PARAMETER parameters[5]{};
             parameters[RootFrame].InitAsConstantBufferView(0);
             parameters[RootMaterial].InitAsConstants(sizeof(MaterialConstants) / 4, 1, 0, D3D12_SHADER_VISIBILITY_PIXEL);
             parameters[RootTexture].InitAsDescriptorTable(1, &textureRange, D3D12_SHADER_VISIBILITY_PIXEL);
             parameters[RootPalette].InitAsShaderResourceView(1, 0, D3D12_SHADER_VISIBILITY_VERTEX);
+            parameters[RootShadowMap].InitAsDescriptorTable(1, &shadowRange, D3D12_SHADER_VISIBILITY_PIXEL);
 
             // Trilinear, anisotropic, wrapping (glTF's default sampler)
             CD3DX12_STATIC_SAMPLER_DESC sampler(0, D3D12_FILTER_ANISOTROPIC);
             sampler.MaxAnisotropy = 8;
             sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
-            const CD3DX12_ROOT_SIGNATURE_DESC rootDesc(static_cast<UINT>(std::size(parameters)), parameters, 1, &sampler,
+            // The shadow map's: comparisons (lit where the surface is no farther than the depth
+            // there), bilinear for soft edges; beyond the map, lit
+            CD3DX12_STATIC_SAMPLER_DESC shadowSampler(1, D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT,
+                D3D12_TEXTURE_ADDRESS_MODE_BORDER, D3D12_TEXTURE_ADDRESS_MODE_BORDER, D3D12_TEXTURE_ADDRESS_MODE_BORDER,
+                0.0f, 1, D3D12_COMPARISON_FUNC_LESS_EQUAL, D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE);
+            shadowSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+            const CD3DX12_STATIC_SAMPLER_DESC samplers[] = { sampler, shadowSampler };
+
+            const CD3DX12_ROOT_SIGNATURE_DESC rootDesc(static_cast<UINT>(std::size(parameters)), parameters,
+                static_cast<UINT>(std::size(samplers)), samplers,
                 D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
                 | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
                 | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
@@ -397,6 +427,22 @@ namespace LB::Systems::Rendering::Detail
                 create(ModelPass::Opaque, CommonStates::Opaque, CommonStates::DepthDefault);
                 create(ModelPass::DepthOnly, depthOnly, CommonStates::DepthDefault);
                 create(ModelPass::Transparent, CommonStates::AlphaBlend, CommonStates::DepthRead);
+
+                // The shadow pass: no pixel shader or color target, the shadow map's depth format,
+                // both faces (thin walls and open meshes still cast), and a slope bias against acne
+                auto shadow = desc;
+                shadow.PS = {};
+                shadow.NumRenderTargets = 0;
+                shadow.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
+                shadow.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+                shadow.BlendState = depthOnly;
+                shadow.DepthStencilState = CommonStates::DepthDefault;
+                shadow.RasterizerState = CommonStates::CullNone;
+                shadow.RasterizerState.DepthBias = 64;
+                shadow.RasterizerState.SlopeScaledDepthBias = 2.0f;
+                shadow.RasterizerState.DepthBiasClamp = 0.01f;
+                ThrowIfFailed(device->CreateGraphicsPipelineState(&shadow,
+                    IID_PPV_ARGS(m_pipelines[skinned][static_cast<int>(ModelPass::Shadow)].ReleaseAndGetAddressOf())));
             }
         }
 
@@ -493,7 +539,7 @@ namespace LB::Systems::Rendering::Detail
         std::vector<GpuModel> m_models;
         FrameConstants m_frame;
         ComPtr<ID3D12RootSignature> m_rootSignature;
-        ComPtr<ID3D12PipelineState> m_pipelines[2][3];   // [rigid, skinned][ModelPass]
+        ComPtr<ID3D12PipelineState> m_pipelines[2][ModelPassCount];   // [rigid, skinned][ModelPass]
         ID3D12PipelineState* m_boundPipeline{nullptr};
         D3D12_GPU_VIRTUAL_ADDRESS m_paletteAddress{0};
     };

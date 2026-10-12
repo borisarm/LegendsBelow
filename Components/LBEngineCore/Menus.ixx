@@ -220,13 +220,17 @@ export namespace LB::Engine {
         std::string message;
         std::vector<std::string> lines;          // the credits
         std::size_t firstLine{0};
-        // The controls: what, on the keyboard and mouse, on a controller (a row with only `action` is a section's title)
+        // The controls: what, on the keyboard and mouse, on a controller (a row with only `action` is a
+        // section's title); `binding` names the input action a row changes (empty: it cannot be)
         struct ControlRow {
             std::string action;
             std::string keyboard;
             std::string controller;
+            std::string binding;
         };
         std::vector<ControlRow> controls;
+        std::optional<std::size_t> controlsCursor;   // the chosen row (remapping)
+        bool listening{false};                       // it waits for a key or button
         MenuArt art;
     };
 
@@ -364,26 +368,33 @@ export namespace LB::Engine {
                 const auto last = std::min(menu.controls.size(), menu.firstLine + ControlRowsShown);
                 for (std::size_t i = menu.firstLine; i < last; ++i) {
                     const auto& row = menu.controls[i];
-                    if (row.keyboard.empty() && row.controller.empty()) {
+                    const bool chosen = menu.controlsCursor == i;
+                    if (chosen) Selection(renderer, menu.art, { left - 20, y - 5, right - left + 40, 24 }, 31);
+                    if (row.keyboard.empty() && row.controller.empty() && row.binding.empty()) {
                         text(row.action, left, y, 1.6f, gold);
                     }
                     else {
-                        const auto light = display(0.88f, 0.86f, 0.80f);
+                        const auto light = chosen ? display(1.0f, 0.92f, 0.70f) : display(0.88f, 0.86f, 0.80f);
                         text(row.action, left + 12, y, 1.5f, light);
-                        text(row.keyboard, keyboardX, y, 1.5f, light);
-                        text(row.controller, controllerX, y, 1.5f, light);
+                        if (chosen && menu.listening) {
+                            text("press a key or a button  (Esc, Start: keep it)", keyboardX, y, 1.5f, gold);
+                        }
+                        else {
+                            text(row.keyboard, keyboardX, y, 1.5f, light);
+                            text(row.controller, controllerX, y, 1.5f, light);
+                        }
                     }
                     y += 24;
                 }
-                if (menu.controls.size() > ControlRowsShown) {
-                    const auto more = std::format("{}-{} of {}  (up and down to scroll)", menu.firstLine + 1, last, menu.controls.size());
-                    centered(more, center, y, 1.2f, dim);
-                }
+                const auto more = menu.controls.size() > ControlRowsShown
+                    ? std::format("{}-{} of {}   Enter, A: change the chosen one   Esc, B: back", menu.firstLine + 1, last, menu.controls.size())
+                    : std::string("Enter, A: change the chosen one   Esc, B: back");
+                centered(more, center, y, 1.2f, dim);
                 y += 24;
             }
             for (std::size_t i = 0; i < menu.items.size(); ++i) {
                 const auto& item = menu.items[i];
-                const bool selected = i == menu.cursor && item.enabled;
+                const bool selected = i == menu.cursor && item.enabled && !menu.controlsCursor;   // the controls' cursor is on their rows
                 if (selected) {
                     Selection(renderer, menu.art, { left - 20, y - 8, right - left + 40, rowHeight - 2 }, 31);
                 }

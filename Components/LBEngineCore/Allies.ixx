@@ -10,6 +10,7 @@ import :World;
 import :Animator;
 import :Enemies;
 import :Encounter;
+import :Statuses;
 
 export namespace LB::Engine {
 
@@ -23,6 +24,36 @@ export namespace LB::Engine {
         ClipInfo shoot;      // a bow's draw and release
         ClipInfo hit;
         ClipInfo death;
+        ClipInfo cast;       // a healer's prayer
+    };
+
+    /// <summary>
+    /// How the party stands (the hero's orders): following them, or holding a spot (fighting only
+    /// what comes into reach there)
+    /// </summary>
+    enum class AllyStance : std::uint8_t {
+        Follow,
+        Hold
+    };
+
+    /// <summary>
+    /// What an ally's gear adds (the engine works it out from the items it gave them)
+    /// </summary>
+    struct AllyGear {
+        std::int32_t damage{0};
+        std::int32_t attackBonus{0};
+        std::int32_t armor{0};
+        std::int32_t armorClass{0};
+        std::int32_t hitPoints{0};
+    };
+
+    /// <summary>
+    /// A healer's prayer this step: who it mended (0: the hero), by how much, where
+    /// </summary>
+    struct AllyHeal {
+        std::uint32_t target{0};
+        std::int32_t amount{0};
+        WorldPoint at{};
     };
 
     enum class AllyState {
@@ -50,6 +81,9 @@ export namespace LB::Engine {
         float recoverySeconds{0.0f};
         float hitFlashSeconds{0.0f};
         float quietSeconds{0.0f};               // down, with no enemy awake nearby
+        float healCooldown{0.0f};
+        StatusSet statuses;                     // an enemy spell's slow or burn
+        AllyGear gear;
         Animator animator;
         // Their way around the walls (found again when the goal moves to another cell)
         std::vector<WorldPoint> route;
@@ -64,15 +98,15 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] Services::Combat::WeaponAttackProfile Attack() const {
             Services::Combat::WeaponAttackProfile attack{};
-            attack.attackBonus = definition->attackBonus + (level - 1) / 2;
+            attack.attackBonus = definition->attackBonus + (level - 1) / 2 + gear.attackBonus;
             attack.damageDice = definition->damageDice;
-            attack.damageBonus = definition->damageBonus + (level - 1) / 3;
+            attack.damageBonus = definition->damageBonus + (level - 1) / 3 + gear.damage;
             attack.damageType = definition->damageType;
             return attack;
         }
 
         [[nodiscard]] Services::Combat::DefenseProfile Defense() const {
-            return { definition->armorClass, definition->physicalArmor, {} };
+            return { definition->armorClass + gear.armorClass, definition->physicalArmor + gear.armor, {} };
         }
     };
 
@@ -84,7 +118,8 @@ export namespace LB::Engine {
     /// </summary>
     class AllyParty {
     public:
-        static constexpr std::size_t MaxAllies = 1;
+        static constexpr std::size_t MaxAllies = 2;
+        static constexpr float HealBelow = 0.6f;          // a healer mends those below this share of their health
         static constexpr float FollowDistance = 1.8f;     // they keep about this close to the hero
         static constexpr float GuardRadius = 7.0f;        // they go after awake enemies this near the hero
         static constexpr float CatchUpDistance = 14.0f;   // farther than this (and not fighting) they rejoin the hero at once
@@ -100,6 +135,7 @@ export namespace LB::Engine {
         /// </summary>
         std::optional<std::uint32_t> Add(const Content::AllyDefinition& definition, WorldPoint at, std::int32_t level) {
             if (allies_.size() >= MaxAllies) return std::nullopt;
+            if (std::ranges::any_of(allies_, [&](const Ally& ally) { return ally.definition == &definition; })) return std::nullopt;   // one of each
             Ally ally;
             ally.id = nextId_++;
             ally.definition = &definition;
@@ -115,13 +151,51 @@ export namespace LB::Engine {
         void Clear() noexcept { allies_.clear(); }
 
         /// <summary>
+        /// The party's stance: following the hero, or holding `at`
+        /// </summary>
+        void SetStance(AllyStance stance, WorldPoint at = {}) {
+            stance_ = stance;
+            holdAt_ = at;
+            for (auto& ally : allies_) ally.target.reset();
+        }
+        [[nodiscard]] AllyStance Stance() const noexcept { return stance_; }
+
+        /// <summary>
+        /// Everyone after one enemy until it falls (then back to their stance)
+        /// </summary>
+        void Focus(std::uint32_t enemy) {
+            focus_ = enemy;
+            for (auto& ally : allies_) ally.target = enemy;
+        }
+        [[nodiscard]] std::optional<std::uint32_t> FocusTarget() const noexcept { return focus_; }
+
+        /// <summary>
+        /// What an ally's gear adds (their maximum hit points grow with it)
+        /// </summary>
+        void SetGear(std::uint32_t id, const AllyGear& gear) {
+            auto* ally = Mutable(id);
+            if (!ally) return;
+            const auto before = ally->gear.hitPoints;
+            ally->gear = gear;
+            ally->maxHitPoints = MaxHitPointsAt(*ally->definition, ally->level) + gear.hitPoints;
+            ally->hitPoints = std::clamp(ally->hitPoints + gear.hitPoints - before, ally->IsDown() ? 0 : 1, ally->maxHitPoints);
+        }
+
+        /// <summary>
+        /// A status on an ally (an enemy spell's)
+        /// </summary>
+        void ApplyStatus(std::uint32_t id, const Content::StatusDefinition& status) {
+            if (auto* ally = Mutable(id); ally && !ally->IsDown()) ally->statuses.Apply(status);
+        }
+
+        /// <summary>
         /// The hero reached a level: their allies grow with them (the hit points gained are healed)
         /// </summary>
         void SetLevel(std::int32_t level) {
             for (auto& ally : allies_) {
                 const auto before = ally.maxHitPoints;
                 ally.level = std::max(1, level);
-                ally.maxHitPoints = MaxHitPointsAt(*ally.definition, ally.level);
+                ally.maxHitPoints = MaxHitPointsAt(*ally.definition, ally.level) + ally.gear.hitPoints;
                 if (!ally.IsDown()) ally.hitPoints = std::min(ally.maxHitPoints, ally.hitPoints + std::max(0, ally.maxHitPoints - before));
             }
         }
@@ -155,6 +229,7 @@ export namespace LB::Engine {
                 return false;
             }
             ally->state = AllyState::Down;
+            ally->statuses.Clear();
             ally->swinging = false;
             ally->target.reset();
             ally->quietSeconds = 0.0f;
@@ -184,12 +259,26 @@ export namespace LB::Engine {
         /// One step. Blows land through the Encounter at once (returned as the hero's side's
         /// events); arrows leave into it and land in its next steps.
         /// </summary>
-        std::vector<CombatEvent> Update(float dt, const WorldMap& world, Encounter& encounter, WorldPoint hero, bool heroAlive) {
+        std::vector<CombatEvent> Update(float dt, const WorldMap& world, Encounter& encounter, WorldPoint hero, bool heroAlive, float heroHealth = 1.0f) {
             std::vector<CombatEvent> events;
+            heals_.clear();
+            if (focus_) {
+                const auto* target = encounter.FindEnemy(*focus_);
+                if (!target || !target->IsTargetable()) focus_.reset();
+            }
             for (auto& ally : allies_) {
                 ally.hitFlashSeconds = std::max(0.0f, ally.hitFlashSeconds - dt);
                 ally.recoverySeconds = std::max(0.0f, ally.recoverySeconds - dt);
+                ally.healCooldown = std::max(0.0f, ally.healCooldown - dt);
                 ally.animator.Update(dt);
+
+                // Burning and the like (a status that downs them counts as any other blow)
+                if (!ally.IsDown()) {
+                    for (const auto& tick : ally.statuses.Update(dt)) {
+                        Damage(ally.id, Services::Combat::CombatService::ResolveSpellHit(tick.damage, tick.damageType, ally.Defense()).finalDamage);
+                        if (ally.IsDown()) break;
+                    }
+                }
 
                 if (ally.IsDown()) {
                     const bool threatened = std::ranges::any_of(encounter.GetEnemies(), [&](const Enemy& enemy) {
@@ -200,15 +289,23 @@ export namespace LB::Engine {
                     continue;
                 }
 
+                if (ally.statuses.PreventsActions()) continue;   // frozen, stunned
                 if (ally.swinging) {
                     Swing(ally, dt, encounter, events);
                     continue;
                 }
 
-                // A foe: theirs if still awake and near the hero, else the nearest awake one there
-                const Enemy* foe = ally.target ? encounter.FindEnemy(*ally.target) : nullptr;
-                if (foe && (!Awake(*foe) || Distance(foe->position, hero) > GuardRadius + 2.0f)) foe = nullptr;
-                if (!foe && heroAlive) foe = NearestFoe(encounter, ally, hero);
+                // A healer mends first: the most hurt within reach below HealBelow (the hero on a tie)
+                if (ally.definition->healAmount > 0 && ally.healCooldown <= 0.0f && Pray(ally, hero, heroAlive, heroHealth)) continue;
+
+                // A foe: the focus (the hero's target), theirs if still awake and near where they
+                // guard, else the nearest awake one there; holding, only what comes into reach
+                const auto guard = stance_ == AllyStance::Hold ? holdAt_ : hero;
+                const Enemy* foe = focus_ ? encounter.FindEnemy(*focus_) : ally.target ? encounter.FindEnemy(*ally.target) : nullptr;
+                if (foe && !focus_ && (!Awake(*foe) || Distance(foe->position, guard) > GuardRadius + 2.0f)) foe = nullptr;
+                if (foe && !foe->IsTargetable()) foe = nullptr;
+                if (!foe && heroAlive) foe = NearestFoe(encounter, ally, guard);
+                if (foe && stance_ == AllyStance::Hold && !focus_ && Distance(foe->position, ally.position) > ally.definition->attackRange + 0.3f) foe = nullptr;
                 ally.target = foe ? std::optional{ foe->id } : std::nullopt;
                 ally.state = foe ? AllyState::Fighting : AllyState::Following;
 
@@ -225,7 +322,12 @@ export namespace LB::Engine {
                     continue;
                 }
 
-                // No foe: back to the hero (at once when left far behind)
+                // No foe: back to the hero (at once when left far behind), or to the spot they hold
+                if (stance_ == AllyStance::Hold) {
+                    if (Distance(ally.position, holdAt_) > 0.8f) WalkToward(ally, world, holdAt_, dt, 0.5f);
+                    else ally.animator.Play(clips_.idle.id, true);
+                    continue;
+                }
                 const float away = Distance(ally.position, hero);
                 if (away > CatchUpDistance) {
                     PlaceAround(world, hero, false);
@@ -247,6 +349,11 @@ export namespace LB::Engine {
         }
 
         [[nodiscard]] const std::vector<Ally>& Allies() const noexcept { return allies_; }
+
+        /// <summary>
+        /// The healers' prayers in the last Update (the engine heals the hero for those at 0)
+        /// </summary>
+        [[nodiscard]] const std::vector<AllyHeal>& Heals() const noexcept { return heals_; }
         [[nodiscard]] const Ally* Find(std::uint32_t id) const {
             const auto it = std::ranges::find(allies_, id, &Ally::id);
             return it != allies_.end() ? &*it : nullptr;
@@ -262,6 +369,33 @@ export namespace LB::Engine {
         Ally* Mutable(std::uint32_t id) {
             const auto it = std::ranges::find(allies_, id, &Ally::id);
             return it != allies_.end() ? &*it : nullptr;
+        }
+
+        // The most hurt of the party within reach (the hero first on a tie), below HealBelow
+        bool Pray(Ally& healer, WorldPoint hero, bool heroAlive, float heroHealth) {
+            const auto& type = *healer.definition;
+            std::optional<AllyHeal> best;
+            float lowest = HealBelow;
+            if (heroAlive && heroHealth < lowest && Distance(hero, healer.position) <= type.healRange) {
+                lowest = heroHealth;
+                best = AllyHeal{ 0, 0, hero };
+            }
+            for (auto& other : allies_) {
+                if (other.IsDown() || Distance(other.position, healer.position) > type.healRange) continue;
+                const float share = static_cast<float>(other.hitPoints) / static_cast<float>(std::max(1, other.maxHitPoints));
+                if (share < lowest) {
+                    lowest = share;
+                    best = AllyHeal{ other.id, 0, other.position };
+                }
+            }
+            if (!best) return false;
+            best->amount = type.healAmount + healer.level;
+            if (best->target != 0) best->amount = Heal(best->target, best->amount);
+            healer.healCooldown = type.healCooldownSeconds;
+            Face(healer, best->at);
+            healer.animator.Play(clips_.cast.id, false, 1.0f, true, 0.1f);
+            heals_.push_back(*best);
+            return true;
         }
 
         static bool Awake(const Enemy& enemy) noexcept {
@@ -348,13 +482,18 @@ export namespace LB::Engine {
                 ally.animator.Play(clips_.idle.id, true);
                 return;
             }
-            const float step = std::min(ally.definition->movementSpeed * dt, left);
+            const float step = std::min(ally.definition->movementSpeed * ally.statuses.MovementMultiplier() * dt, left);
+            if (step <= 0.0f) return;   // rooted
             ally.position = world.Move(ally.position, { dx / length * step, dy / length * step }, Radius);
             ally.facingYaw = std::atan2(dx, dy);
             ally.animator.Play(clips_.run.id, true);
         }
 
         std::vector<Ally> allies_;
+        std::vector<AllyHeal> heals_;
+        AllyStance stance_{AllyStance::Follow};
+        WorldPoint holdAt_{};
+        std::optional<std::uint32_t> focus_;
         AllyClips clips_{};
         std::uint32_t nextId_{1};
     };

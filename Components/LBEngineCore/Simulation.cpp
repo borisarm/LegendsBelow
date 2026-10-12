@@ -66,6 +66,11 @@ namespace LB::Engine {
             const auto before = session_->playerPosition;
             MovePlayer(static_cast<float>(elapsedSeconds));
             const bool moving = Distance(before, session_->playerPosition) > 1e-4f;
+            if (session_->knockSeconds > 0.0f) {   // thrown back: carried along, against the walls
+                const float t = std::min(static_cast<float>(elapsedSeconds), session_->knockSeconds);
+                session_->playerPosition = session_->world.Move(session_->playerPosition, { session_->knockVelocity.x * t, session_->knockVelocity.y * t }, PlayerRadius);
+                session_->knockSeconds -= static_cast<float>(elapsedSeconds);
+            }
             UpdateEncounter(static_cast<float>(elapsedSeconds));
             UpdatePlayerStatuses(static_cast<float>(elapsedSeconds));
             AnimatePlayer(static_cast<float>(elapsedSeconds), moving);
@@ -176,6 +181,7 @@ namespace LB::Engine {
         if (!session_->playerId) return;
         const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
         if (triggered(TacticalPauseAction)) SetPaused(!session_->paused);
+        UpdateAllyOrders();
 
         // The enemy under the mouse (when it moved), kept while it can be targeted
         std::optional<WorldPoint> floor;
@@ -198,7 +204,10 @@ namespace LB::Engine {
         }
 
         if (triggered(OrderAction) && floor && IsPlayerAlive()) {
-            if (session_->picked) session_->order = PlayerOrder{ OrderKind::Attack, {}, session_->picked, 0 };
+            if (session_->picked) {
+                session_->order = PlayerOrder{ OrderKind::Attack, {}, session_->picked, 0 };
+                session_->allies.Focus(*session_->picked);   // the party goes after it too
+            }
             else if (session_->world.IsOpen(*floor)) session_->order = PlayerOrder{ OrderKind::Move, *floor, std::nullopt, 0 };
         }
         if (!session_->paused || !IsPlayerAlive()) return;
@@ -220,7 +229,10 @@ namespace LB::Engine {
                 session_->picked = targets[static_cast<std::size_t>(((index % count) + count) % count)]->id;
             }
         }
-        if (session_->picked && triggered(AttackAction)) session_->order = PlayerOrder{ OrderKind::Attack, {}, session_->picked, 0 };
+        if (session_->picked && triggered(AttackAction)) {
+            session_->order = PlayerOrder{ OrderKind::Attack, {}, session_->picked, 0 };
+            session_->allies.Focus(*session_->picked);
+        }
         for (std::size_t slot = 0; slot < SpellSlots; ++slot) {
             if (triggered(SpellActions[slot]) && slot < GetSpellBar().size()) session_->order = PlayerOrder{ OrderKind::Cast, {}, session_->picked, slot };
         }
@@ -727,8 +739,13 @@ namespace LB::Engine {
                 }
                 continue;
             }
-            if (event.ally != 0) {   // an ally took it
+            if (event.ally != 0) {   // an ally took it (and a spell's hindrances)
                 if (event.result.hit && event.result.finalDamage > 0) session_->allies.Damage(event.ally, event.result.finalDamage);
+                if (event.result.hit && event.spell) {
+                    for (const auto& key : event.spell->appliedStatusIds) {
+                        if (const auto* status = content_->FindStatus(key)) session_->allies.ApplyStatus(event.ally, *status);
+                    }
+                }
                 continue;
             }
             if (event.result.hit && session_->evadeSeconds > 0.0f && IsPlayerAlive()) {
@@ -914,10 +931,47 @@ namespace LB::Engine {
     // ------------------------------------------------------------------------------------------
 
     void GameEngine::UpdateAllies(float elapsedSeconds) {
-        for (const auto& event : session_->allies.Update(elapsedSeconds, session_->world, session_->encounter, session_->playerPosition, IsPlayerAlive())) {
+        const auto* player = PlayerCharacter();
+        const float health = player ? static_cast<float>(player->GetCurrentHitPoints()) / static_cast<float>(std::max(1, player->GetMaxHitPoints())) : 1.0f;
+        for (const auto& event : session_->allies.Update(elapsedSeconds, session_->world, session_->encounter, session_->playerPosition, IsPlayerAlive(), health)) {
             session_->combatEvents.push_back(event);
             if (event.killed) {
                 if (const auto* enemy = session_->encounter.FindEnemy(event.enemyId)) OnEnemyKilled(*enemy);
+            }
+        }
+        // A healer's prayers: the hero's here; an ally's mended already
+        for (const auto& heal : session_->allies.Heals()) {
+            auto amount = heal.amount;
+            if (heal.target == 0) amount = session_->characterService.HealCharacter(*session_->playerId, heal.amount);
+            session_->combatText.Add(std::format("+{}", amount), { heal.at.x, PlayerTop(), heal.at.y }, { 0.45f, 0.95f, 0.45f, 1.0f }, 3.0f);
+            session_->effects.Emit(ParticleEffect::Healing, { heal.at.x, 0.1f, heal.at.y }, 34);
+        }
+    }
+
+    // The party's orders: follow or hold (G, d-pad down), and after the nearest enemy in sight (T,
+    // d-pad right; in the tactical pause the hero's attack order names their target instead)
+    void GameEngine::UpdateAllyOrders() {
+        if (session_->allies.Allies().empty() || !IsPlayerAlive()) return;
+        const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
+        const Systems::Rendering::Vector3 over{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
+        if (triggered(AllyStanceAction)) {
+            const bool hold = session_->allies.Stance() == AllyStance::Follow;
+            session_->allies.SetStance(hold ? AllyStance::Hold : AllyStance::Follow, session_->playerPosition);
+            session_->combatText.Add(hold ? "ALLIES: HOLD HERE" : "ALLIES: FOLLOW", over, { 0.55f, 0.95f, 0.55f, 1.0f }, 2.0f);
+        }
+        if (!session_->paused && triggered(AllyFocusAction)) {
+            const Enemy* best = nullptr;
+            float nearest = 12.0f;
+            for (const auto& enemy : session_->encounter.GetEnemies()) {
+                const float distance = Distance(enemy.position, session_->playerPosition);
+                if (enemy.IsTargetable() && distance < nearest && session_->world.LineOfSight(session_->playerPosition, enemy.position)) {
+                    nearest = distance;
+                    best = &enemy;
+                }
+            }
+            if (best) {
+                session_->allies.Focus(best->id);
+                session_->combatText.Add("ALLIES: ATTACK!", over, { 0.95f, 0.55f, 0.40f, 1.0f }, 2.0f);
             }
         }
     }
@@ -978,14 +1032,29 @@ namespace LB::Engine {
             if (!event.result.hit || event.result.finalDamage <= 0) continue;
             if (event.kind == CombatEventKind::PlayerAttack) {
                 if (event.result.critical) Jolt(CritHitStopSeconds, 0.15f, 0.06f);
+                // Thrown back: by a critical hit of the hero's own (not an ally's), or by a spell that throws
+                const float knock = std::max(event.result.critical && !event.byAlly ? CritKnockbackTiles : 0.0f, event.spell ? event.spell->knockbackTiles : 0.0f);
+                if (knock > 0.0f) session_->encounter.Knock(event.enemyId, session_->playerPosition, knock);
                 continue;
             }
             if (event.ally != 0) continue;
             const auto* enemy = session_->encounter.FindEnemy(event.enemyId);
+            const bool heavy = static_cast<float>(event.result.finalDamage) >= HeavyHitShare * static_cast<float>(player->GetMaxHitPoints());
             if (enemy && enemy->definition->boss) Jolt(HeavyHitStopSeconds, 0.4f, 0.28f);
-            else if (static_cast<float>(event.result.finalDamage) >= HeavyHitShare * static_cast<float>(player->GetMaxHitPoints())) Jolt(HeavyHitStopSeconds, 0.25f, 0.15f);
+            else if (heavy) Jolt(HeavyHitStopSeconds, 0.25f, 0.15f);
+            if (enemy && (enemy->definition->boss || heavy)) KnockPlayer(enemy->position, HeavyKnockbackTiles);
         }
         if (!session_->encounter.GetPhaseChanges().empty()) Jolt(0.0f, 0.5f, 0.2f);   // a boss enraged
+    }
+
+    // The hero thrown `tiles` straight away from `from` over Encounter::KnockSeconds
+    void GameEngine::KnockPlayer(WorldPoint from, float tiles) {
+        const float dx = session_->playerPosition.x - from.x;
+        const float dy = session_->playerPosition.y - from.y;
+        const float length = std::hypot(dx, dy);
+        if (length < 1e-4f || !IsPlayerAlive()) return;
+        session_->knockVelocity = { dx / length * tiles / Encounter::KnockSeconds, dy / length * tiles / Encounter::KnockSeconds };
+        session_->knockSeconds = Encounter::KnockSeconds;
     }
 
     void GameEngine::Jolt(float hitStopSeconds, float shakeSeconds, float shakeStrength) {

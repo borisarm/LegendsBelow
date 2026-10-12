@@ -42,7 +42,7 @@ export namespace LB::Services::Progression {
         /// Default experience curve (D&D-inspired)
         /// </summary>
         static constexpr ExperienceCurve DefaultExperienceCurve() noexcept {
-            return ExperienceCurve{100.0f, 1.5f, 100};
+            return ExperienceCurve{100.0f, 2.0f, 100};
         }
 
         /// <summary>

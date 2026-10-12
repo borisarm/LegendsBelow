@@ -172,6 +172,9 @@
     <ClCompile Include="ModelPipeline.cpp">
       <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
     </ClCompile>
+    <ClCompile Include="ShadowMap.cpp">
+      <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
+    </ClCompile>
     <ClCompile Include="PrimitivePipeline.cpp">
       <CompileAs>CompileAsCppModuleInternalPartition</CompileAs>
     </ClCompile>

@@ -1,7 +1,9 @@
 // BalanceTests.cpp - LB.Engine tests: a simple bot plays each class headless through the first
-// tier (three floors and its boss) and must reach the resting place below; it reports deaths,
-// potions, and time for balancing. A run is minutes of game time, so these are built only in
-// optimized configurations (Release; seconds there, minutes in Debug).
+// tier (three floors and its boss) and the second (the caves' creatures and the Golem Warlord) and
+// must reach the resting place below each; it reports deaths, potions, and time for balancing. It
+// grows as a player would (attribute points, a path, better finds, a companion and potions from
+// the merchant, the locked gate's treasure). A run is minutes of game time, so these are built
+// only in optimized configurations (Release; seconds there, minutes in Debug).
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -18,8 +20,20 @@ namespace {
         std::int32_t deaths{0};
         std::int32_t potions{0};
         std::int32_t level{1};
+        std::int32_t gates{0};      // locked gates opened
+        std::int32_t allies{0};     // companions at the end
         float minutes{0.0f};
     };
+
+    // The attribute a class's points go into
+    LB::AttributeType MainAttribute(CharacterClass characterClass) {
+        switch (characterClass) {
+        case CharacterClass::Rogue: return LB::AttributeType::Dexterity;
+        case CharacterClass::Mage: return LB::AttributeType::Intelligence;
+        case CharacterClass::Cleric: return LB::AttributeType::Wisdom;
+        default: return LB::AttributeType::Strength;
+        }
+    }
 
     // Rooms the bot must clear (their enemies keep the way down shut)
     bool IsFightingRoom(LB::Dungeon::RoomType type) {
@@ -33,7 +47,7 @@ namespace {
     /// </summary>
     class Bot {
     public:
-        explicit Bot(GameEngine& engine) : engine_(engine), world_(engine.GetWorld()) {
+        explicit Bot(GameEngine& engine, CharacterClass characterClass) : engine_(engine), world_(engine.GetWorld()), class_(characterClass) {
             // A bow in the kit (the Rogue's): shoot while the arrows last, the melee weapon after
             if (engine_.GetPlayerWeapon()) melee_ = engine_.GetPlayerWeapon()->key;
             if (engine_.CountItem(GameEngine::StartingBow) > 0) engine_.EquipItem(GameEngine::StartingBow);
@@ -46,11 +60,31 @@ namespace {
                 depth_ = engine_.GetDepth();
                 world_ = engine_.GetWorld();
                 goalSet_ = false;
+                openGates_ = 0;
+                deathsIn_.clear();
+                avoided_.clear();
+                givenUp_.clear();
             }
+            // A gate opened: the map has a new way through
+            const auto open = static_cast<std::int32_t>(std::ranges::count_if(engine_.GetFeatures().Gates(), [](const Gate& gate) { return gate.open; }));
+            if (open != openGates_) {
+                gates_ += std::max(0, open - openGates_);
+                openGates_ = open;
+                world_ = engine_.GetWorld();
+                goalSet_ = false;
+            }
+            if (steps_ % 60 == 0) Grow();
             if (!engine_.IsPlayerAlive()) {
+                // A room that keeps killing the hero is left alone (all but the exit's are optional)
+                if (!down_) {
+                    const auto room = engine_.GetWorld().RoomAt(engine_.GetPlayerPosition());
+                    if (room >= 0 && ++deathsIn_[room] >= 2) avoided_.insert(room);
+                }
+                down_ = true;
                 Release();
                 return;
             }
+            down_ = false;
             if (const auto* weapon = engine_.GetPlayerWeapon(); weapon && !weapon->ammoType.empty() && engine_.AmmoCount(weapon->ammoType) == 0 && !melee_.empty()) {
                 engine_.EquipItem(melee_);
             }
@@ -83,8 +117,9 @@ namespace {
                 const bool ranged = weapon && weapon->IsRanged() && (weapon->ammoType.empty() || engine_.AmmoCount(weapon->ammoType) > 0);
                 const float reach = ranged ? weapon->range * 0.8f : 1.2f;
                 // A shooter backs away from one closing in (for a while: cornered, it stands and fights)
+                const bool keepsAway = ranged;
                 if (distance >= 3.5f) kiteSteps_ = 0;
-                if (ranged && distance < 2.5f && kiteSteps_ < 120) {
+                if (keepsAway && distance < 2.5f && kiteSteps_ < 120) {
                     ++kiteSteps_;
                     Release();
                     SteerToward(engine_, { at.x + (at.x - foe->position.x) / std::max(distance, 0.01f) * 3.0f,
@@ -103,7 +138,21 @@ namespace {
                 return;
             }
             Release();
-            GoTo(NextPlace());
+            if (const auto shop = Shopping()) {
+                GoTo(*shop);
+                return;
+            }
+            // An optional goal (a gate, a chest) not reached in 40 seconds is given up
+            const auto [place, optional] = NextPlace();
+            if (!optional || Encounter::Distance(place, optionalGoal_) > 0.5f) {
+                optionalGoal_ = place;
+                optionalSteps_ = 0;
+            }
+            if (optional && ++optionalSteps_ > 40 * 60) {
+                givenUp_.push_back(place);
+                optionalSteps_ = 0;
+            }
+            GoTo(place);
         }
 
         void Release() {
@@ -113,6 +162,7 @@ namespace {
         }
 
         [[nodiscard]] std::int32_t Potions() const noexcept { return potions_; }
+        [[nodiscard]] std::int32_t GatesOpened() const noexcept { return gates_; }
 
     private:
         // The nearest enemy awake, or close and in sight
@@ -133,10 +183,18 @@ namespace {
             return best;
         }
 
-        // The ability bar, first ready slot that suits: heals when hurt, the rest at a foe in range
+        // The ability bar: heals when hurt, the rest at a foe in range; the big ones (with a
+        // cooldown) first when ready, the later slots first, then the cheap ones in order
         std::optional<std::size_t> SpellToCast(float distance, std::int32_t hp) const {
             const auto bar = engine_.GetSpellBar();
+            std::vector<std::size_t> order;
+            for (std::size_t slot = bar.size(); slot-- > 0;) {
+                if (bar[slot]->cooldownSeconds > 0.0f) order.push_back(slot);
+            }
             for (std::size_t slot = 0; slot < bar.size(); ++slot) {
+                if (bar[slot]->cooldownSeconds <= 0.0f) order.push_back(slot);
+            }
+            for (const auto slot : order) {
                 const auto& spell = *bar[slot];
                 if (!engine_.SpellBlocker(slot).empty()) continue;
                 if (spell.IsHeal()) {
@@ -151,22 +209,107 @@ namespace {
             return std::nullopt;
         }
 
-        // The nearest room still to clear (the exit's last), or the trapdoor
-        WorldPoint NextPlace() const {
+        // The nearest room still to clear; then the locked gate (with its key), the treasure rooms
+        // open to it (these two optional), and last the exit's trapdoor
+        std::pair<WorldPoint, bool> NextPlace() const {
+            const auto givenUp = [&](WorldPoint place) {
+                return std::ranges::any_of(givenUp_, [&](WorldPoint other) { return Encounter::Distance(place, other) < 0.5f; });
+            };
             const auto& layout = engine_.GetWorld().Layout();
             const auto& rooms = engine_.GetRoomStates();
+            const auto& features = engine_.GetFeatures();
             const auto at = engine_.GetPlayerPosition();
-            std::optional<WorldPoint> best;
-            float bestDistance = 1e9f;
-            for (std::size_t i = 0; i < layout.rooms.size() && i < rooms.size(); ++i) {
-                if (rooms[i].cleared || !IsFightingRoom(layout.rooms[i].type) || static_cast<std::int32_t>(i) == layout.exitRoom) continue;
-                const auto center = engine_.GetWorld().RoomCenter(static_cast<std::int32_t>(i));
-                if (Encounter::Distance(at, center) < bestDistance) {
-                    bestDistance = Encounter::Distance(at, center);
-                    best = center;
+            const auto nearest = [&](auto wanted) {
+                std::optional<WorldPoint> best;
+                float bestDistance = 1e9f;
+                for (std::size_t i = 0; i < layout.rooms.size() && i < rooms.size(); ++i) {
+                    if (static_cast<std::int32_t>(i) == layout.exitRoom || !wanted(i)) continue;
+                    const auto center = engine_.GetWorld().RoomCenter(static_cast<std::int32_t>(i));
+                    if (Encounter::Distance(at, center) < bestDistance) {
+                        bestDistance = Encounter::Distance(at, center);
+                        best = center;
+                    }
+                }
+                return best;
+            };
+            if (const auto fight = nearest([&](std::size_t i) {
+                    return !rooms[i].cleared && IsFightingRoom(layout.rooms[i].type) && !avoided_.contains(static_cast<std::int32_t>(i));
+                })) {
+                return { *fight, false };
+            }
+            if (engine_.CountItem(GameEngine::KeyItem) > 0) {
+                for (const auto& gate : features.Gates()) {
+                    if (gate.kind != GateKind::Locked || gate.open) continue;
+                    // Before it, on the corridor's side
+                    const auto room = engine_.GetWorld().RoomCenter(gate.room);
+                    const float dx = gate.center.x - room.x;
+                    const float dy = gate.center.y - room.y;
+                    const float length = std::max(std::hypot(dx, dy), 0.01f);
+                    const WorldPoint before{ gate.center.x + dx / length * 1.4f, gate.center.y + dy / length * 1.4f };
+                    if (!givenUp(before)) return { before, true };
                 }
             }
-            return best.value_or(engine_.GetWorld().RoomCenter(layout.exitRoom));
+            const auto shut = [&](std::size_t i) {
+                return std::ranges::any_of(features.Gates(), [&](const Gate& gate) { return gate.room == static_cast<std::int32_t>(i) && !gate.open; });
+            };
+            if (const auto chest = nearest([&](std::size_t i) {
+                    return layout.rooms[i].type == LB::Dungeon::RoomType::Treasure && !rooms[i].chestOpened && !shut(i)
+                        && features.ChestReady(static_cast<std::int32_t>(i)) && !givenUp(engine_.GetWorld().RoomCenter(static_cast<std::int32_t>(i)));
+                })) {
+                return { *chest, true };
+            }
+            return { engine_.GetWorld().RoomCenter(layout.exitRoom), false };
+        }
+
+        // As a player grows: points into the class's attribute, the first path when it opens, and
+        // the better finds in the bag (a weapon of the same reach, armour worth more than what is worn)
+        void Grow() {
+            while (engine_.SpendAttributePoint(MainAttribute(class_))) {}
+            if (!engine_.GetPlayerPath()) {
+                for (const auto& classData : engine_.GetContent()->GetClasses()) {
+                    if (classData.characterClass == class_ && !classData.specializations.empty()) engine_.ChoosePath(classData.specializations.front().key);
+                }
+            }
+            const auto bag = engine_.GetInventory();
+            for (const auto& stack : bag) {
+                const auto item = ItemRef::Unpack(stack.itemId);
+                const auto base = engine_.BaseItem(item);
+                if (base.kind == ItemKind::Weapon) {
+                    const auto* found = engine_.GetContent()->FindWeapon(base.id);
+                    const auto* wielded = engine_.GetPlayerWeapon();
+                    if (!found || !wielded || found->IsRanged() != wielded->IsRanged()) continue;
+                    if (engine_.PriceOf(item) > engine_.PriceOf(engine_.GetPlayerWeaponItem()) && engine_.EquipItemRef(item) && !found->IsRanged()) melee_ = found->key;
+                }
+                else if (base.kind == ItemKind::Armor) {
+                    const auto* piece = engine_.GetContent()->FindArmor(base.id);
+                    if (!piece) continue;
+                    const auto worn = engine_.EquippedItem(piece->slot);
+                    if (!worn.IsValid() || engine_.PriceOf(item) > engine_.PriceOf(worn)) engine_.EquipItemRef(item);
+                }
+            }
+        }
+
+        // At a merchant (the resting places): a companion when the party has room, then potions up
+        // to six; the merchant's place until done
+        std::optional<WorldPoint> Shopping() {
+            const auto merchant = engine_.GetMerchantPosition();
+            if (!merchant || shopped_ == depth_) return std::nullopt;
+            if (Encounter::Distance(engine_.GetPlayerPosition(), *merchant) > 1.2f) return *merchant;
+            const auto buy = [&](auto wanted) {
+                for (bool bought = true; bought;) {
+                    bought = false;
+                    const auto& stock = engine_.GetMerchantStock();
+                    for (std::size_t i = 0; i < stock.size() && !bought; ++i) {
+                        bought = wanted(stock[i]) && engine_.GetGold() >= stock[i].price && engine_.BuyFromMerchant(i);
+                    }
+                }
+            };
+            buy([&](const GameEngine::StockEntry& entry) { return entry.ally && engine_.GetAllies().Allies().empty(); });
+            buy([&](const GameEngine::StockEntry& entry) {
+                return entry.item == engine_.MakeItem(GameEngine::HealingPotion) && engine_.CountItem(GameEngine::HealingPotion) < 6;
+            });
+            shopped_ = depth_;
+            return std::nullopt;
         }
 
         // Along the floor's flow field (built again when the goal moves)
@@ -189,7 +332,17 @@ namespace {
         bool attacking_{false};
         std::optional<std::size_t> pending_;
         std::string melee_;
+        CharacterClass class_;
         std::int32_t depth_{1};
+        std::int32_t shopped_{0};
+        std::int32_t openGates_{0};
+        std::int32_t gates_{0};
+        bool down_{false};
+        std::map<std::int32_t, std::int32_t> deathsIn_;   // deaths per room on this floor
+        std::set<std::int32_t> avoided_;
+        std::vector<WorldPoint> givenUp_;                  // optional goals not reached in time
+        WorldPoint optionalGoal_{};
+        std::int64_t optionalSteps_{0};
         std::int32_t potionWait_{0};
         std::int32_t kiteSteps_{0};
         std::int32_t potions_{0};
@@ -201,7 +354,7 @@ namespace {
         GameEngine engine;
         EXPECT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = CombatSeed,
             .dungeon = true, .playerClass = characterClass })) << engine.GetInitializationError();
-        Bot bot(engine);
+        Bot bot(engine, characterClass);
         BotReport report;
         bool alive = true;
         const auto budget = static_cast<std::int64_t>(budgetMinutes * 60.0f * 60.0f);
@@ -216,21 +369,25 @@ namespace {
         report.depth = engine.GetDepth();
         report.potions = bot.Potions();
         report.level = PlayerLevel(engine);
+        report.gates = bot.GatesOpened();
+        report.allies = static_cast<std::int32_t>(engine.GetAllies().Allies().size());
         report.minutes = static_cast<float>(step) / 3600.0f;
-        std::printf("[ BALANCE  ] %-8s depth %d, level %d, %d deaths, %d potions, %.1f minutes\n",
-                    LB::Character::ToString(characterClass), report.depth, report.level, report.deaths, report.potions, report.minutes);
+        std::printf("[ BALANCE  ] %-8s depth %d, level %d, %d deaths, %d potions, %d gates, %d allies, %.1f minutes\n",
+                    LB::Character::ToString(characterClass), report.depth, report.level, report.deaths, report.potions, report.gates, report.allies, report.minutes);
         return report;
     }
 
     // Every class clears the first tier, its boss included, in time. The bot charges in and sets up
     // no sneak attacks, so it dies more than a player would: the cap catches a class that got much
-    // harder (at the last pass: Warrior 1, Mage 4, Rogue 20, Cleric 3 deaths; 4 to 12 minutes)
+    // harder (at the last pass: Warrior 3, Mage 4, Rogue 24, Cleric 6 deaths, level 5 or 6; 6 to
+    // 15 minutes; over six seeds the Warrior, Mage, and Cleric died 2 to 13 times)
     constexpr std::int32_t RestingPlace = GameEngine::BossFloorInterval + 1;
-    constexpr float BudgetMinutes = 14.0f;
+    constexpr float BudgetMinutes = 20.0f;
     constexpr std::int32_t MostDeaths = 15;
     // The bot's Rogue sets up no sneak attacks (the class's strength): it dies most, and varies most
-    // with the floors' layouts (9 to 20 deaths over six seeds, with puzzle rooms in the layouts)
-    constexpr std::int32_t MostRogueDeaths = 25;
+    // with the floors' layouts (5 to 39 deaths over six seeds; on two it did not get past the
+    // Necromancer in time)
+    constexpr std::int32_t MostRogueDeaths = 35;
 }
 
 TEST(BalanceTests, Warrior_ClearsTheFirstTier) {
@@ -255,6 +412,41 @@ TEST(BalanceTests, Cleric_ClearsTheFirstTier) {
     const auto report = Play(CharacterClass::Cleric, RestingPlace, BudgetMinutes);
     EXPECT_EQ(report.depth, RestingPlace);
     EXPECT_LE(report.deaths, MostDeaths);
+}
+
+// The second tier: the caves' creatures and the Golem Warlord, with what the first tier gave
+// (a companion and potions from the resting place's merchant)
+namespace {
+    constexpr std::int32_t SecondRestingPlace = 2 * GameEngine::BossFloorInterval + 1;
+    constexpr float SecondBudgetMinutes = 30.0f;
+    // At the last pass: Warrior 3, Mage 19, Rogue 30, Cleric 7 deaths, level 9 or 10, 13 to 25
+    // minutes; over six seeds the Warrior, Mage, and Cleric died 3 to 24 times, the Rogue 17 to 32
+    constexpr std::int32_t MostSecondTierDeaths = 30;
+    constexpr std::int32_t MostRogueSecondTierDeaths = 40;
+}
+
+TEST(BalanceTests, Warrior_ClearsTheSecondTier) {
+    const auto report = Play(CharacterClass::Warrior, SecondRestingPlace, SecondBudgetMinutes);
+    EXPECT_EQ(report.depth, SecondRestingPlace);
+    EXPECT_LE(report.deaths, MostSecondTierDeaths);
+}
+
+TEST(BalanceTests, Mage_ClearsTheSecondTier) {
+    const auto report = Play(CharacterClass::Mage, SecondRestingPlace, SecondBudgetMinutes);
+    EXPECT_EQ(report.depth, SecondRestingPlace);
+    EXPECT_LE(report.deaths, MostSecondTierDeaths);
+}
+
+TEST(BalanceTests, Rogue_ClearsTheSecondTier) {
+    const auto report = Play(CharacterClass::Rogue, SecondRestingPlace, SecondBudgetMinutes);
+    EXPECT_EQ(report.depth, SecondRestingPlace);
+    EXPECT_LE(report.deaths, MostRogueSecondTierDeaths);
+}
+
+TEST(BalanceTests, Cleric_ClearsTheSecondTier) {
+    const auto report = Play(CharacterClass::Cleric, SecondRestingPlace, SecondBudgetMinutes);
+    EXPECT_EQ(report.depth, SecondRestingPlace);
+    EXPECT_LE(report.deaths, MostSecondTierDeaths);
 }
 
 #endif // NDEBUG

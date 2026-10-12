@@ -148,6 +148,7 @@ namespace LB::Engine {
         const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
         menu_.SetItems(BuildMenuItems());
 
+        if (menu_.Page() == MenuPage::Controls && UpdateControlsPage()) return;
         if (triggered(MenuBackAction) || triggered(PauseAction)) {
             if (menu_.Page() == MenuPage::Title || menu_.Page() == MenuPage::Fallen) return;   // nowhere to go back to
             PlaySound(GameSound::ScreenClose);
@@ -164,9 +165,6 @@ namespace LB::Engine {
         if (vertical != 0) {
             if (menu_.Page() == MenuPage::Credits) {
                 menu_.Scroll(vertical * 3, credits_.size(), MenuView::CreditLinesShown);
-            }
-            else if (menu_.Page() == MenuPage::Controls) {
-                menu_.Scroll(vertical * 3, GetControls().size(), MenuView::ControlRowsShown);
             }
             else if (menu_.Step(vertical)) {
                 PlaySound(GameSound::MenuMove);
@@ -238,9 +236,13 @@ namespace LB::Engine {
         case MenuCommand::Options:
             menu_.Push(MenuPage::Options);
             break;
-        case MenuCommand::Controls:
+        case MenuCommand::Controls: {
             menu_.Push(MenuPage::Controls);
+            const auto rows = GetControls();
+            controlsCursor_ = static_cast<std::size_t>(std::ranges::find_if(rows, [](const auto& row) { return !row.binding.empty(); }) - rows.begin());
+            listening_ = false;
             break;
+        }
         case MenuCommand::OpenSaveSlots:
             menu_.Push(MenuPage::SaveSlots);
             break;
@@ -306,6 +308,8 @@ namespace LB::Engine {
         if (menu_.Page() == MenuPage::Controls) {
             model.controls = GetControls();
             model.firstLine = menu_.ScrollPosition();
+            model.controlsCursor = controlsCursor_;
+            model.listening = listening_;
         }
         if (menu_.Page() == MenuPage::Fallen) model.lines = FallenSummary();
         if (menu_.Page() == MenuPage::Legacy) model.lines = LegacyLines();
@@ -343,23 +347,22 @@ namespace LB::Engine {
         const auto section = [&](std::string title) { rows.push_back({ std::move(title), {}, {} }); };
         const auto action = [&](std::string what, std::string_view name) {
             auto [keyboard, controller] = bound(name);
-            rows.push_back({ std::move(what), std::move(keyboard), std::move(controller) });
+            const bool remappable = std::ranges::find(RemappableActions, name) != RemappableActions.end()
+                && std::ranges::none_of(rows, [&](const auto& row) { return row.binding == name; });   // once
+            rows.push_back({ std::move(what), std::move(keyboard), std::move(controller), remappable ? std::string(name) : std::string{} });
         };
         const auto fixed = [&](std::string what, std::string keyboard, std::string controller) {
             rows.push_back({ std::move(what), std::move(keyboard), std::move(controller) });
-        };
-        const auto pair = [&](std::string what, std::string_view first, std::string_view second) {
-            const auto [k1, c1] = bound(first);
-            const auto [k2, c2] = bound(second);
-            rows.push_back({ std::move(what), k1 + " / " + k2, c1 == "-" ? c2 : c1 });
         };
 
         section("EXPLORING");
         fixed("Move", "W A S D / arrows", "Left stick");
         action("Talk, trade", InteractAction);
         action("Map", MapAction);
-        pair("Turn the camera", RotateCameraLeftAction, RotateCameraRightAction);
-        rows.back().controller = "Right stick left / right";
+        action("Turn the camera left", RotateCameraLeftAction);
+        if (rows.back().controller == "-") rows.back().controller = "Right stick left";
+        action("Turn the camera right", RotateCameraRightAction);
+        if (rows.back().controller == "-") rows.back().controller = "Right stick right";
         fixed("Zoom", "Mouse wheel", "Right stick up / down");
 
         section("FIGHTING");
@@ -369,9 +372,11 @@ namespace LB::Engine {
             const auto [keyboard, controller] = bound(SpellActions[slot]);
             spellKeys += (slot ? " " : "") + keyboard;
             spellButtons += (slot ? " " : "") + controller;
+            action(std::format("Spell, ability {}", slot + 1), SpellActions[slot]);
         }
-        fixed("Spells, abilities", spellKeys, spellButtons);
         action("Drink a potion", UsePotionAction);
+        action("Allies: follow / hold", AllyStanceAction);
+        action("Allies: attack", AllyFocusAction);
 
         section("TACTICAL PAUSE");
         action("Pause, resume", TacticalPauseAction);
@@ -393,6 +398,7 @@ namespace LB::Engine {
         fixed("Move in menus", upKeys + " / " + downKeys, upButtons + " / " + downButtons);
         action("Choose", MenuConfirmAction);
         action("Back", MenuBackAction);
+        rows.push_back({ "Reset to the defaults", {}, {}, std::string(ResetControlsRow) });
         return rows;
     }
 
@@ -477,6 +483,206 @@ namespace LB::Engine {
             lines.push_back(legacy_.Has(boon.boon) ? std::format("{}: {}", boon.name, boon.gives) : std::format("{} (locked): {}", boon.name, boon.requirement));
         }
         return lines;
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Remapping (the Controls page)
+    // ------------------------------------------------------------------------------------------
+
+    namespace {
+        bool SameInput(const Systems::Input::InputAction& a, const Systems::Input::InputAction& b) noexcept {
+            using Systems::Input::InputDevice;
+            if (a.deviceType != b.deviceType) return false;
+            switch (a.deviceType) {
+            case InputDevice::Keyboard: return a.keyCode == b.keyCode;
+            case InputDevice::Mouse: return a.mouseButton == b.mouseButton;
+            case InputDevice::Gamepad: return a.gamepadButton == b.gamepadButton;
+            default: return false;
+            }
+        }
+
+        // "k32,m1,g4": an action's bindings in the profile
+        std::string BindingsText(const std::vector<Systems::Input::InputAction>& bindings) {
+            using Systems::Input::InputDevice;
+            std::string text;
+            for (const auto& binding : bindings) {
+                if (!text.empty()) text += ',';
+                switch (binding.deviceType) {
+                case InputDevice::Keyboard: text += std::format("k{}", binding.keyCode); break;
+                case InputDevice::Mouse: text += std::format("m{}", static_cast<std::int32_t>(binding.mouseButton)); break;
+                case InputDevice::Gamepad: text += std::format("g{}", static_cast<std::int32_t>(binding.gamepadButton)); break;
+                default: break;
+                }
+            }
+            return text;
+        }
+
+        std::optional<std::vector<Systems::Input::InputAction>> ParseBindings(std::string_view text) {
+            using Systems::Input::InputDevice;
+            std::vector<Systems::Input::InputAction> bindings;
+            while (!text.empty()) {
+                const auto comma = text.find(',');
+                const auto part = text.substr(0, comma);
+                text = comma == std::string_view::npos ? std::string_view{} : text.substr(comma + 1);
+                std::int32_t value = 0;
+                if (part.size() < 2) return std::nullopt;
+                const auto [end, ec] = std::from_chars(part.data() + 1, part.data() + part.size(), value);
+                if (ec != std::errc{} || end != part.data() + part.size() || value < 0) return std::nullopt;
+                Systems::Input::InputAction binding{};
+                switch (part[0]) {
+                case 'k': binding.deviceType = InputDevice::Keyboard; binding.keyCode = value; break;
+                case 'm':
+                    if (value > static_cast<std::int32_t>(Systems::Input::MouseButton::Middle)) return std::nullopt;
+                    binding.deviceType = InputDevice::Mouse;
+                    binding.mouseButton = static_cast<Systems::Input::MouseButton>(value);
+                    break;
+                case 'g':
+                    if (value > static_cast<std::int32_t>(Systems::Input::GamepadButton::DPadRight)) return std::nullopt;
+                    binding.deviceType = InputDevice::Gamepad;
+                    binding.gamepadButton = static_cast<Systems::Input::GamepadButton>(value);
+                    break;
+                default: return std::nullopt;
+                }
+                bindings.push_back(binding);
+            }
+            return bindings;
+        }
+
+        std::string ProfileKey(std::string_view action) { return std::format("controls.{}", action); }
+    }
+
+    bool GameEngine::Rebind(std::string_view action, Systems::Input::InputAction binding) {
+        using Systems::Input::InputDevice;
+        namespace Keys = Systems::Input::Keys;
+        if (std::ranges::find(RemappableActions, action) == RemappableActions.end()) return false;
+        if (binding.deviceType == InputDevice::Keyboard) {
+            for (const auto reserved : { Keys::FromChar('W'), Keys::FromChar('A'), Keys::FromChar('S'), Keys::FromChar('D'),
+                                         Keys::Up, Keys::Down, Keys::Left, Keys::Right, Keys::Escape }) {
+                if (binding.keyCode == reserved) return false;
+            }
+        }
+        if (binding.deviceType == InputDevice::Gamepad && binding.gamepadButton == Systems::Input::GamepadButton::Start) return false;
+        const std::string name(action);
+        binding.name = name;
+
+        auto mine = inputSystem_.GetBindings(name);
+        const auto primary = std::ranges::find_if(mine, [&](const auto& b) { return b.deviceType == binding.deviceType; });
+        const std::optional<Systems::Input::InputAction> old = primary != mine.end() ? std::optional{ *primary } : std::nullopt;
+        if (old && SameInput(*old, binding)) return true;
+
+        // An action that had it takes the old one instead (or loses it when there was none)
+        for (const auto other : RemappableActions) {
+            if (other == action) continue;
+            auto theirs = inputSystem_.GetBindings(std::string(other));
+            bool changed = false;
+            for (auto it = theirs.begin(); it != theirs.end();) {
+                if (!SameInput(*it, binding)) { ++it; continue; }
+                changed = true;
+                if (old) { *it = *old; ++it; }
+                else { it = theirs.erase(it); }
+            }
+            if (changed) inputSystem_.SetBindings(std::string(other), std::move(theirs));
+        }
+        if (primary != mine.end()) *primary = binding;
+        else mine.push_back(binding);
+        // No input twice (it had C and I: I to C leaves C once)
+        std::vector<Systems::Input::InputAction> once;
+        for (const auto& b : mine) {
+            if (std::ranges::none_of(once, [&](const auto& kept) { return SameInput(kept, b); })) once.push_back(b);
+        }
+        inputSystem_.SetBindings(name, std::move(once));
+        SaveBindings();
+        return true;
+    }
+
+    void GameEngine::ResetBindings() {
+        inputSystem_.ClearActions();
+        RegisterDefaultBindings();
+        auto profile = persistenceSystem_.LoadProfile();
+        for (const auto action : RemappableActions) profile.erase(ProfileKey(action));
+        persistenceSystem_.SaveProfile(profile);
+    }
+
+    // The remappable actions' bindings, every one (a swap or a second key kept as they are)
+    void GameEngine::SaveBindings() {
+        auto profile = persistenceSystem_.LoadProfile();
+        for (const auto action : RemappableActions) profile[ProfileKey(action)] = BindingsText(inputSystem_.GetBindings(std::string(action)));
+        persistenceSystem_.SaveProfile(profile);
+    }
+
+    void GameEngine::ApplyBindingProfile() {
+        const auto profile = persistenceSystem_.LoadProfile();
+        for (const auto action : RemappableActions) {
+            const auto it = profile.find(ProfileKey(action));
+            if (it == profile.end()) continue;
+            if (auto bindings = ParseBindings(it->second)) inputSystem_.SetBindings(std::string(action), std::move(*bindings));
+        }
+    }
+
+    // Up and down choose a row (skipping the sections' titles), Enter or A waits for the row's new
+    // key or button (Esc or Start keep the old one); true when it took the step's input
+    bool GameEngine::UpdateControlsPage() {
+        using Systems::Input::GamepadButton;
+        const auto rows = GetControls();
+        if (rows.empty()) return false;
+        controlsCursor_ = std::min(controlsCursor_, rows.size() - 1);
+        const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
+
+        if (listening_) {
+            const auto& row = rows[controlsCursor_];
+            if (inputSystem_.IsKeyPressed(Systems::Input::Keys::Escape) || inputSystem_.IsGamepadButtonPressed(GamepadButton::Start)) {
+                listening_ = false;
+                menu_.SetMessage({});
+                return true;
+            }
+            Systems::Input::InputAction binding{};
+            if (const auto key = inputSystem_.FirstKeyPressed()) {
+                binding.deviceType = Systems::Input::InputDevice::Keyboard;
+                binding.keyCode = *key;
+            }
+            else if (const auto button = inputSystem_.FirstGamepadButtonPressed()) {
+                binding.deviceType = Systems::Input::InputDevice::Gamepad;
+                binding.gamepadButton = *button;
+            }
+            else {
+                return true;   // still waiting
+            }
+            listening_ = false;
+            const bool bound = Rebind(row.binding, binding);
+            menu_.SetMessage(bound ? std::string{} : std::string("That one moves the hero or opens the menu"));
+            PlaySound(bound ? GameSound::MenuConfirm : GameSound::ScreenClose);
+            return true;
+        }
+
+        const int vertical = (triggered(MenuDownAction) ? 1 : 0) - (triggered(MenuUpAction) ? 1 : 0);
+        if (vertical != 0) {
+            auto next = static_cast<std::ptrdiff_t>(controlsCursor_);
+            do next += vertical;
+            while (next >= 0 && next < static_cast<std::ptrdiff_t>(rows.size()) && rows[static_cast<std::size_t>(next)].binding.empty());
+            if (next >= 0 && next < static_cast<std::ptrdiff_t>(rows.size())) {
+                controlsCursor_ = static_cast<std::size_t>(next);
+                PlaySound(GameSound::MenuMove);
+            }
+            // Keep it in view (and the section's title above the first)
+            const auto first = menu_.ScrollPosition();
+            const auto wanted = controlsCursor_ < first + 1 ? (controlsCursor_ > 0 ? controlsCursor_ - 1 : 0)
+                              : controlsCursor_ >= first + MenuView::ControlRowsShown ? controlsCursor_ + 1 - MenuView::ControlRowsShown : first;
+            menu_.Scroll(static_cast<int>(wanted) - static_cast<int>(first), rows.size(), MenuView::ControlRowsShown);
+            return true;
+        }
+        if (triggered(MenuConfirmAction) && !rows[controlsCursor_].binding.empty()) {
+            if (rows[controlsCursor_].binding == ResetControlsRow) {
+                ResetBindings();
+                menu_.SetMessage("The controls are as they were");
+            }
+            else {
+                listening_ = true;
+                menu_.SetMessage({});
+            }
+            PlaySound(GameSound::MenuConfirm);
+            return true;
+        }
+        return false;
     }
 
 } // namespace LB::Engine

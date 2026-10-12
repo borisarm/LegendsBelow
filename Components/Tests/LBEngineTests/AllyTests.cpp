@@ -1,5 +1,6 @@
 // AllyTests.cpp - LB.Engine tests: companions hired from the merchant, fighting beside the hero,
-// targeted by enemies, going down and getting up, healed by the Cleric, and kept in saves
+// targeted by enemies, going down and getting up, healed by the Cleric, and kept in saves; the
+// Acolyte's prayers, the party's orders (hold, attack), their gear, and their statuses
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -29,7 +30,9 @@ TEST(AllyTests, Hire_JoinsBesideTheHero_OneAtATime) {
     EXPECT_LT(Encounter::Distance(ally.position, engine.GetPlayerPosition()), 2.0f);
     EXPECT_EQ(ally.level, PlayerLevel(engine));
     EXPECT_EQ(ally.maxHitPoints, ally.definition->hitPoints + ally.definition->hitPointsPerLevel * (PlayerLevel(engine) - 1));   // grown with the hero
-    EXPECT_FALSE(engine.HireAlly("ally_ranger").has_value());   // the party is full
+    EXPECT_FALSE(engine.HireAlly(Barbarian).has_value());        // one of each
+    EXPECT_TRUE(engine.HireAlly("ally_ranger").has_value());
+    EXPECT_FALSE(engine.HireAlly("ally_acolyte").has_value());   // the party is full (two)
     EXPECT_FALSE(engine.HireAlly("ally_nobody").has_value());
 }
 
@@ -115,6 +118,8 @@ TEST(AllyTests, Allies_FollowTheHeroDown_AndAreKeptInSaves) {
         ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, options));
         const auto id = *engine.HireAlly("ally_ranger");
         engine.DamageAlly(id, 3);
+        engine.GiveItem("armor_chest_leather_jerkin_t1");
+        ASSERT_TRUE(engine.GiveToAlly(id, engine.MakeItem("armor_chest_leather_jerkin_t1")));
         engine.EnterFloor(2);
         EXPECT_LT(Encounter::Distance(OnlyAlly(engine).position, engine.GetPlayerPosition()), 2.0f);   // came along
         hitPoints = OnlyAlly(engine).hitPoints;
@@ -126,6 +131,7 @@ TEST(AllyTests, Allies_FollowTheHeroDown_AndAreKeptInSaves) {
     ASSERT_EQ(engine.GetAllies().Allies().size(), 1u);
     EXPECT_EQ(OnlyAlly(engine).definition->key, "ally_ranger");
     EXPECT_EQ(OnlyAlly(engine).hitPoints, hitPoints);
+    EXPECT_EQ(engine.AllyItems(OnlyAlly(engine).id).second, engine.MakeItem("armor_chest_leather_jerkin_t1"));   // and what they carry
 }
 
 TEST(AllyTests, TheMerchant_HiresThemForGold) {
@@ -160,7 +166,7 @@ TEST(AllyPartyTests, Damage_Heal_AndTheCap) {
     AllyParty party;
     const auto id = *party.Add(definition, { 0.0f, 0.0f }, 3);
     EXPECT_EQ(party.Find(id)->maxHitPoints, 30);
-    EXPECT_FALSE(party.Add(definition, { 0.0f, 0.0f }, 1).has_value());   // MaxAllies
+    EXPECT_FALSE(party.Add(definition, { 0.0f, 0.0f }, 1).has_value());   // one of each
 
     EXPECT_FALSE(party.Damage(id, 12));
     EXPECT_EQ(party.Heal(id, 100), 12);   // up to the most
@@ -171,4 +177,98 @@ TEST(AllyPartyTests, Damage_Heal_AndTheCap) {
     EXPECT_EQ(party.Heal(id, 10), 0);           // not while down
     party.RestoreAll();
     EXPECT_EQ(party.Find(id)->hitPoints, 40);
+}
+
+TEST(AllyTests, TheAcolyte_MendsTheWorstOff) {
+    GameEngine engine;
+    InitializeAs(engine, LB::Character::CharacterClass::Warrior);
+    const auto barbarian = *engine.HireAlly(Barbarian);
+    ASSERT_TRUE(engine.HireAlly("ally_acolyte").has_value());
+    const auto& party = engine.GetAllies();
+    engine.DamageAlly(barbarian, party.Find(barbarian)->maxHitPoints * 2 / 3);
+    const auto before = party.Find(barbarian)->hitPoints;
+
+    RunSteps(engine, 30);
+
+    EXPECT_GT(party.Find(barbarian)->hitPoints, before);
+    RunSteps(engine, 60);   // and not again before the prayer's cooldown
+    const auto once = party.Find(barbarian)->hitPoints;
+    RunSteps(engine, 120);
+    EXPECT_EQ(party.Find(barbarian)->hitPoints, once);
+}
+
+TEST(AllyTests, Hold_KeepsThePartyWhereTheHeroStood) {
+    GameEngine engine;
+    InitializeAs(engine, LB::Character::CharacterClass::Warrior);
+    ASSERT_TRUE(engine.HireAlly(Barbarian).has_value());
+    const auto spot = engine.GetPlayerPosition();
+    TapKey(engine, Keys::FromChar('G'));
+    engine.Tick(OneSixtieth);
+    ASSERT_EQ(engine.GetAllies().Stance(), AllyStance::Hold);
+
+    WalkTo(engine, { spot.x - 4.0f, spot.y }, 60 * 4);
+    RunSteps(engine, 60);
+    EXPECT_LT(Encounter::Distance(OnlyAlly(engine).position, spot), 1.5f);   // stayed
+
+    TapKey(engine, Keys::FromChar('G'));   // follow again
+    RunSteps(engine, 120);
+    EXPECT_EQ(engine.GetAllies().Stance(), AllyStance::Follow);
+    EXPECT_LT(Encounter::Distance(OnlyAlly(engine).position, engine.GetPlayerPosition()), 2.5f);
+}
+
+TEST(AllyTests, Attack_SendsThePartyAfterTheNearestEnemy) {
+    GameEngine engine;
+    InitializeAs(engine, LB::Character::CharacterClass::Warrior);
+    ASSERT_TRUE(engine.HireAlly(Barbarian).has_value());
+    const auto near = *engine.SpawnEnemy(GameEngine::LightEnemy, { 3.0f, 0.0f });
+    engine.SpawnEnemy(GameEngine::LightEnemy, { -5.0f, 0.0f });
+    RunSteps(engine, 60);   // up from the ground
+
+    TapKey(engine, Keys::FromChar('T'));
+    engine.Tick(OneSixtieth);
+
+    EXPECT_EQ(engine.GetAllies().FocusTarget(), near);
+    EXPECT_EQ(OnlyAlly(engine).target, near);
+}
+
+TEST(AllyTests, GearGiven_StrengthensThem_AndComesBack) {
+    GameEngine engine;
+    InitializeAs(engine, LB::Character::CharacterClass::Warrior);
+    const auto id = *engine.HireAlly(Barbarian);
+    const auto damage = OnlyAlly(engine).Attack().damageBonus;
+    const auto armour = OnlyAlly(engine).Defense().physicalArmor;
+    ASSERT_EQ(engine.GiveItem("weapon_sword_rusted_shortsword_t1"), 1);
+    ASSERT_EQ(engine.GiveItem("armor_chest_leather_jerkin_t1"), 1);
+    const auto bag = engine.GetInventory().size();
+    const auto sword = engine.MakeItem("weapon_sword_rusted_shortsword_t1");
+    const auto jerkin = engine.MakeItem("armor_chest_leather_jerkin_t1");
+
+    ASSERT_TRUE(engine.GiveToAlly(id, sword));
+    ASSERT_TRUE(engine.GiveToAlly(id, jerkin));
+    EXPECT_FALSE(engine.GiveToAlly(id, engine.MakeItem(GameEngine::HealingPotion)));   // not gear
+    EXPECT_GE(OnlyAlly(engine).Attack().damageBonus, damage);
+    EXPECT_GT(OnlyAlly(engine).Defense().physicalArmor, armour);
+    EXPECT_EQ(engine.GetInventory().size(), bag - 2);
+    EXPECT_EQ(engine.AllyItems(id).first, sword);
+
+    ASSERT_TRUE(engine.TakeFromAlly(id));
+    EXPECT_EQ(engine.GetInventory().size(), bag);
+    EXPECT_EQ(OnlyAlly(engine).Defense().physicalArmor, armour);
+}
+
+TEST(AllyPartyTests, Statuses_SlowThemAndClearWhenDown) {
+    LB::Content::AllyDefinition definition{};
+    definition.key = "ally_test";
+    definition.hitPoints = 20;
+    LB::Content::StatusDefinition slow{};
+    slow.key = "status_test_slow";
+    slow.durationSeconds = 5.0f;
+    slow.movementMultiplier = 0.5f;
+    AllyParty party;
+    const auto id = *party.Add(definition, { 0.0f, 0.0f }, 1);
+
+    party.ApplyStatus(id, slow);
+    EXPECT_FLOAT_EQ(party.Find(id)->statuses.MovementMultiplier(), 0.5f);
+    party.Damage(id, 100);
+    EXPECT_FLOAT_EQ(party.Find(id)->statuses.MovementMultiplier(), 1.0f);
 }

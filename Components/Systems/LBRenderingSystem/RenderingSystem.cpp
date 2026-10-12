@@ -249,12 +249,21 @@ namespace LB::Systems::Rendering {
 
                 using Pass = Detail::GpuRenderer::ModelPass;
                 gpu_->renderer.SetSkinPalette(skinPalette_.data(), skinPalette_.size());
-                gpu_->renderer.BeginModelPass();
                 const auto drawGroups = [this](const std::vector<std::vector<ModelInstance>>& groups, Pass pass) {
                     for (std::size_t i = 0; i < groups.size(); ++i) {
                         gpu_->renderer.DrawModelInstances(i, groups[i].data(), groups[i].size(), pass);
                     }
                 };
+
+                // The key light's shadows: every model (the faded walls too) drawn from the light first
+                if (gpu_->renderer.BeginShadowPass(view.target.x, view.target.y, view.target.z, lighting_.shadows)) {
+                    drawGroups(opaqueInstances_, Pass::Shadow);
+                    drawGroups(fadedInstances_, Pass::Shadow);
+                    gpu_->renderer.EndShadowPass();
+                    stats_.drawCalls += 1;
+                }
+
+                gpu_->renderer.BeginModelPass();
                 drawGroups(opaqueInstances_, Pass::Opaque);
 
                 drawGroups(fadedInstances_, Pass::DepthOnly);

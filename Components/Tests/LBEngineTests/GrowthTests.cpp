@@ -58,7 +58,7 @@ TEST(GrowthTests, Warrior_ShieldBashOpensAtLevelThreeAndStuns) {
 TEST(GrowthTests, LevelUp_ABannerWithWhatWasGained) {
     GameEngine engine;
     InitializeAs(engine, LB::Character::CharacterClass::Rogue);
-    engine.GrantExperience(300);   // two levels in one award: one banner
+    engine.GrantExperience(400);   // two levels in one award: one banner
     engine.Tick(OneSixtieth);
     ASSERT_EQ(PlayerLevel(engine), 3);
 

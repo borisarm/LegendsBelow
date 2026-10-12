@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
-    EXPECT_EQ(content_.GetSpells().size(), 53u);   // 45, the rogue's four abilities, the warrior's three, the healing circle
+    EXPECT_EQ(content_.GetSpells().size(), 55u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells
     EXPECT_EQ(content_.GetWeapons().size(), 12u);
     EXPECT_EQ(content_.GetArmour().size(), 15u);
 }
@@ -158,7 +158,7 @@ TEST_F(ShippedContentTests, SpellRepository_OverShippedContent) {
     auto shared = std::make_shared<const ContentDatabase>(content_);
     LB::Repositories::SpellRepository repo = MakeContentSpellRepository(shared);
 
-    EXPECT_EQ(repo->GetAllSpellIds().size(), 53u);
+    EXPECT_EQ(repo->GetAllSpellIds().size(), 55u);
 
     const auto* bolt = content_.FindSpell("spell_evocation_arcane_bolt_l1");
     auto spell = repo->GetSpell(bolt->id);
@@ -626,7 +626,7 @@ namespace {
 }
 
 TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
-    ASSERT_EQ(content_.GetEnemies().size(), 7u);   // and the crossbowman, the mage, the golem, and the two bosses (below)
+    ASSERT_EQ(content_.GetEnemies().size(), 15u);   // the crypts' skeletons and golem, the caves' and ruins' creatures, three bosses
 
     const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
     ASSERT_NE(minion, nullptr);

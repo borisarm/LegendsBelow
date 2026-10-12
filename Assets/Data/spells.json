@@ -789,7 +789,8 @@
     "appliedStatusIds": [
       "status_stun_basic"
     ],
-    "notes": "Stuns the target"
+    "knockbackTiles": 1.5,
+    "notes": "Stuns the target and throws it back"
   },
   {
     "id": "spell_utility_whirlwind_l2",
@@ -866,5 +867,49 @@
     "powerCoefficient": 0.6,
     "cleansesStatuses": 2,
     "notes": "Heals everyone around the cleric and lifts their hindrances"
+  },
+  {
+    "id": "spell_shadow_hex_bolt_l1",
+    "name": "Hex Bolt",
+    "school": "Shadow",
+    "level": 1,
+    "categories": [
+      "Damage"
+    ],
+    "requiredLevel": 1,
+    "manaCost": 0,
+    "castTimeSeconds": 0.5,
+    "cooldownSeconds": 0.0,
+    "range": 8.0,
+    "baseDamage": 5,
+    "powerCoefficient": 0.5,
+    "damageType": "Acid",
+    "appliedStatusIds": [
+      "status_slow_basic"
+    ],
+    "projectileSpeed": 9.0,
+    "notes": "A witch's curse: it eats at armour and slows"
+  },
+  {
+    "id": "spell_evocation_hellfire_l1",
+    "name": "Hellfire",
+    "school": "Evocation",
+    "level": 1,
+    "categories": [
+      "Damage"
+    ],
+    "requiredLevel": 1,
+    "manaCost": 0,
+    "castTimeSeconds": 0.5,
+    "cooldownSeconds": 0.0,
+    "range": 8.0,
+    "baseDamage": 7,
+    "powerCoefficient": 0.5,
+    "damageType": "Fire",
+    "appliedStatusIds": [
+      "status_burning_basic"
+    ],
+    "projectileSpeed": 11.0,
+    "notes": "A tiefling's fire: it sets its target burning"
   }
 ]

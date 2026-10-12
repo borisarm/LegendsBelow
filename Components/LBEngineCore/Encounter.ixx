@@ -85,6 +85,27 @@ export namespace LB::Engine {
 
         [[nodiscard]] static WaveScaling ScalingFor(std::int32_t wave) noexcept { return Waves::ScalingFor(wave); }
 
+        /// <summary>
+        /// How long a knockback carries its body (it covers its distance in this time)
+        /// </summary>
+        static constexpr float KnockSeconds = 0.18f;
+
+        /// <summary>
+        /// Throw an enemy `tiles` straight away from `from` (a heavy blow); bosses and the
+        /// unstaggerable stand fast. Returns whether it was thrown.
+        /// </summary>
+        bool Knock(std::uint32_t id, WorldPoint from, float tiles) {
+            auto* enemy = Find(id);
+            if (!enemy || enemy->IsDead() || tiles <= 0.0f || enemy->definition->boss || enemy->definition->staggerImmune) return false;
+            const float dx = enemy->position.x - from.x;
+            const float dy = enemy->position.y - from.y;
+            const float length = std::hypot(dx, dy);
+            if (length < 1e-4f) return false;
+            enemy->knockVelocity = { dx / length * tiles / KnockSeconds, dy / length * tiles / KnockSeconds };
+            enemy->knockSeconds = KnockSeconds;
+            return true;
+        }
+
         [[nodiscard]] static std::pair<std::int32_t, std::int32_t> WaveComposition(std::int32_t wave) noexcept { return Waves::Composition(wave); }
 
         [[nodiscard]] static std::int32_t WaveShooters(std::int32_t wave) noexcept { return Waves::Shooters(wave); }
@@ -164,9 +185,16 @@ export namespace LB::Engine {
                 const auto formation = formations.find(enemy.group);
                 const auto& target = TargetOf(enemy, player, allies);
                 switch (behavior_.Update(enemy, elapsedSeconds, target, formation != formations.end() ? formation->second : Formation{})) {
-                case EnemyAction::Strike:
+                case EnemyAction::Strike: {
                     events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), target.defense), false, nullptr, target.ally });
+                    // Life drain: its blow heals it
+                    const auto& dealt = events.back().result;
+                    if (enemy.definition->lifeSteal > 0.0f && dealt.hit && dealt.finalDamage > 0) {
+                        const auto healed = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(dealt.finalDamage) * enemy.definition->lifeSteal)));
+                        enemy.hitPoints = std::min(enemy.maxHitPoints, enemy.hitPoints + healed);
+                    }
                     break;
+                }
                 case EnemyAction::Shoot:
                     if (enemy.definition->IsCaster()) CastAtPlayer(enemy, target.position);
                     else ShootAtPlayer(enemy, target.position);

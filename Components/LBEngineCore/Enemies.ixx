@@ -81,6 +81,11 @@ export namespace LB::Engine {
         float slamSeconds{0.0f};            // > 0: winding up a telegraphed attack, landing when it runs out
         float slamCooldown{0.0f};           // until it may start another
         WorldPoint slamCenter{};            // where the ring is
+        WorldPoint knockVelocity{};         // thrown back by a heavy blow (tiles per second)...
+        float knockSeconds{0.0f};           // ...for this long
+        float lungeSeconds{0.0f};           // > 0: rushing at the player
+        float lungeCooldown{0.0f};
+        WorldPoint lungeDirection{};
 
         [[nodiscard]] bool IsDead() const noexcept { return state == EnemyState::Dead; }
 

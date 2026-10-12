@@ -25,6 +25,9 @@ export namespace LB::Engine {
         SpellTrail,     // a spell missile's wake (colored by its element)
         SpellBurst,     // a spell landing or bursting
         SpellCharge,    // magic gathering in the caster's hands
+        CryptDust,      // each tier's air: dust motes hanging in the crypts...
+        CaveMist,       // ...mist creeping over the caves' floors...
+        RuinEmbers,     // ...embers drifting up through the ruins
     };
 
     /// <summary>

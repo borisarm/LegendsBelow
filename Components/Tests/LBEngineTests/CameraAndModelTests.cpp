@@ -259,9 +259,11 @@ TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
     // the potion and the arrow and bolt bundles (3), the merchant, the shrine and its candles (3),
     // the tiers' floors and walls, props, and traps (18),
     // the companions' bodies and great axe (3), the greater chest, gate, candles, and key (5),
+    // the caves' and ruins' creatures, the frost golem, and their weapons (15),
+    // the acolyte and her mace (2),
     // weapons and the shield in the heroes' hands and their arrows and bolts (11),
     // enemy bodies, weapons and shots (13), animation sets (5 medium, 3 large)
-    EXPECT_NE(error.find("87 problems"), std::string::npos) << error;
+    EXPECT_NE(error.find("104 problems"), std::string::npos) << error;
     EXPECT_NE(error.find("wall.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Knight.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Skeleton_Minion.glb"), std::string::npos) << error;

@@ -64,9 +64,10 @@ TEST(GameEngineTorchTests, NearbyTorches_BurnWithParticles) {
     const auto& particles = engine.GetParticles().GetParticles();
     ASSERT_FALSE(particles.empty());
     EXPECT_EQ(engine.GetRendering().GetQueuedParticles().size(), particles.size());
-    // Every particle rises from a torch within range of the player (but the sparkles of loot lying about)
+    // Every particle rises from a torch within range of the player (but the sparkles of loot lying
+    // about, and the dust hanging in the air)
     const auto atLoot = [&](const auto& particle) {
-        return std::ranges::any_of(engine.GetGroundItems(), [&](const GroundItem& ground) {
+        return particle.effect == ParticleEffect::CryptDust || std::ranges::any_of(engine.GetGroundItems(), [&](const GroundItem& ground) {
             return std::hypot(ground.position.x - particle.position.x, ground.position.y - particle.position.z) < 1.0f;
         });
     };
@@ -81,6 +82,7 @@ TEST(GameEngineTorchTests, NearbyTorches_BurnWithParticles) {
     for (const auto& torch : engine.GetTorches()) {
         if (Encounter::Distance(torch.position, engine.GetPlayerPosition()) <= GameEngine::TorchFireRange) continue;
         for (const auto& particle : particles) {
+            if (particle.effect == ParticleEffect::CryptDust) continue;
             EXPECT_GT(std::hypot(torch.position.x - particle.position.x, torch.position.y - particle.position.z), 0.5f);
         }
     }

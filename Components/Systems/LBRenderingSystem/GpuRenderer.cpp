@@ -1,6 +1,6 @@
 // GpuRenderer.cpp - The frame-level façade over the GPU: owns the device and the shared
-// resources, composes the pipelines (models, primitives, particles, overlay), and handles the
-// frame lifecycle, the camera, and device loss
+// resources, composes the pipelines (models, primitives, particles, overlay) and the key light's
+// shadow map, and handles the frame lifecycle, the camera, and device loss
 //
 // Internal partition of LB.RenderingSystem. It exposes only plain types, so RenderingSystem never
 // handles Direct3D types; each pipeline owns its own root signature and pipeline states.
@@ -15,6 +15,7 @@ import :Font;
 import :DeviceResources;
 import :GpuResources;
 import :ModelPipeline;
+import :ShadowMap;
 import :PrimitivePipeline;
 import :OverlayPipeline;
 import :ParticlePipeline;
@@ -33,7 +34,8 @@ namespace LB::Systems::Rendering::Detail
         GpuRenderer()
             : m_device(std::make_unique<DeviceResources>(DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)),
               m_resources(*m_device),
-              m_models(*m_device, m_resources)
+              m_models(*m_device, m_resources),
+              m_shadowMap(*m_device, m_resources)
         {
             m_device->RegisterDeviceNotify(this);
             m_models.SetLights(m_lights);
@@ -144,6 +146,37 @@ namespace LB::Systems::Rendering::Detail
         // Bind the model pipeline. Call after SetCamera and SetSkinPalette.
         void BeginModelPass() { m_models.BeginPass(m_device->GetCommandList()); }
 
+        // The key light's shadow pass around `focus` (what the camera looks at): draw the
+        // world's models into it with ModelPass::Shadow, then EndShadowPass. Strength 0: no
+        // shadows (the pass is skipped and the shader samples nothing). Call after SetCamera,
+        // SetLighting, and SetSkinPalette.
+        bool BeginShadowPass(float focusX, float focusY, float focusZ, float strength)
+        {
+            const bool on = strength > 0.0f && m_shadowMap.IsReady();
+            m_models.SetShadow(ShadowMap::LightViewProjection({ focusX, focusY, focusZ }, m_lights.direction[0]), on ? strength : 0.0f,
+                               1.0f / static_cast<float>(ShadowMap::Size));
+            if (!on) return false;
+            auto* commandList = m_device->GetCommandList();
+            m_shadowMap.BeginPass(commandList);
+            m_models.BeginPass(commandList, true);
+            return true;
+        }
+
+        // Back to the frame's own targets, the shadow map ready to be sampled
+        void EndShadowPass()
+        {
+            auto* commandList = m_device->GetCommandList();
+            m_shadowMap.EndPass(commandList);
+            const auto rtv = m_device->GetRenderTargetView();
+            const auto dsv = m_device->GetDepthStencilView();
+            commandList->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
+            const auto viewport = m_device->GetScreenViewport();
+            const auto scissor = m_device->GetScissorRect();
+            commandList->RSSetViewports(1, &viewport);
+            commandList->RSSetScissorRects(1, &scissor);
+            m_models.InvalidateBinding();
+        }
+
         void DrawModelInstances(std::size_t index, const ModelInstance* instances, std::size_t count, ModelPass pass)
         {
             m_models.Draw(m_device->GetCommandList(), index, instances, count, pass);
@@ -223,6 +256,7 @@ namespace LB::Systems::Rendering::Detail
         void OnDeviceLost() override
         {
             m_models.Reset();
+            m_shadowMap.Reset();
             m_overlay.Reset();
             m_particles.Reset();
             m_primitives.Reset();
@@ -266,6 +300,7 @@ namespace LB::Systems::Rendering::Detail
             m_overlay.Create(device, renderTargetState);
             m_particles.Create(device, renderTargetState);
             m_models.Create(renderTargetState);   // and uploads the models kept across a device loss
+            m_shadowMap.Create();
         }
 
         // Declaration order is destruction order in reverse: the pipelines go before the shared
@@ -273,6 +308,7 @@ namespace LB::Systems::Rendering::Detail
         std::unique_ptr<DeviceResources> m_device;
         GpuResources m_resources;
         ModelPipeline m_models;
+        ShadowMap m_shadowMap;
         PrimitivePipeline m_primitives;
         OverlayPipeline m_overlay;
         ParticlePipeline m_particles;

@@ -844,7 +844,7 @@ TEST(CharacterServiceGrowthTests, LevelUp_AutoPointsAlternatePrimaries) {
     EXPECT_EQ(toLevel2->attributeGains.strength, 1);       // level 2 -> first primary
     EXPECT_EQ(toLevel2->attributeGains.constitution, 0);
 
-    auto toLevel3 = service.AwardExperience(id, 183);      // 283 total: level 3
+    auto toLevel3 = service.AwardExperience(id, 300);      // 400 total: level 3
     ASSERT_EQ(toLevel3->newLevel, 3);
     EXPECT_EQ(toLevel3->attributeGains.constitution, 1);   // level 3 -> second primary
 
@@ -858,7 +858,7 @@ TEST(CharacterServiceGrowthTests, LevelUp_GrantsFreePoints) {
     CharacterService service = MakeTestService();
     auto id = *service.CreateCharacter(CharacterCreationRequest("M", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
 
-    auto result = service.AwardExperience(id, 283);  // level 1 -> 3
+    auto result = service.AwardExperience(id, 400);  // level 1 -> 3
 
     EXPECT_EQ(result->attributePointsGained, 2);
     EXPECT_EQ(Get(service, id).GetUnspentAttributePoints(), 2);
@@ -1049,14 +1049,14 @@ TEST(CharacterServiceProgressTests, RestoreProgress_SetsLevelAttributesAndHitPoi
     auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{16, 12, 14, 8, 10, 10}));
     CharacterService reference = MakeTestService();
     auto other = *reference.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{16, 12, 14, 8, 10, 10}));
-    reference.AwardExperience(other, 300);   // level 3
+    reference.AwardExperience(other, 400);   // level 3
     const auto& expected = Get(reference, other);
 
     ASSERT_TRUE(service.RestoreProgress(id, expected.GetLevel(), expected.GetExperience(), expected.GetAttributes(), 2));
 
     const auto& restored = Get(service, id);
     EXPECT_EQ(restored.GetLevel(), 3);
-    EXPECT_EQ(restored.GetExperience(), 300);
+    EXPECT_EQ(restored.GetExperience(), 400);
     EXPECT_EQ(restored.GetAttributes().strength, expected.GetAttributes().strength);
     EXPECT_EQ(restored.GetUnspentAttributePoints(), 2);
     EXPECT_EQ(restored.GetMaxHitPoints(), expected.GetMaxHitPoints());

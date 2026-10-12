@@ -20,7 +20,9 @@ export namespace LB::Engine {
         Unequip,          // take off the piece in `slot`
         Buy,              // buy the merchant's stock entry `index`
         Sell,             // sell one `item` from the bag
-        ChoosePath        // take the class's specialization `index`
+        ChoosePath,       // take the class's specialization `index`
+        GiveToAlly,       // choose an item from the bag for ally `index` (an id)
+        TakeFromAlly      // take ally `index`'s gear back
     };
 
     /// <summary>

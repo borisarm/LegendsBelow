@@ -22,6 +22,8 @@ namespace LB::Systems::Rendering::Detail
     public:
         // Distinct images the texture heap can hold (the KayKit sets share one atlas per pack)
         static constexpr std::size_t MaxTextures = 256;
+        // The heap's last slot is the shadow map's (ShadowMap); textures stop one short of it
+        static constexpr std::size_t ShadowSlot = MaxTextures - 1;
 
         explicit GpuResources(DeviceResources& device) noexcept : m_device(device) {}
 
@@ -78,6 +80,12 @@ namespace LB::Systems::Rendering::Detail
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle(std::size_t slot) const
         {
             return m_textureHeap->GetGpuHandle(slot);
+        }
+
+        // Where a view in the texture heap is written (the shadow map's, in ShadowSlot)
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle(std::size_t slot) const
+        {
+            return m_textureHeap->GetCpuHandle(slot);
         }
 
         // A white texel for untextured materials and solid rectangles
@@ -177,7 +185,7 @@ namespace LB::Systems::Rendering::Detail
             {
                 if (m_textures.contains(texture) || std::ranges::any_of(pending, [&](const Pending& p) { return p.texture == texture; }))
                     continue;
-                if (m_textures.size() + pending.size() >= MaxTextures)
+                if (m_textures.size() + pending.size() >= ShadowSlot)
                     throw std::runtime_error("too many distinct textures");
 
                 Pending upload{ texture };

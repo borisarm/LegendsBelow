@@ -58,6 +58,7 @@ export namespace LB::Content {
         String notes;
         float projectileSpeed{0.0f};                  // tiles per second of a bolt; 0: not a missile
         float dashTiles{0.0f};                        // the caster rolls this far (a dodge)
+        float knockbackTiles{0.0f};                   // a struck enemy is thrown back this far (not bosses, nor the unstaggerable)
         float evadeSeconds{0.0f};                     // ... and no attack touches them this long
         bool teleportBehindTarget{false};             // the caster steps behind the target (within range)
         std::int32_t cleansesStatuses{0};             // hindrances (Debuff, Control) it removes from the caster
@@ -307,6 +308,14 @@ export namespace LB::Content {
         // tank until it closes in, and its shooters keep behind the front line
         bool tank{false};
 
+        // A lunge (a hunter's rush, design-combat-system.md 9.2): from up to lungeRange it rushes at
+        // the player at lungeSpeed and strikes at once
+        float lungeRange{0.0f};                       // tiles; 0: never
+        float lungeSpeed{8.0f};                       // tiles per second
+        float lungeCooldownSeconds{6.0f};
+        float lifeSteal{0.0f};                        // its blows heal it by this share of the damage
+        bool rises{true};                             // rises from the ground (the undead); else it stands ready
+
         // Movement and awareness
         float movementSpeed{3.0f};                    // tiles per second
         float aggroRange{8.0f};                       // tiles; notices the player within this distance
@@ -353,6 +362,11 @@ export namespace LB::Content {
         String projectileModel;
         float movementSpeed{3.2f};
         std::int32_t price{60};                       // gold the merchant asks to hire them
+        // A healer: mends the most hurt of the party (the hero first on a tie) within healRange
+        // below 60% health, by healAmount + their level, every healCooldownSeconds
+        std::int32_t healAmount{0};                   // 0: not a healer
+        float healCooldownSeconds{6.0f};
+        float healRange{6.0f};
         String model;                                 // a KayKit Adventurers body (Rig_Medium)
         String mainHandModel;
         float modelScale{0.5f};

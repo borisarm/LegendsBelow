@@ -336,6 +336,39 @@ export namespace LB::Systems::Input {
         }
 
         /// <summary>
+        /// Replace all of an action's bindings (a player's remapping); empty leaves it unbound
+        /// </summary>
+        void SetBindings(const String& actionName, std::vector<InputAction> bindings) {
+            for (auto& binding : bindings) binding.name = actionName;
+            actions_[actionName] = std::move(bindings);
+        }
+
+        /// <summary>
+        /// Forget every binding (to register the defaults again)
+        /// </summary>
+        void ClearActions() noexcept { actions_.clear(); }
+
+        /// <summary>
+        /// A key that went down this input frame (the lowest code when several did), for remapping
+        /// </summary>
+        [[nodiscard]] std::optional<std::int32_t> FirstKeyPressed() const {
+            if (pressedSinceUpdate_.empty()) return std::nullopt;
+            return *std::ranges::min_element(pressedSinceUpdate_);
+        }
+
+        /// <summary>
+        /// A gamepad button that went down this input frame (the first in GamepadButton order)
+        /// </summary>
+        [[nodiscard]] std::optional<GamepadButton> FirstGamepadButtonPressed(std::int32_t gamepadIndex = 0) const {
+            const auto it = gamepadPressedSinceUpdate_.find(gamepadIndex);
+            if (it == gamepadPressedSinceUpdate_.end()) return std::nullopt;
+            for (auto button = 0u; button <= static_cast<std::uint32_t>(GamepadButton::DPadRight); ++button) {
+                if ((it->second & (1u << button)) != 0) return static_cast<GamepadButton>(button);
+            }
+            return std::nullopt;
+        }
+
+        /// <summary>
         /// The bindings of an action, in the order they were registered (empty: none)
         /// </summary>
         [[nodiscard]] std::vector<InputAction> GetBindings(const String& actionName) const {

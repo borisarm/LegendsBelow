@@ -574,6 +574,24 @@ namespace LB::Engine {
         }
         info("Defense", std::format("AC {}   AR {}", GetPlayerDefense().armorClass, GetPlayerDefense().physicalArmor));
 
+        // The companions and their gear: choose one to give them an item from the bag
+        if (!session_->allies.Allies().empty()) {
+            heading(session_->givingTo ? std::string("Allies - choose a weapon or armour below for them (Esc: cancel)") : std::string("Allies"));
+            for (const auto& ally : session_->allies.Allies()) {
+                const auto [weapon, armour] = AllyItems(ally.id);
+                const auto carried = std::format("{} / {}", weapon.IsValid() ? ItemName(weapon) : std::string("-"), armour.IsValid() ? ItemName(armour) : std::string("-"));   // weapon / armour
+                ScreenRow row{ std::format("{} (HP {}/{})", ally.definition->name, ally.hitPoints, ally.maxHitPoints), carried, ScreenAction::GiveToAlly };
+                row.index = ally.id;
+                row.color = session_->givingTo == ally.id ? std::optional{ Systems::Rendering::Color{ 0.55f, 0.95f, 0.55f, 1.0f } } : std::nullopt;
+                rows.push_back(std::move(row));
+                if (weapon.IsValid() || armour.IsValid()) {
+                    ScreenRow back{ std::format("  take back {}'s gear", ally.definition->name), {}, ScreenAction::TakeFromAlly };
+                    back.index = ally.id;
+                    rows.push_back(std::move(back));
+                }
+            }
+        }
+
         // The bag
         const auto bag = GetInventory();
         heading(std::format("Bag ({}/{})", bag.size(), BagCapacity));
@@ -653,8 +671,14 @@ namespace LB::Engine {
             return;
         }
 
+        if (session_->givingTo && triggered(MenuBackAction)) {   // Esc cancels choosing an ally's item first
+            session_->givingTo.reset();
+            session_->characterScreen.SetRows(BuildScreenRows());
+            return;
+        }
         if (triggered(CharacterScreenAction) || triggered(MenuBackAction)) {
             session_->characterScreen.Close();
+            session_->givingTo.reset();
             PlaySound(GameSound::ScreenClose);
             return;
         }
@@ -685,7 +709,17 @@ namespace LB::Engine {
         else if (row->action != ScreenAction::None && row->action != ScreenAction::Use) PlaySound(GameSound::MenuConfirm);
         switch (row->action) {
         case ScreenAction::SpendPoint: session_->characterService.SpendAttributePoint(*session_->playerId, row->attribute); break;
-        case ScreenAction::Equip: EquipItemRef(row->item); break;
+        case ScreenAction::Equip:
+            if (session_->givingTo) {
+                GiveToAlly(*session_->givingTo, row->item);
+                session_->givingTo.reset();
+            }
+            else {
+                EquipItemRef(row->item);
+            }
+            break;
+        case ScreenAction::GiveToAlly: session_->givingTo = static_cast<std::uint32_t>(row->index); break;
+        case ScreenAction::TakeFromAlly: TakeFromAlly(static_cast<std::uint32_t>(row->index)); break;
         case ScreenAction::Use: UseItem(key); break;
         case ScreenAction::Unequip: UnequipArmorSlot(row->slot); break;
         case ScreenAction::ChoosePath:
@@ -729,7 +763,7 @@ namespace LB::Engine {
         const auto text = [&](std::string line, std::int32_t x, std::int32_t y, float scale, Color color) {
             renderingSystem_.DrawText(Systems::Rendering::TextRenderData{ std::move(line), LB::Position{ x, y }, {}, color, scale, 32, false });
         };
-        // A name that would run into the detail column: smaller, then cut short with "..."
+        // A name that would run into the detail column (a detail past the panel): smaller, then cut short with "..."
         const std::int32_t detailX = left + panelWidth / 2 + 60;
         const auto fitted = [&](std::string line, std::int32_t x, std::int32_t y, float scale, Color color, bool hasDetail) {
             const float room = static_cast<float>((hasDetail ? detailX - 10 : left + panelWidth - 16) - x);
@@ -772,7 +806,7 @@ namespace LB::Engine {
             else {
                 text(row.heading ? row.text : "  " + row.text, left + 16, y, row.heading ? 2.0f : 1.8f, color);
             }
-            if (!row.detail.empty()) text(row.detail, detailX, y, 1.8f, row.enabled ? Display(0.70f, 0.70f, 0.70f) : color);
+            if (!row.detail.empty()) fitted(row.detail, detailX, y, 1.8f, row.enabled ? Display(0.70f, 0.70f, 0.70f) : color, false);
         }
     }
 
@@ -874,7 +908,11 @@ namespace LB::Engine {
         data["player.gold"] = std::format("{}", session_->gold);
         data["player.path"] = session_->path;
         std::string allies;
-        for (const auto& ally : session_->allies.Allies()) allies += std::format("{}:{};", ally.definition->key, ally.hitPoints);
+        for (const auto& ally : session_->allies.Allies()) {
+            const auto [weapon, armour] = AllyItems(ally.id);
+            allies += std::format("{}:{}:{}:{};", ally.definition->key, ally.hitPoints, weapon.IsValid() ? ItemSaveKey(weapon) : std::string("-"),
+                                  armour.IsValid() ? ItemSaveKey(armour) : std::string("-"));
+        }
         data["party.allies"] = allies;
         data["player.weapon"] = GetPlayerWeaponItem().IsValid() ? ItemSaveKey(GetPlayerWeaponItem()) : std::string{};
 
@@ -945,16 +983,22 @@ namespace LB::Engine {
         if (const auto* text = field("player.path"); text && content_->FindClass(session_->playerClass) && content_->FindClass(session_->playerClass)->FindSpecialization(*text)) {
             session_->path = *text;
         }
-        // The companions, with the health they had ("key:hitPoints;")
+        // The companions, with the health they had and what they carried ("key:hitPoints:weapon:armour;",
+        // "-" for nothing)
         session_->allies.Clear();
+        session_->allyItems.clear();
         if (const auto* text = field("party.allies")) {
             for (const auto& entry : Split(*text, ';')) {
-                const auto colon = entry.rfind(':');
+                const auto parts = Split(entry, ':');
                 std::int32_t hitPoints = 0;
-                if (colon == std::string::npos || !ParseInt(std::string_view(entry).substr(colon + 1), hitPoints)) continue;
-                const auto* definition = content_->FindAlly(entry.substr(0, colon));
+                if (parts.size() < 2 || !ParseInt(parts[1], hitPoints)) continue;
+                const auto* definition = content_->FindAlly(parts[0]);
                 if (!definition) continue;
                 if (const auto id = session_->allies.Add(*definition, session_->playerPosition, level)) {
+                    auto& items = session_->allyItems[*id];
+                    if (parts.size() > 2 && parts[2] != "-") items.first = ItemFromSaveKey(parts[2]);
+                    if (parts.size() > 3 && parts[3] != "-") items.second = ItemFromSaveKey(parts[3]);
+                    SyncAllyGear(*id);
                     const auto missing = session_->allies.Find(*id)->maxHitPoints - hitPoints;
                     if (missing > 0) session_->allies.Damage(*id, missing);
                 }
@@ -1098,6 +1142,57 @@ namespace LB::Engine {
         }
         const auto it = assets_.itemIcons.find(name);
         return it != assets_.itemIcons.end() ? it->second : Systems::Rendering::InvalidImageId;
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Allies' gear (design-character-system.md 7): a weapon and an armour piece each
+    // ------------------------------------------------------------------------------------------
+
+    bool GameEngine::GiveToAlly(std::uint32_t ally, ItemRef item) {
+        if (!session_->playerId || !session_->allies.Find(ally) || !item.IsValid()) return false;
+        const auto base = session_->rolls.BaseOf(item);
+        if (base.kind != ItemKind::Weapon && base.kind != ItemKind::Armor) return false;
+        const auto bag = GetInventory();
+        if (std::ranges::none_of(bag, [&](const Inventory::InventoryItem& stack) { return stack.itemId == item.Pack(); })) return false;
+        session_->inventoryService.RemoveItem(*session_->playerId, item.Pack(), 1);
+        auto& [weapon, armour] = session_->allyItems[ally];
+        auto& slot = base.kind == ItemKind::Weapon ? weapon : armour;
+        if (slot.IsValid()) GiveItemRef(slot);   // what they had goes back to the bag
+        slot = item;
+        SyncAllyGear(ally);
+        PlaySound(GameSound::Equip);
+        return true;
+    }
+
+    bool GameEngine::TakeFromAlly(std::uint32_t ally) {
+        auto it = session_->allyItems.find(ally);
+        if (it == session_->allyItems.end() || !session_->playerId) return false;
+        const auto needed = (it->second.first.IsValid() ? 1u : 0u) + (it->second.second.IsValid() ? 1u : 0u);
+        if (needed == 0 || GetInventory().size() + needed > static_cast<std::size_t>(BagCapacity)) return false;
+        if (it->second.first.IsValid()) GiveItemRef(it->second.first);
+        if (it->second.second.IsValid()) GiveItemRef(it->second.second);
+        session_->allyItems.erase(it);
+        SyncAllyGear(ally);
+        return true;
+    }
+
+    // A weapon adds its damage bonus and affixes; armour its armour, armour class, and hit points
+    void GameEngine::SyncAllyGear(std::uint32_t ally) {
+        AllyGear gear{};
+        const auto [weapon, armour] = AllyItems(ally);
+        if (weapon.IsValid()) {
+            const auto bonuses = session_->rolls.BonusesOf(weapon);
+            gear.damage = content_->FindWeapon(session_->rolls.BaseOf(weapon).id)->damageBonus + bonuses.damage;
+            gear.attackBonus = bonuses.attackBonus;
+        }
+        if (armour.IsValid()) {
+            const auto* piece = content_->FindArmor(session_->rolls.BaseOf(armour).id);
+            const auto bonuses = session_->rolls.BonusesOf(armour);
+            gear.armor = piece->physicalAR + piece->armorBonus + bonuses.armor;
+            gear.armorClass = bonuses.armorClass;
+            gear.hitPoints = bonuses.hitPoints;
+        }
+        session_->allies.SetGear(ally, gear);
     }
 
 } // namespace LB::Engine

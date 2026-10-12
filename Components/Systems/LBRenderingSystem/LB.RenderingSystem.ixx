@@ -135,11 +135,13 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
-    /// The light everything shares: directional lights scaled (1: the default rig), and ambient
+    /// The light everything shares: directional lights scaled (1: the default rig), ambient, and
+    /// how dark the key light's shadows are on models (0: no shadows, 1: none of it gets there)
     /// </summary>
     struct SceneLighting {
         float directional{1.0f};
         Color ambient{0.03f, 0.03f, 0.04f, 1.0f};   // linear
+        float shadows{0.8f};
     };
 
     /// <summary>

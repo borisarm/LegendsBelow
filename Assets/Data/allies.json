@@ -42,5 +42,29 @@
     "model": "Ranger.glb",
     "mainHandModel": "bow_withString.gltf",
     "modelScale": 0.42
+  },
+  {
+    "id": "ally_acolyte",
+    "name": "Acolyte",
+    "description": "A priestess with a mace and a prayer: she mends whoever is worst off",
+    "hitPoints": 16,
+    "hitPointsPerLevel": 3,
+    "armorClass": 12,
+    "physicalArmor": 1,
+    "attackBonus": 2,
+    "damageDice": "1d6",
+    "damageBonus": 0,
+    "damageType": "Bludgeoning",
+    "attackTimeSeconds": 1.0,
+    "attackRecoverySeconds": 0.6,
+    "attackRange": 1.3,
+    "movementSpeed": 3.2,
+    "price": 100,
+    "healAmount": 6,
+    "healCooldownSeconds": 6.0,
+    "healRange": 6.0,
+    "model": "Acolyte.glb",
+    "mainHandModel": "Cleric_Mace.gltf",
+    "modelScale": 0.42
   }
 ]

@@ -867,9 +867,10 @@ export namespace LB::Services::Character {
         }
 
         std::int32_t calculateExperienceForLevel(std::int32_t level) const {
-            // Simple exponential XP curve
+            // 100 (level - 1)^2: about level 5 through the first tier of the dungeon and 10 through the
+            // second, as the item tiers expect (design-armour-system.md 6.1)
             if (level <= 1) return 0;
-            return static_cast<std::int32_t>(100 * std::pow(level - 1, 1.5));
+            return static_cast<std::int32_t>(100 * std::pow(level - 1, 2.0));
         }
 
         std::int32_t calculateLevelForExperience(std::int32_t experience) const {

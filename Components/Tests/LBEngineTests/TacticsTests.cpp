@@ -61,7 +61,8 @@ TEST(TacticsTests, Shooters_KeepBehindTheFrontLine) {
 TEST(TacticsTests, Bosses_OnePerTier) {
     EXPECT_EQ(GameEngine::BossForDepth(3), "enemy_necromancer");
     EXPECT_EQ(GameEngine::BossForDepth(6), "enemy_golem_warlord");
-    EXPECT_EQ(GameEngine::BossForDepth(9), "enemy_necromancer");
+    EXPECT_EQ(GameEngine::BossForDepth(9), "enemy_frost_golem");
+    EXPECT_EQ(GameEngine::BossForDepth(12), "enemy_necromancer");   // and around again
 }
 
 TEST(TacticsTests, Slam_ShowsItsRingThenStrikesThoseInside) {

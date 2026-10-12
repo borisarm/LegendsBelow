@@ -4,6 +4,7 @@
 // world transform, tint, and (skinned parts) where its joint matrices start in the skin palette.
 // Lighting mirrors the DirectXTK BasicEffect setup used for primitives (three directional lights
 // plus ambient, no specular), so both look alike, plus up to MaxPointLights point lights (torches).
+// The key light (the first) casts shadows: the shadow map holds the world's depth as it sees it.
 
 #define MaxPointLights 16
 
@@ -16,6 +17,8 @@ cbuffer Frame : register(b0)
     float4 PointLightPosition[MaxPointLights];   // xyz: world position, w: radius (tiles)
     float4 PointLightColor[MaxPointLights];      // linear color times intensity
     float4 PointLightCount;                       // x
+    row_major float4x4 ShadowViewProjection;      // the key light's view and projection
+    float4 ShadowParams;                          // x: on, y: a texel (in shadow map UV), z: strength
 };
 
 // Per part: the material's base color factor (multiplies the texture) and emissive color
@@ -27,6 +30,30 @@ cbuffer Material : register(b1)
 
 Texture2D<float4> BaseColorTexture : register(t0);   // sRGB, sampled as linear
 SamplerState LinearWrap : register(s0);
+Texture2D<float> ShadowMap : register(t2);            // the key light's depth
+SamplerComparisonState ShadowSampler : register(s1);  // less-or-equal, bilinear: smooth edges
+
+// How much of the key light reaches a world position: 1 lit, down to 1 - strength in shadow.
+// A 3x3 filter of comparisons softens the edge; the normal offset keeps surfaces from shadowing
+// themselves.
+float KeyLightVisible(float3 world, float3 normal)
+{
+    if (ShadowParams.x <= 0.0f)
+        return 1.0f;
+    const float4 seen = mul(float4(world + normal * 0.04f, 1.0f), ShadowViewProjection);
+    const float2 uv = seen.xy * float2(0.5f, -0.5f) + 0.5f;
+    if (any(uv < 0.0f) || any(uv > 1.0f) || seen.z > 1.0f)
+        return 1.0f;
+    float lit = 0.0f;
+    [unroll]
+    for (int y = -1; y <= 1; ++y)
+    {
+        [unroll]
+        for (int x = -1; x <= 1; ++x)
+            lit += ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + float2(x, y) * ShadowParams.y, seen.z);
+    }
+    return lerp(1.0f, lit / 9.0f, ShadowParams.z);
+}
 
 // A row-vector matrix stored as its first three columns: transformed.x = dot(float4(p, 1), c0)...
 struct AffineColumns

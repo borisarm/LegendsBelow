@@ -29,8 +29,12 @@ export namespace LB::Engine {
     /// <summary>
     /// The tier of a depth (three floors each, a boss at the end), cycling through the themes
     /// </summary>
+    [[nodiscard]] inline std::size_t ThemeIndexForDepth(std::int32_t depth) noexcept {
+        return static_cast<std::size_t>(std::max(0, depth - 1) / 3) % FloorThemes.size();
+    }
+
     [[nodiscard]] inline const FloorTheme& ThemeForDepth(std::int32_t depth) noexcept {
-        return FloorThemes[static_cast<std::size_t>(std::max(0, depth - 1) / 3) % FloorThemes.size()];
+        return FloorThemes[ThemeIndexForDepth(depth)];
     }
 
     /// <summary>
@@ -55,6 +59,7 @@ export namespace LB::Engine {
         float phase{0.0f};              // seconds into its cycle at time 0
         bool struck{false};             // this cycle's strike is spent
         bool wasUp{false};
+        std::vector<std::uint32_t> struckOthers;   // the allies it struck this cycle
     };
 
     /// <summary>
@@ -64,6 +69,7 @@ export namespace LB::Engine {
     struct TrapStep {
         std::vector<WorldPoint> rose;
         bool playerStruck{false};
+        std::vector<std::uint32_t> othersStruck;   // allies (by id)
     };
 
     /// <summary>
@@ -143,12 +149,24 @@ export namespace LB::Engine {
         /// Run the traps' cycles to a time (the game clock); a trap that is up strikes a living
         /// player standing on its cell, once a cycle
         /// </summary>
-        TrapStep UpdateTraps(double timeSeconds, WorldPoint player, float playerRadius, bool alive) {
+        TrapStep UpdateTraps(double timeSeconds, WorldPoint player, float playerRadius, bool alive,
+                             std::span<const std::pair<std::uint32_t, WorldPoint>> others = {}) {
             TrapStep step;
             for (auto& trap : traps_) {
                 const bool up = Raise(trap, timeSeconds) >= 1.0f;
                 if (up && !trap.wasUp) step.rose.push_back(trap.center);
-                if (!up) trap.struck = false;
+                if (!up) {
+                    trap.struck = false;
+                    trap.struckOthers.clear();
+                }
+                const float reach = WorldMap::CellTiles * 0.5f + playerRadius * 0.5f;
+                for (const auto& [id, at] : others) {
+                    const bool onIt = std::abs(at.x - trap.center.x) < reach && std::abs(at.y - trap.center.y) < reach;
+                    if (up && onIt && std::ranges::find(trap.struckOthers, id) == trap.struckOthers.end()) {
+                        trap.struckOthers.push_back(id);
+                        step.othersStruck.push_back(id);
+                    }
+                }
                 trap.wasUp = up;
                 const float half = WorldMap::CellTiles * 0.5f + playerRadius * 0.5f;
                 const bool on = std::abs(player.x - trap.center.x) < half && std::abs(player.y - trap.center.y) < half;

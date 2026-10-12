@@ -57,6 +57,7 @@ namespace LB::Engine {
         if (session_->dungeonMode) {
             lighting.directional = DungeonDirectionalLight * dim;
             lighting.ambient = { 0.02f * dim, 0.018f * dim, 0.025f * dim, 1.0f };
+            lighting.shadows = 1.0f;   // walls and bodies hide the key light entirely
         }
         else if (dim < 1.0f) {
             lighting.directional = dim;

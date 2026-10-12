@@ -743,3 +743,39 @@ TEST(InputSystemTests, Names_ForPlayers) {
     EXPECT_EQ(GamepadButtonName(GamepadButton::Back), "View");
     EXPECT_EQ(GamepadButtonName(GamepadButton::DPadUp), "D-pad up");
 }
+
+TEST(InputSystemTests, SetBindings_ReplacesAnAction_AndClearActionsForgetsAll) {
+    InputSystem system;
+    system.Initialize();
+    InputAction key{};
+    key.name = "Jump";
+    key.keyCode = Keys::Space;
+    system.RegisterAction(key);
+    InputAction other{};
+    other.keyCode = Keys::FromChar('J');
+
+    system.SetBindings("Jump", { other });
+
+    ASSERT_EQ(system.GetBindings("Jump").size(), 1u);
+    EXPECT_EQ(system.GetBindings("Jump")[0].keyCode, Keys::FromChar('J'));
+    EXPECT_EQ(system.GetBindings("Jump")[0].name, "Jump");   // named for the action
+    system.ClearActions();
+    EXPECT_TRUE(system.GetBindings("Jump").empty());
+}
+
+TEST(InputSystemTests, FirstPressed_KeyAndButton_ThisFrameOnly) {
+    InputSystem system;
+    system.Initialize();
+    EXPECT_FALSE(system.FirstKeyPressed().has_value());
+    system.SetKeyState(Keys::FromChar('K'), KeyState::Pressed);
+    GamepadState pad{};
+    pad.connected = true;
+    pad.buttons = ButtonMask(GamepadButton::Y) | ButtonMask(GamepadButton::DPadLeft);
+    system.SetGamepadState(0, pad);
+
+    EXPECT_EQ(system.FirstKeyPressed(), Keys::FromChar('K'));
+    EXPECT_EQ(system.FirstGamepadButtonPressed(), GamepadButton::Y);
+    system.Update();
+    EXPECT_FALSE(system.FirstKeyPressed().has_value());
+    EXPECT_FALSE(system.FirstGamepadButtonPressed().has_value());
+}

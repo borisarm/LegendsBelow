@@ -159,11 +159,12 @@ namespace LB::Engine {
             auto& room = session_->rooms[static_cast<std::size_t>(here)];
             room.triggered = true;
             const auto type = layout.rooms[static_cast<std::size_t>(here)].type;
-            const auto* light = content_->FindEnemy(LightEnemy);
-            const auto* heavy = content_->FindEnemy(HeavyEnemy);
-            const auto* ranged = content_->FindEnemy(RangedEnemy);
-            const auto* caster = content_->FindEnemy(CasterEnemy);
-            const auto* brute = content_->FindEnemy(BruteEnemy);
+            const auto& roster = RosterForDepth(session_->depth);
+            const auto* light = content_->FindEnemy(roster.light);
+            const auto* heavy = content_->FindEnemy(roster.heavy);
+            const auto* ranged = content_->FindEnemy(roster.ranged);
+            const auto* caster = content_->FindEnemy(roster.caster);
+            const auto* brute = content_->FindEnemy(roster.brute);
             const auto* boss = content_->FindEnemy(BossForDepth(session_->depth));
             const auto raise = [&](const Content::EnemyDefinition* kind, std::int32_t count) {
                 if (!kind || count <= 0) return;
@@ -171,9 +172,12 @@ namespace LB::Engine {
             };
             switch (type) {
             case RoomType::Combat:
-                raise(light, std::min(2 + (session_->depth - 1) / 2, 4));
-                raise(heavy, session_->depth >= 2 ? std::min(1 + session_->depth / 4, 2) : 0);
-                raise(ranged, session_->depth >= 2 ? std::min(1 + session_->depth / 4, 2) : 0);   // shooters from the second floor
+                // A room grows by tiers (each tier's inhabitants are stronger already): two light
+                // ones in the first, three in the second, four after; a second heavy one and a
+                // second shooter from the sixth floor
+                raise(light, std::min(2 + (session_->depth - 1) / BossFloorInterval, 4));
+                raise(heavy, session_->depth >= 2 ? std::min(1 + session_->depth / 6, 2) : 0);
+                raise(ranged, session_->depth >= 2 ? std::min(1 + session_->depth / 6, 2) : 0);   // shooters from the second floor
                 raise(caster, session_->depth >= 3 ? 1 : 0);                                       // casters from the third
                 raise(brute, session_->depth >= 5 ? 1 : 0);
                 break;
@@ -214,8 +218,18 @@ namespace LB::Engine {
     // Spikes rising (heard nearby) and striking the player on their cell: 1d6 + half the depth,
     // piercing, through armour
     void GameEngine::UpdateTraps() {
-        const auto step = session_->decor.UpdateTraps(session_->gameTimeSeconds, session_->playerPosition, PlayerRadius, IsPlayerAlive());
+        std::vector<std::pair<std::uint32_t, WorldPoint>> allies;
+        for (const auto& ally : session_->allies.Allies()) {
+            if (!ally.IsDown()) allies.emplace_back(ally.id, ally.position);
+        }
+        const auto step = session_->decor.UpdateTraps(session_->gameTimeSeconds, session_->playerPosition, PlayerRadius, IsPlayerAlive(), allies);
         for (const auto at : step.rose) PlaySound(GameSound::Spikes, at);
+        for (const auto id : step.othersStruck) {
+            if (const auto* ally = session_->allies.Find(id)) {
+                const auto raw = session_->lootRoller.RollDice(LB::Dice{ 1, 6, session_->depth / 2 });
+                session_->allies.Damage(id, Services::Combat::CombatService::ResolveSpellHit(raw, LB::Combat::DamageType::Piercing, ally->Defense()).finalDamage);
+            }
+        }
         if (!step.playerStruck) return;
         const auto damage = session_->lootRoller.RollDice(LB::Dice{ 1, 6, session_->depth / 2 });
         CombatEvent event{ CombatEventKind::EnemyAttack, 0, Services::Combat::CombatService::ResolveSpellHit(damage, LB::Combat::DamageType::Piercing, GetPlayerDefense()), false };
@@ -252,6 +266,7 @@ namespace LB::Engine {
             const auto chest = session_->world.RoomCenter(room);
             if (Encounter::Distance(chest, session_->playerPosition) <= InteractRadius) {
                 session_->rooms[i].chestOpened = true;
+                session_->rooms[i].chestOpenedAt = session_->gameTimeSeconds;
                 EmitChestEffect(chest);
                 PlaySound(GameSound::ChestOpen, chest);
                 // A greater chest behind a gate or a puzzle: more finds, and rarer
@@ -286,8 +301,25 @@ namespace LB::Engine {
             const auto type = layout.rooms[i].type;
             if (type != RoomType::Treasure && type != RoomType::Puzzle) continue;
             const bool greater = session_->features.IsGuarded(static_cast<std::int32_t>(i));
-            draw(session_->rooms[i].chestOpened ? OpenChestModel : greater ? GreaterChestModel : ChestModel, session_->world.RoomCenter(static_cast<std::int32_t>(i)),
-                 { 0.35f, 0.20f, 0.08f, 1.0f });
+            const auto at = session_->world.RoomCenter(static_cast<std::int32_t>(i));
+            // A greater chest keeps its shape: its lid (a part of its own, hinged at the back)
+            // swings open, easing out
+            if (greater && session_->rooms[i].chestOpened && assets_.models.loaded) {
+                const auto& room = session_->rooms[i];
+                const float t = room.chestOpenedAt <= 0.0 ? 1.0f
+                    : std::clamp(static_cast<float>(session_->gameTimeSeconds - room.chestOpenedAt) / LidSwingSeconds, 0.0f, 1.0f);
+                const float eased = 1.0f - (1.0f - t) * (1.0f - t);
+                Systems::Rendering::ModelRenderData chest{ ModelOf(GreaterChestModel), { at.x, 0.0f, at.y }, 0.0f, ModelScale, tint };
+                if (const auto* model = renderingSystem_.GetModel(chest.model)) {
+                    const auto lid = std::ranges::find(model->parts, GreaterChestLid, &Systems::Rendering::ModelPart::name);
+                    if (lid != model->parts.end()) {
+                        chest.partPoses.push_back({ static_cast<std::uint32_t>(lid - model->parts.begin()), Systems::Rendering::Matrix4::RotationX(-LidOpenRadians * eased) });
+                    }
+                }
+                renderingSystem_.DrawModel(chest);
+                continue;
+            }
+            draw(session_->rooms[i].chestOpened ? OpenChestModel : greater ? GreaterChestModel : ChestModel, at, { 0.35f, 0.20f, 0.08f, 1.0f });
         }
         DrawFeatures(tint);
         draw(TrapdoorModel, session_->world.RoomCenter(layout.exitRoom), { 0.10f, 0.08f, 0.06f, 1.0f });
@@ -562,6 +594,11 @@ namespace LB::Engine {
         auto& features = session_->features;
         const auto& layout = session_->world.Layout();
         features.Update(1.0f / 60.0f);
+        for (const auto& gate : features.Gates()) {   // a sinking gate grinds up dust
+            if (gate.kind == GateKind::Locked && gate.open && gate.openSeconds < GateSinkSeconds) {
+                session_->effects.Stream(ParticleEffect::RiseDust, { gate.center.x, 0.03f, gate.center.y }, 40.0f, 1.0f / 60.0f);
+            }
+        }
         const auto keyRoom = features.KeyRoom();
         if (keyRoom >= 0 && !features.KeyDropped() && session_->rooms[static_cast<std::size_t>(keyRoom)].cleared) {
             features.SetKeyDropped(true);
@@ -643,10 +680,20 @@ namespace LB::Engine {
         const auto view = GetViewArea();
         for (const auto& gate : session_->features.Gates()) {
             if (!view.Contains(gate.center, WorldMap::CellTiles)) continue;
-            const float sink = gate.open ? std::min(1.0f, gate.openSeconds / GateSinkSeconds) : 0.0f;
-            if (sink >= 1.0f) continue;
             const auto model = ModelOf(gate.kind == GateKind::Locked ? GateModel : SecretWallModel);
-            if (gate.kind == GateKind::Secret && gate.open) continue;   // broken: gone in a cloud of dust
+            if (gate.kind == GateKind::Secret) {
+                // Broken: it shudders and falls in on itself, faster and faster, in a cloud of dust
+                const float t = gate.open ? gate.openSeconds / WallCrumbleSeconds : 0.0f;
+                if (t >= 1.0f) continue;
+                const float shudder = gate.open ? 0.06f * (1.0f - t) * std::sin(gate.openSeconds * 70.0f) : 0.0f;
+                renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ model,
+                    { gate.center.x + shudder, -2.2f * t * t, gate.center.y + shudder }, gate.yaw, ModelScale, tint });
+                continue;
+            }
+            // A gate sinks into the floor, slowing as it goes, grinding up dust
+            const float t = gate.open ? std::min(1.0f, gate.openSeconds / GateSinkSeconds) : 0.0f;
+            if (t >= 1.0f) continue;
+            const float sink = 1.0f - (1.0f - t) * (1.0f - t);
             renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ model, { gate.center.x, -2.0f * sink, gate.center.y }, gate.yaw, ModelScale, tint });
         }
         for (const auto& puzzle : session_->features.Puzzles()) {

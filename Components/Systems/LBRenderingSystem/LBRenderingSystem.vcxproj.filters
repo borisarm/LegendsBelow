@@ -18,6 +18,7 @@
     <ClCompile Include="DeviceResources.cpp" />
     <ClCompile Include="GpuResources.cpp" />
     <ClCompile Include="ModelPipeline.cpp" />
+    <ClCompile Include="ShadowMap.cpp" />
     <ClCompile Include="PrimitivePipeline.cpp" />
     <ClCompile Include="OverlayPipeline.cpp" />
     <ClCompile Include="ParticlePipeline.cpp" />

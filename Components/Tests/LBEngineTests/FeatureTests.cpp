@@ -16,6 +16,25 @@ namespace {
         return 0;
     }
 
+    // The touches that light every candle of the floor's first puzzle (each touch flips three in
+    // the ring: try every set)
+    void Solve(GameEngine& engine) {
+        const auto puzzle = engine.GetFeatures().Puzzles().front();
+        std::optional<std::uint32_t> solution;
+        for (std::uint32_t mask = 0; mask < (1u << puzzle.candles.size()) && !solution; ++mask) {
+            auto trial = puzzle;
+            for (std::size_t c = 0; c < trial.candles.size(); ++c) {
+                if (mask & (1u << c)) trial.Touch(c);
+            }
+            if (trial.solved) solution = mask;
+        }
+        ASSERT_TRUE(solution.has_value());
+        for (std::size_t c = 0; c < puzzle.candles.size(); ++c) {
+            if (*solution & (1u << c)) engine.TouchCandle(0, c);
+        }
+        ASSERT_TRUE(engine.GetFeatures().Puzzles().front().solved);
+    }
+
     void Open(GameEngine& engine, std::uint32_t seed, std::int32_t depth) {
         ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = seed, .dungeon = true }));
         engine.EnterFloor(depth);
@@ -86,20 +105,7 @@ TEST(FeatureTests, ACandlePuzzle_Solved_OpensAGreaterChest) {
     RunSteps(engine, 5);
     EXPECT_FALSE(engine.GetRoomStates()[static_cast<std::size_t>(puzzle.room)].chestOpened);
 
-    // The touches that light them all (each touch flips three in the ring: try every set)
-    std::optional<std::uint32_t> solution;
-    for (std::uint32_t mask = 0; mask < (1u << puzzle.candles.size()) && !solution; ++mask) {
-        auto trial = puzzle;
-        for (std::size_t c = 0; c < trial.candles.size(); ++c) {
-            if (mask & (1u << c)) trial.Touch(c);
-        }
-        if (trial.solved) solution = mask;
-    }
-    ASSERT_TRUE(solution.has_value());
-    for (std::size_t c = 0; c < puzzle.candles.size(); ++c) {
-        if (*solution & (1u << c)) engine.TouchCandle(0, c);
-    }
-    ASSERT_TRUE(engine.GetFeatures().Puzzles().front().solved);
+    Solve(engine);
 
     const auto gold = engine.GetGold();
     const auto bag = engine.GetInventory().size();
@@ -107,6 +113,36 @@ TEST(FeatureTests, ACandlePuzzle_Solved_OpensAGreaterChest) {
     EXPECT_TRUE(engine.GetRoomStates()[static_cast<std::size_t>(puzzle.room)].chestOpened);
     EXPECT_GT(engine.GetGold(), gold);                // every roll brings gold
     EXPECT_GE(engine.GetInventory().size(), bag + 1);  // and finds
+}
+
+TEST(FeatureTests, AGreaterChestsLid_SwingsOpen) {
+    const auto seed = FindFloor(2, [](const GameEngine& engine) { return !engine.GetFeatures().Puzzles().empty(); });
+    ASSERT_NE(seed, 0u);
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory(),
+        .randomSeed = seed, .dungeon = true }));
+    engine.EnterFloor(2);
+    engine.Tick(OneSixtieth);
+    const auto chest = engine.GetWorld().RoomCenter(engine.GetFeatures().Puzzles().front().room);
+    engine.EnterFloorPosition(chest);
+    Solve(engine);
+    // The lid's angle (the cosine in its pose) as the opened chest is drawn (the floor may hold
+    // another greater chest, closed, behind a gate)
+    const auto lid = [&]() -> std::optional<float> {
+        for (const auto& draw : DrawsOf(engine, std::filesystem::path(GameEngine::GreaterChestModel).stem().string())) {
+            if (draw.partPoses.size() == 1) return draw.partPoses[0].transform.m[5];
+        }
+        return std::nullopt;
+    };
+
+    RunSteps(engine, 6);
+    const auto room = static_cast<std::size_t>(engine.GetFeatures().Puzzles().front().room);
+    ASSERT_TRUE(engine.GetRoomStates()[room].chestOpened);
+    ASSERT_TRUE(lid().has_value());   // still the greater chest, its lid posed
+    const float early = *lid();
+    RunSteps(engine, 40);
+    EXPECT_LT(*lid(), early);         // swung further back (past upright: the cosine goes negative)
+    EXPECT_LT(*lid(), 0.0f);
 }
 
 TEST(FeatureTests, ALockedGate_OpensForAKey) {

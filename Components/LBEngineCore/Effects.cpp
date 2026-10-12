@@ -111,6 +111,13 @@ namespace LB::Engine {
             session_->effects.Stream(ParticleEffect::TrapdoorMist, { exit.x, 0.05f, exit.y }, 10.0f, elapsedSeconds);
         }
 
+        // The tier's air (it drifts on through the tactical pause, as the fire does)
+        if (session_->dungeonMode) {
+            const auto& air = Atmospheres[ThemeIndexForDepth(session_->depth)];
+            session_->effects.Scatter(air.effect, { session_->playerPosition.x, 0.0f, session_->playerPosition.y }, AtmosphereHalfExtent,
+                                      air.lowest, air.highest, air.perSecond, elapsedSeconds);
+        }
+
         if (!running) {
             session_->effectsPlayerPosition = session_->playerPosition;
             return;

@@ -1,5 +1,6 @@
 // FeelTests.cpp - LB.Engine tests: shadows under characters, hit-stop and camera shake on heavy
-// blows, the death screen and the run's summary, and each tier's ambience and footsteps
+// blows, knockback, the death screen and the run's summary, and each tier's ambience, footsteps,
+// and air (dust, mist, embers)
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -75,6 +76,47 @@ TEST(FeelTests, HeavyBlows_ShakeTheCamera_AndFreezeTheActionWhenEnabled) {
     EXPECT_GT(engine.GetGameTimeSeconds(), time);   // and on again
 }
 
+TEST(FeelTests, ABossBlow_ThrowsTheHeroBack) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, ArenaOptions()));
+    const auto start = engine.GetPlayerPosition();
+    ASSERT_TRUE(AwaitAHeavyBlow(engine));   // the warlord at +x
+
+    RunSteps(engine, 20);
+
+    EXPECT_LT(engine.GetPlayerPosition().x, start.x - 0.5f);   // thrown away from it
+}
+
+TEST(FeelTests, Knock_ThrowsAnEnemyBack_ButNotABoss) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, ArenaOptions()));
+    const auto minion = *engine.SpawnEnemy(GameEngine::LightEnemy, { 3.0f, 0.0f });
+    const auto boss = *engine.SpawnEnemy("enemy_golem_warlord", { -3.0f, 0.0f });
+    RunSteps(engine, 60);   // up from the ground
+    const auto before = engine.GetEncounter().FindEnemy(minion)->position.x;
+
+    EXPECT_TRUE(engine.KnockEnemy(minion, engine.GetPlayerPosition(), 1.0f));
+    EXPECT_FALSE(engine.KnockEnemy(boss, engine.GetPlayerPosition(), 1.0f));
+    RunSteps(engine, 11);   // the throw's time (it keeps walking at the hero meanwhile)
+
+    EXPECT_GT(engine.GetEncounter().FindEnemy(minion)->position.x, before + 0.4f);
+}
+
+TEST(FeelTests, ShieldBash_ThrowsItsTargetBack) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, ArenaOptions()));
+    engine.GrantExperience(400);   // level 3: the bash
+    engine.Tick(OneSixtieth);
+    const auto id = *engine.SpawnEnemy(GameEngine::HeavyEnemy, { 1.2f, 0.0f });
+    RunSteps(engine, 60);   // up from the ground
+    const auto before = engine.GetEncounter().FindEnemy(id)->position.x;
+
+    TapKey(engine, Keys::FromChar('2'));
+    RunSteps(engine, 40);
+
+    EXPECT_GT(engine.GetEncounter().FindEnemy(id)->position.x, before + 1.0f);
+}
+
 TEST(FeelTests, WithoutHitStop_TheShakeAlone) {
     GameEngine engine;
     ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, ArenaOptions()));
@@ -133,4 +175,21 @@ TEST(AmbienceTests, EachTier_ItsOwnLoop_AndFootsteps) {
     played = engine.GetAudio().TakePlayedClips();
     EXPECT_TRUE(Played(played, GameSound::FootstepDirt));
     EXPECT_FALSE(Played(played, GameSound::Footstep));
+}
+
+TEST(AmbienceTests, EachTier_ItsOwnAir) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false,
+        .randomSeed = CombatSeed, .dungeon = true }));
+    const auto drifting = [&](ParticleEffect effect) { return engine.GetParticles().Count(effect); };
+    RunSteps(engine, 60);
+    EXPECT_GT(drifting(ParticleEffect::CryptDust), 5u);
+    EXPECT_EQ(drifting(ParticleEffect::CaveMist), 0u);
+
+    engine.EnterFloor(5);   // the caves
+    RunSteps(engine, 60);
+    EXPECT_GT(drifting(ParticleEffect::CaveMist), 1u);
+    engine.EnterFloor(8);   // the ruins
+    RunSteps(engine, 60);
+    EXPECT_GT(drifting(ParticleEffect::RuinEmbers), 2u);
 }

@@ -127,7 +127,9 @@ export namespace LB::Engine {
         static constexpr std::string_view MenuRightAction = "MenuRight";
         // Talk to the merchant: F, gamepad d-pad up
         static constexpr std::string_view InteractAction = "Interact";
-        static constexpr std::string_view DropAction = "Drop";        // the character screen: drop the bag item under the cursor
+        static constexpr std::string_view DropAction = "Drop";               // the character screen: drop the bag item under the cursor
+        static constexpr std::string_view AllyStanceAction = "AllyStance";   // the party: follow, or hold here (G, d-pad down)
+        static constexpr std::string_view AllyFocusAction = "AllyFocus";     // the party: after the nearest enemy (T, d-pad right)
         // The tactical pause (design-combat-system.md 2.1): Tab, gamepad left stick click
         static constexpr std::string_view TacticalPauseAction = "TacticalPause";
         // Orders: right click (the secondary action, design-ui-ux-and-audio.md 4.1); the target
@@ -138,6 +140,17 @@ export namespace LB::Engine {
         // The spell bar's slots (keys 1-4; gamepad LB, RB, Y, B)
         static constexpr std::array<std::string_view, 4> SpellActions = { "Spell1", "Spell2", "Spell3", "Spell4" };
         static constexpr std::size_t SpellSlots = SpellActions.size();
+
+        /// <summary>
+        /// The actions a player may bind to other keys and buttons on the Controls page (moving,
+        /// the menus' keys, and Esc / Start stay as they are)
+        /// </summary>
+        static constexpr std::array<std::string_view, 18> RemappableActions = {
+            InteractAction, MapAction, RotateCameraLeftAction, RotateCameraRightAction, AttackAction,
+            SpellActions[0], SpellActions[1], SpellActions[2], SpellActions[3], UsePotionAction, AllyStanceAction, AllyFocusAction,
+            TacticalPauseAction, CharacterScreenAction, DropAction, QuickSaveAction, QuickLoadAction, OrderAction };
+        // The Controls page's last row: every binding back to the defaults
+        static constexpr std::string_view ResetControlsRow = "ResetControls";
         // A spell's release pose (Ranged_Magic_Shoot) plays this long after it leaves
         static constexpr float SpellReleaseSeconds = 0.45f;
 
@@ -236,7 +249,29 @@ export namespace LB::Engine {
         static constexpr std::string_view BruteEnemy = "enemy_skeleton_golem";
         static constexpr std::string_view BossEnemy = "enemy_necromancer";
         // The bosses of the tiers, in turn (design-dungeon-and-world.md 7.1)
-        static constexpr std::array<std::string_view, 2> BossEnemies = { "enemy_necromancer", "enemy_golem_warlord" };
+        static constexpr std::array<std::string_view, 3> BossEnemies = { "enemy_necromancer", "enemy_golem_warlord", "enemy_frost_golem" };
+
+        /// <summary>
+        /// Who fills a tier's rooms (design-dungeon-and-world.md 5: each theme its inhabitants): the
+        /// crypts' skeletons; the caves' werewolves, orcs, and witches; the ruins' vampires,
+        /// tieflings, and black knights (skeletons still shoot in all of them)
+        /// </summary>
+        struct Roster {
+            std::string_view light;
+            std::string_view heavy;
+            std::string_view ranged;
+            std::string_view caster;
+            std::string_view brute;
+        };
+        static constexpr std::array<Roster, 3> Rosters{ {
+            { "enemy_skeleton_minion", "enemy_skeleton_warrior", "enemy_skeleton_rogue", "enemy_skeleton_mage", "enemy_skeleton_golem" },
+            { "enemy_werewolf", "enemy_orc_raider", "enemy_skeleton_rogue", "enemy_witch", "enemy_orc_brute" },
+            { "enemy_vampire", "enemy_skeleton_warrior", "enemy_skeleton_rogue", "enemy_tiefling", "enemy_black_knight" },
+        } };
+
+        [[nodiscard]] static constexpr const Roster& RosterForDepth(std::int32_t depth) noexcept {
+            return Rosters[static_cast<std::size_t>(std::max(0, depth - 1) / BossFloorInterval) % Rosters.size()];
+        }
 
         /// <summary>
         /// The boss at the end of a depth's tier
@@ -293,6 +328,10 @@ export namespace LB::Engine {
         static constexpr std::string_view LitCandleModel = "candle_lit.gltf";
         static constexpr float GateReach = 1.6f;          // the hero this close to a gate tries it
         static constexpr float GateSinkSeconds = 0.8f;     // an opened gate sinks into the floor
+        static constexpr float WallCrumbleSeconds = 0.6f;  // a broken secret wall falls in on itself
+        static constexpr float LidSwingSeconds = 0.5f;     // a greater chest's lid swings open
+        static constexpr float LidOpenRadians = 1.9f;      // back past upright
+        static constexpr std::string_view GreaterChestLid = "chest_large_gold_lid";   // the lid's part (node) in GreaterChestModel
         static constexpr float CandleReach = 1.2f;
         static constexpr float InteractRadius = 1.0f;
 
@@ -301,7 +340,29 @@ export namespace LB::Engine {
         static constexpr std::string_view TorchModel = "torchWall.glb";
         static constexpr float TorchLightRadius = TorchSet::LightRadius;
         static constexpr float TorchFireRange = TorchSet::FireRange;
-        static constexpr float DungeonDirectionalLight = 0.3f;
+        static constexpr float DungeonDirectionalLight = 0.45f;   // the key light, which casts the shadows
+
+        // Knockback (feel): the hero's critical hits throw an enemy back, a boss's blow or a
+        // heavy one (HeavyHitShare) throws the hero back; a spell's own knockbackTiles too
+        static constexpr float CritKnockbackTiles = 0.8f;
+
+        /// <summary>
+        /// Each tier's air around the hero (FloorThemes order): what drifts there, how much each
+        /// second, and between which heights
+        /// </summary>
+        struct Atmosphere {
+            ParticleEffect effect;
+            float perSecond;
+            float lowest;
+            float highest;
+        };
+        static constexpr std::array<Atmosphere, 3> Atmospheres{ {
+            { ParticleEffect::CryptDust, 18.0f, 0.3f, 2.6f },
+            { ParticleEffect::CaveMist, 6.0f, 0.05f, 0.3f },
+            { ParticleEffect::RuinEmbers, 8.0f, 0.1f, 1.2f },
+        } };
+        static constexpr float AtmosphereHalfExtent = 7.0f;   // tiles around the hero
+        static constexpr float HeavyKnockbackTiles = 1.0f;
 
         // Damage numbers rise and fade over this time (CombatTextLog)
         static constexpr float FloatingTextSeconds = CombatTextLog::Seconds;
@@ -505,6 +566,7 @@ export namespace LB::Engine {
             bool triggered{false};
             bool cleared{false};
             bool chestOpened{false};
+            double chestOpenedAt{0.0};   // game time it opened (its lid's swing); 0: long open (a loaded save)
             std::vector<std::uint32_t> enemies;
         };
 
@@ -562,6 +624,11 @@ export namespace LB::Engine {
         /// <summary>
         /// The enemies and waves of the arena
         [[nodiscard]] const Encounter& GetEncounter() const noexcept { return session_->encounter; }
+
+        /// <summary>
+        /// Throw an enemy back from a point, as a heavy blow does (tools and tests); false for a boss
+        /// </summary>
+        bool KnockEnemy(std::uint32_t id, WorldPoint from, float tiles) { return session_->encounter.Knock(id, from, tiles); }
 
         /// <summary>
         /// Attacks resolved during the last simulation step (the player's and the enemies')
@@ -788,6 +855,8 @@ export namespace LB::Engine {
         /// <summary>
         /// A rolled item's level (the depth it dropped at); 0 for anything else
         /// </summary>
+        [[nodiscard]] ItemRef BaseItem(ItemRef item) const noexcept { return session_->rolls.BaseOf(item); }   // a rolled item's weapon or armour
+
         [[nodiscard]] std::int32_t ItemLevel(ItemRef item) const noexcept {
             const auto* rolled = session_->rolls.Find(item);
             return rolled ? rolled->level : 0;
@@ -875,6 +944,13 @@ export namespace LB::Engine {
         bool ChoosePath(std::string_view key);
 
         /// <summary>
+        /// Spend an unspent attribute point, as the character screen does; false with none (or at the cap)
+        /// </summary>
+        bool SpendAttributePoint(LB::AttributeType attribute) {
+            return session_->playerId && session_->characterService.SpendAttributePoint(*session_->playerId, attribute);
+        }
+
+        /// <summary>
         /// Award the player experience as a kill would (levels and their fanfare; tools and tests)
         /// </summary>
         void GrantExperience(std::int32_t experience);
@@ -940,6 +1016,39 @@ export namespace LB::Engine {
         std::optional<std::uint32_t> HireAlly(std::string_view key);
 
         [[nodiscard]] const AllyParty& GetAllies() const noexcept { return session_->allies; }
+
+        /// <summary>
+        /// Bind an action (one of RemappableActions) to a key or button in place of its first one
+        /// of that device. An action that had it takes the action's old one instead (a swap).
+        /// Moving's keys (WASD, arrows), Esc, and Start are refused. Kept in the profile.
+        /// </summary>
+        bool Rebind(std::string_view action, Systems::Input::InputAction binding);
+
+        /// <summary>
+        /// Every binding back to the defaults (and the profile's forgotten)
+        /// </summary>
+        void ResetBindings();
+
+        /// <summary>
+        /// The Controls page's chosen row, and whether it waits for a key or button
+        /// </summary>
+        [[nodiscard]] std::size_t ControlsCursor() const noexcept { return controlsCursor_; }
+        [[nodiscard]] bool IsListeningForBinding() const noexcept { return listening_; }
+
+        /// <summary>
+        /// Give an ally a weapon or armour piece from the bag (what they had of that kind goes
+        /// back to it), or take an ally's gear back; false when it cannot be
+        /// </summary>
+        bool GiveToAlly(std::uint32_t ally, ItemRef item);
+        bool TakeFromAlly(std::uint32_t ally);
+
+        /// <summary>
+        /// The items an ally carries (weapon, armour; invalid: none)
+        /// </summary>
+        [[nodiscard]] std::pair<ItemRef, ItemRef> AllyItems(std::uint32_t ally) const {
+            const auto it = session_->allyItems.find(ally);
+            return it != session_->allyItems.end() ? it->second : std::pair<ItemRef, ItemRef>{};
+        }
 
         /// <summary>
         /// Wound an ally (tools and tests); returns whether it took them down
@@ -1069,6 +1178,9 @@ export namespace LB::Engine {
         static bool ParseDouble(const Systems::Persistence::SaveData& data, const std::string& key, double& value);
         void RegisterGamepadBinding(std::string_view action, Systems::Input::GamepadButton button);
         void RegisterKeyBinding(std::string_view action, std::int32_t keyCode);
+        void ApplyBindingProfile();
+        void SaveBindings();
+        bool UpdateControlsPage();
         void RegisterDefaultBindings();
         void OnDeviceLost() {}       // nothing device-dependent is held by the game yet
         void OnDeviceRestored() {}
@@ -1104,9 +1216,12 @@ export namespace LB::Engine {
         void UpdateAmbience();
         void FeelCombat();
         void Jolt(float hitStopSeconds, float shakeSeconds, float shakeStrength);
+        void KnockPlayer(WorldPoint from, float tiles);
         void DrawShadows();
         [[nodiscard]] std::vector<std::string> FallenSummary() const;
         void UpdateAllies(float elapsedSeconds);
+        void UpdateAllyOrders();
+        void SyncAllyGear(std::uint32_t ally);
         void DrawAllies(const Shade& shade);
         void HealParty(const Content::SpellDefinition& spell, std::int32_t amount);
         bool PutOn(ItemRef item, LB::Combat::EquipmentSlot slot);
@@ -1362,9 +1477,13 @@ export namespace LB::Engine {
             FloorFeatures features;                  // gates, secret walls, candle puzzles
             EventBus events;                         // what happens in the run (GameEvents), dispatched after each step
             AllyParty allies;                        // the hero's companions
+            std::map<std::uint32_t, std::pair<ItemRef, ItemRef>> allyItems;   // what each carries: weapon, armour
+            std::optional<std::uint32_t> givingTo;   // the character screen is choosing an item for this ally
             std::string ambienceClip;                // the loop playing under the floor (empty: none)
             Systems::Audio::AudioSourceId ambienceSource{};
             float hitStopSeconds{0.0f};              // the action is frozen (a heavy blow)
+            WorldPoint knockVelocity{};              // the hero thrown back by a heavy blow...
+            float knockSeconds{0.0f};                // ...for this long
             float shakeSeconds{0.0f};                // the camera shakes, dying away over shakeDuration
             float shakeDuration{0.0f};
             float shakeStrength{0.0f};               // tiles at its start
@@ -1409,8 +1528,10 @@ export namespace LB::Engine {
         GameMenu menu_;                             // spans runs: New Game and Quit to Title start new ones
         bool quitRequested_{false};
         std::vector<std::string> credits_;
-        std::unique_ptr<Session> session_ = std::make_unique<Session>();
-        Legacy legacy_;   // outlives runs: loaded from the profile at startup   // on the heap: it is large (~20 KB)
+        std::unique_ptr<Session> session_ = std::make_unique<Session>();   // on the heap: it is large (~20 KB)
+        Legacy legacy_;                             // outlives runs: loaded from the profile at startup
+        std::size_t controlsCursor_{0};          // the Controls page's chosen row
+        bool listening_{false};                  // waiting for the chosen row's new key or button
         StepTimer timer_;
         bool active_{true};
         bool initialized_{false};

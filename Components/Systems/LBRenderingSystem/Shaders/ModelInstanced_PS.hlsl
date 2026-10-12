@@ -9,7 +9,7 @@ float4 main(PixelInput input) : SV_Target
     [unroll]
     for (int i = 0; i < 3; ++i)
     {
-        light += saturate(dot(normal, -LightDirection[i].xyz)) * LightColor[i].rgb;
+        light += saturate(dot(normal, -LightDirection[i].xyz)) * LightColor[i].rgb * (i == 0 ? KeyLightVisible(input.world, normal) : 1.0f);
     }
 
     // Point lights: wrapped diffuse (surfaces turned a little away still catch some light) with a

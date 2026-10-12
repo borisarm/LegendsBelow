@@ -92,6 +92,21 @@ namespace LB::Engine::EffectDetail {
                 return { .radius = 0.25f, .height = 0.3f, .outwardMin = -0.6f, .outwardMax = -0.3f, .upwardMin = 0.1f, .upwardMax = 0.4f,
                          .buoyancy = 0.0f, .drag = 1.0f, .lifeMin = 0.25f, .lifeMax = 0.4f, .startSize = 0.07f, .endSize = 0.02f,
                          .start = { 1.0f, 1.0f, 1.0f }, .middle = { 0.8f, 0.8f, 0.8f }, .end = { 0.4f, 0.4f, 0.4f }, .brightness = 1.8f };
+            case ParticleEffect::CryptDust:
+                return { .outwardMin = 0.02f, .outwardMax = 0.12f, .upwardMin = -0.04f, .upwardMax = 0.04f, .buoyancy = -0.01f, .drag = 0.05f,
+                         .lifeMin = 4.0f, .lifeMax = 7.0f, .startSize = 0.035f, .endSize = 0.03f, .sizeJitter = 0.4f,
+                         .start = { 0.80f, 0.76f, 0.68f }, .middle = { 0.72f, 0.68f, 0.60f }, .end = { 0.60f, 0.57f, 0.50f },
+                         .brightness = 0.4f, .glowing = false };
+            case ParticleEffect::CaveMist:
+                return { .outwardMin = 0.04f, .outwardMax = 0.14f, .upwardMin = 0.0f, .upwardMax = 0.02f, .drag = 0.05f,
+                         .lifeMin = 5.0f, .lifeMax = 8.0f, .startSize = 0.9f, .endSize = 1.7f, .sizeJitter = 0.3f,
+                         .start = { 0.52f, 0.60f, 0.68f }, .middle = { 0.48f, 0.56f, 0.64f }, .end = { 0.42f, 0.50f, 0.58f },
+                         .brightness = 0.09f, .glowing = false };
+            case ParticleEffect::RuinEmbers:
+                return { .outwardMin = 0.05f, .outwardMax = 0.2f, .upwardMin = 0.15f, .upwardMax = 0.45f, .buoyancy = 0.04f, .drag = 0.2f,
+                         .lifeMin = 3.0f, .lifeMax = 5.0f, .startSize = 0.045f, .endSize = 0.0f, .sizeJitter = 0.3f,
+                         .start = { 1.0f, 0.62f, 0.22f }, .middle = { 0.95f, 0.35f, 0.08f }, .end = { 0.5f, 0.1f, 0.02f },
+                         .brightness = 1.1f };
             case ParticleEffect::TrapdoorMist:
                 return { .radius = 0.6f, .outwardMin = 0.0f, .outwardMax = 0.1f, .upwardMin = 0.2f, .upwardMax = 0.5f,
                          .buoyancy = 0.1f, .drag = 0.5f, .lifeMin = 1.2f, .lifeMax = 2.0f, .startSize = 0.2f, .endSize = 0.45f,
@@ -176,6 +191,18 @@ export namespace LB::Engine {
                     const EffectPalette* palette = nullptr) {
             const auto count = static_cast<std::int32_t>(std::floor(perSecond * elapsedSeconds + Random(0.0f, 1.0f)));
             if (count > 0) Emit(effect, at, count, 1.0f, palette);
+        }
+
+        /// <summary>
+        /// Spread over a square (`halfExtent` tiles around `center`, between two heights): a
+        /// steady `perSecond` on average, each particle somewhere new (a tier's air)
+        /// </summary>
+        void Scatter(ParticleEffect effect, Systems::Rendering::Vector3 center, float halfExtent, float lowest, float highest,
+                     float perSecond, float elapsedSeconds) {
+            const auto count = static_cast<std::int32_t>(std::floor(perSecond * elapsedSeconds + Random(0.0f, 1.0f)));
+            for (std::int32_t i = 0; i < count; ++i) {
+                Emit(effect, { center.x + Random(-halfExtent, halfExtent), Random(lowest, highest), center.z + Random(-halfExtent, halfExtent) }, 1);
+            }
         }
 
         void Update(float elapsedSeconds) { particles_.Update(elapsedSeconds); }

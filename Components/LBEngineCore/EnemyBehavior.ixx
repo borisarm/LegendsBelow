@@ -75,7 +75,9 @@ export namespace LB::Engine {
             const auto& type = *enemy.definition;
             switch (state) {
             case EnemyState::Spawning:
-                enemy.animator.Play(ClipsOf(enemy).spawn, false, ClipsOf(enemy).spawnSeconds / SpawnSeconds, true, 0.0f);
+                // The undead rise from the ground; the living stand ready
+                if (type.rises) enemy.animator.Play(ClipsOf(enemy).spawn, false, ClipsOf(enemy).spawnSeconds / SpawnSeconds, true, 0.0f);
+                else enemy.animator.Play(ClipsOf(enemy).idle, true, 1.0f, true, 0.0f);
                 break;
             case EnemyState::Idle:
                 enemy.animator.Play(ClipsOf(enemy).idle, true);
@@ -106,6 +108,12 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] EnemyAction Update(Enemy& enemy, float dt, const PlayerTarget& player, const Formation& formation = {}) {
             enemy.hitFlashSeconds = std::max(0.0f, enemy.hitFlashSeconds - dt);
+            // Thrown back by a heavy blow: carried along (against the walls) whatever it is doing
+            if (enemy.knockSeconds > 0.0f && !enemy.IsDead()) {
+                const float t = std::min(dt, enemy.knockSeconds);
+                enemy.position = MoveBody(enemy.position, { enemy.knockVelocity.x * t, enemy.knockVelocity.y * t });
+                enemy.knockSeconds -= dt;
+            }
             // Frozen (or charmed): no acting, the pose held, until it wears off
             if (enemy.statuses.PreventsActions() && !enemy.IsDead() && enemy.state != EnemyState::Spawning) return EnemyAction::None;
             enemy.stateSeconds += dt;
@@ -154,6 +162,7 @@ export namespace LB::Engine {
 
             enemy.recoverySeconds = std::max(0.0f, enemy.recoverySeconds - dt);
             enemy.slamCooldown = std::max(0.0f, enemy.slamCooldown - dt);
+            enemy.lungeCooldown = std::max(0.0f, enemy.lungeCooldown - dt);
             if (!player.alive) {
                 enemy.slamSeconds = 0.0f;
                 if (enemy.state != EnemyState::Idle) Enter(enemy, EnemyState::Idle);
@@ -220,6 +229,28 @@ export namespace LB::Engine {
             if (speed <= 0.0f) {
                 TurnToward(enemy, dx, dy, dt);
                 enemy.animator.Play(ClipsOf(enemy).idle, true);
+                return EnemyAction::None;
+            }
+
+            // A lunge: a rush at a player not yet in reach, ending in a blow at once
+            if (enemy.lungeSeconds > 0.0f) {
+                enemy.lungeSeconds -= dt;
+                const float step = type.lungeSpeed * dt;
+                enemy.position = MoveBody(enemy.position, { enemy.lungeDirection.x * step, enemy.lungeDirection.y * step });
+                TurnToward(enemy, dx, dy, dt);
+                enemy.animator.Play(ClipsOf(enemy).walk, true, type.lungeSpeed / WalkAnimationSpeed);
+                if (enemy.lungeSeconds <= 0.0f || distance <= type.attackRange) {
+                    enemy.lungeSeconds = 0.0f;
+                    enemy.recoverySeconds = 0.0f;
+                    if (distance <= type.attackRange + AttackReachSlack) Enter(enemy, EnemyState::Attacking);
+                }
+                return EnemyAction::None;
+            }
+            if (type.lungeRange > 0.0f && enemy.lungeCooldown <= 0.0f && speed > 0.0f && inSight
+                && distance > type.attackRange + 0.5f && distance <= type.lungeRange) {
+                enemy.lungeSeconds = std::min(0.6f, (distance - type.attackRange * 0.8f) / type.lungeSpeed);
+                enemy.lungeDirection = { dx / distance, dy / distance };
+                enemy.lungeCooldown = type.lungeCooldownSeconds;
                 return EnemyAction::None;
             }
 

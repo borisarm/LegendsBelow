@@ -11,7 +11,7 @@ export namespace LB::Services::Progression {
     /// </summary>
     export struct ExperienceCurve {
         float baseExperience{100.0f};
-        float exponent{1.5f};
+        float exponent{2.0f};   // the character service's curve (design-armour-system.md 6.1's level tiers)
         std::int32_t maxLevel{100};
 
         /// <summary>

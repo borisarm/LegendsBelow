@@ -1,4 +1,5 @@
-// MenuTests.cpp - LB.Engine tests: the menu model and the title, pause, options, and credits pages
+// MenuTests.cpp - LB.Engine tests: the menu model and the title, pause, options, and credits pages,
+// and the Controls page (remapping)
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -357,10 +358,12 @@ TEST(GameEngineMenuTests, Controls_FollowTheBindings) {
     ASSERT_TRUE(attack.has_value());
     EXPECT_EQ(attack->keyboard, "Space / Left click");
     EXPECT_EQ(attack->controller, "A");
-    const auto spells = ControlRow(engine, "Spells, abilities");
-    ASSERT_TRUE(spells.has_value());
-    EXPECT_EQ(spells->keyboard, "1 2 3 4");
-    EXPECT_EQ(spells->controller, "LB RB Y B");
+    const auto spell = ControlRow(engine, "Spell, ability 3");
+    ASSERT_TRUE(spell.has_value());
+    EXPECT_EQ(spell->keyboard, "3");
+    EXPECT_EQ(spell->controller, "Y");
+    EXPECT_EQ(spell->binding, GameEngine::SpellActions[2]);   // it can be remapped
+    EXPECT_TRUE(ControlRow(engine, "Choose")->binding.empty());   // the menus' keys cannot
     const auto save = ControlRow(engine, "Quick save");
     ASSERT_TRUE(save.has_value());
     EXPECT_EQ(save->controller, "-");   // keyboard only
@@ -376,8 +379,91 @@ TEST(GameEngineMenuTests, Controls_ScrollToTheLastRows) {
     ASSERT_GT(engine.GetControls().size(), MenuView::ControlRowsShown);
     EXPECT_FALSE(Drawn(engine, "Quick load"));
 
-    for (int i = 0; i < 10; ++i) Press(engine, Keys::Down);
+    for (int i = 0; i < 40; ++i) Press(engine, Keys::Down);   // the cursor down to the last row
 
     EXPECT_TRUE(Drawn(engine, "Quick load"));
+    EXPECT_EQ(engine.ControlsCursor(), engine.GetControls().size() - 1);   // Reset to the defaults
     EXPECT_EQ(engine.GetMenu().ScrollPosition(), engine.GetControls().size() - MenuView::ControlRowsShown);
+}
+
+namespace {
+    // The Controls page open from the title, its cursor on the row doing `what`
+    void ChooseControl(GameEngine& engine, std::string_view what) {
+        Choose(engine, "Controls");
+        for (int i = 0; i < 40 && engine.GetControls()[engine.ControlsCursor()].action != what; ++i) Press(engine, Keys::Down);
+        ASSERT_EQ(engine.GetControls()[engine.ControlsCursor()].action, what);
+    }
+}
+
+TEST(GameEngineMenuTests, Controls_RemapAKey_AndKeepIt) {
+    TempSaveDir dir;
+    const EngineOptions options{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(), .titleScreen = true, .randomSeed = 7u, .dungeon = true };
+    {
+        GameEngine engine;
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, options));
+        engine.Tick(OneSixtieth);
+        ChooseControl(engine, "Drink a potion");
+        Press(engine, Keys::Enter);
+        ASSERT_TRUE(engine.IsListeningForBinding());
+        Press(engine, Keys::FromChar('H'));
+
+        EXPECT_FALSE(engine.IsListeningForBinding());
+        EXPECT_EQ(ControlRow(engine, "Drink a potion")->keyboard, "H");
+        EXPECT_EQ(ControlRow(engine, "Drink a potion")->controller, "X");   // the controller's as it was
+    }
+    GameEngine engine;   // a later start: kept
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, options));
+    EXPECT_EQ(ControlRow(engine, "Drink a potion")->keyboard, "H");
+}
+
+TEST(GameEngineMenuTests, Controls_AKeyInUse_IsSwapped) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+    LB::Systems::Input::InputAction m{};
+    m.deviceType = LB::Systems::Input::InputDevice::Keyboard;
+    m.keyCode = Keys::FromChar('M');
+
+    ASSERT_TRUE(engine.Rebind(GameEngine::InteractAction, m));
+
+    EXPECT_EQ(ControlRow(engine, "Talk, trade")->keyboard, "M");
+    EXPECT_EQ(ControlRow(engine, "Map")->keyboard, "F");   // the map takes the old key
+}
+
+TEST(GameEngineMenuTests, Controls_AButton_AndTheRefused) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+    ChooseControl(engine, "Map");
+    Press(engine, Keys::Enter);
+    TapGamepadButton(engine, GamepadButton::LeftThumb);
+    engine.Tick(OneSixtieth);
+    EXPECT_EQ(ControlRow(engine, "Map")->controller, "Left stick click");
+    EXPECT_EQ(ControlRow(engine, "Pause, resume")->controller, "Right stick click");   // swapped
+    EXPECT_EQ(ControlRow(engine, "Map")->keyboard, "M");
+
+    // Moving's keys are refused (and the binding stays)
+    Press(engine, Keys::Enter);
+    Press(engine, Keys::FromChar('W'));
+    EXPECT_EQ(ControlRow(engine, "Map")->keyboard, "M");
+    EXPECT_FALSE(engine.GetMenu().Message().empty());
+
+    // Esc keeps it, and the page stays open
+    Press(engine, Keys::Enter);
+    Press(engine, Keys::Escape);
+    EXPECT_FALSE(engine.IsListeningForBinding());
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Controls);
+    EXPECT_EQ(ControlRow(engine, "Map")->keyboard, "M");
+}
+
+TEST(GameEngineMenuTests, Controls_ResetToTheDefaults) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+    LB::Systems::Input::InputAction h{};
+    h.deviceType = LB::Systems::Input::InputDevice::Keyboard;
+    h.keyCode = Keys::FromChar('H');
+    ASSERT_TRUE(engine.Rebind(GameEngine::UsePotionAction, h));
+    ChooseControl(engine, "Reset to the defaults");
+
+    Press(engine, Keys::Enter);
+
+    EXPECT_EQ(ControlRow(engine, "Drink a potion")->keyboard, "R");
 }

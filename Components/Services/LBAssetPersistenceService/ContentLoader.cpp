@@ -329,6 +329,8 @@ namespace LB::Content {
             reader.ReadString("notes", spell.notes, false);
             reader.ReadFloat("projectileSpeed", spell.projectileSpeed, false);
             reader.ReadFloat("dashTiles", spell.dashTiles, false);
+            reader.ReadFloat("knockbackTiles", spell.knockbackTiles, false);
+            if (spell.knockbackTiles < 0.0f) reader.Error("'knockbackTiles' must not be negative");
             reader.ReadFloat("evadeSeconds", spell.evadeSeconds, false);
             reader.ReadBool("teleportBehindTarget", spell.teleportBehindTarget);
             reader.ReadInt("cleansesStatuses", spell.cleansesStatuses, false);
@@ -607,6 +609,13 @@ namespace LB::Content {
             reader.ReadInt("spellPower", enemy.spellPower, false);
             reader.ReadString("rig", enemy.rig, false);
             reader.ReadBool("staggerImmune", enemy.staggerImmune);
+            reader.ReadFloat("lungeRange", enemy.lungeRange, false);
+            reader.ReadFloat("lungeSpeed", enemy.lungeSpeed, false);
+            reader.ReadFloat("lungeCooldownSeconds", enemy.lungeCooldownSeconds, false);
+            reader.ReadFloat("lifeSteal", enemy.lifeSteal, false);
+            reader.ReadBool("rises", enemy.rises);
+            if (enemy.lungeRange < 0.0f || enemy.lungeSpeed <= 0.0f) reader.Error("'lungeRange' must not be negative and 'lungeSpeed' must be positive");
+            if (enemy.lifeSteal < 0.0f || enemy.lifeSteal > 1.0f) reader.Error("'lifeSteal' must be in [0, 1]");
             reader.ReadBool("boss", enemy.boss);
             reader.ReadString("summon", enemy.summon, false);
             reader.ReadInt("summonCount", enemy.summonCount, false);
@@ -679,6 +688,9 @@ namespace LB::Content {
             reader.ReadString("projectileModel", ally.projectileModel, false);
             reader.ReadFloat("movementSpeed", ally.movementSpeed, true);
             reader.ReadInt("price", ally.price, true);
+            reader.ReadInt("healAmount", ally.healAmount, false);
+            reader.ReadFloat("healCooldownSeconds", ally.healCooldownSeconds, false);
+            reader.ReadFloat("healRange", ally.healRange, false);
             reader.ReadString("model", ally.model, true);
             reader.ReadString("mainHandModel", ally.mainHandModel, false);
             reader.ReadFloat("modelScale", ally.modelScale, false);
