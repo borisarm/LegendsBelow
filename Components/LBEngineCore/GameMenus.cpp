@@ -73,6 +73,7 @@ namespace LB::Engine {
                 { "New Game", MenuCommand::NewGame },
                 { "Continue", MenuCommand::Continue, saved },
                 { "Options", MenuCommand::Options },
+                { "Controls", MenuCommand::Controls },
                 { "Credits", MenuCommand::Credits },
                 { "Quit", MenuCommand::Quit },
             };
@@ -82,6 +83,7 @@ namespace LB::Engine {
                 { "Save Game", MenuCommand::SaveGame },
                 { "Load Game", MenuCommand::LoadGame, saved },
                 { "Options", MenuCommand::Options },
+                { "Controls", MenuCommand::Controls },
                 { "Credits", MenuCommand::Credits },
                 { "Quit to Title", MenuCommand::QuitToTitle },
             };
@@ -93,6 +95,7 @@ namespace LB::Engine {
                 { "Back", MenuCommand::Back },
             };
         case MenuPage::Credits:
+        case MenuPage::Controls:
             return { { "Back", MenuCommand::Back } };
         case MenuPage::ChooseClass:
             return {
@@ -129,6 +132,9 @@ namespace LB::Engine {
         if (vertical != 0) {
             if (menu_.Page() == MenuPage::Credits) {
                 menu_.Scroll(vertical * 3, credits_.size(), MenuView::CreditLinesShown);
+            }
+            else if (menu_.Page() == MenuPage::Controls) {
+                menu_.Scroll(vertical * 3, GetControls().size(), MenuView::ControlRowsShown);
             }
             else if (menu_.Step(vertical)) {
                 PlaySound(GameSound::MenuMove);
@@ -197,6 +203,9 @@ namespace LB::Engine {
         case MenuCommand::Options:
             menu_.Push(MenuPage::Options);
             break;
+        case MenuCommand::Controls:
+            menu_.Push(MenuPage::Controls);
+            break;
         case MenuCommand::Credits:
             menu_.Push(MenuPage::Credits);
             break;
@@ -223,7 +232,8 @@ namespace LB::Engine {
         MenuModel model;
         model.titlePage = menu_.Page() == MenuPage::Title;
         model.heading = menu_.Page() == MenuPage::Pause ? "PAUSED" : menu_.Page() == MenuPage::Options ? "OPTIONS"
-                      : menu_.Page() == MenuPage::Credits ? "CREDITS" : menu_.Page() == MenuPage::ChooseClass ? "CHOOSE YOUR HERO" : "";
+                      : menu_.Page() == MenuPage::Credits ? "CREDITS" : menu_.Page() == MenuPage::ChooseClass ? "CHOOSE YOUR HERO"
+                      : menu_.Page() == MenuPage::Controls ? "CONTROLS" : "";
         model.items = menu_.Items();
         model.cursor = menu_.Cursor();
         model.message = menu_.Message();
@@ -232,7 +242,94 @@ namespace LB::Engine {
             model.lines = credits_;
             model.firstLine = menu_.ScrollPosition();
         }
+        if (menu_.Page() == MenuPage::Controls) {
+            model.controls = GetControls();
+            model.firstLine = menu_.ScrollPosition();
+        }
         MenuView::Draw(renderingSystem_, model);
+    }
+
+    // The controls page: the bound actions read from the input system (so the page follows the
+    // bindings), with the stick and wheel controls the game reads directly
+    std::vector<MenuModel::ControlRow> GameEngine::GetControls() const {
+        using Systems::Input::InputDevice;
+        // An action's keys and mouse buttons, and its controller buttons, each joined with " / "
+        const auto bound = [this](std::string_view action) {
+            std::string keyboard, controller;
+            for (const auto& binding : inputSystem_.GetBindings(std::string(action))) {
+                std::string name;
+                auto* into = &keyboard;
+                switch (binding.deviceType) {
+                case InputDevice::Keyboard: name = Systems::Input::Keys::Name(binding.keyCode); break;
+                case InputDevice::Mouse:
+                    name = binding.mouseButton == Systems::Input::MouseButton::Right ? "Right click"
+                         : binding.mouseButton == Systems::Input::MouseButton::Middle ? "Middle click" : "Left click";
+                    break;
+                case InputDevice::Gamepad:
+                    name = std::string(Systems::Input::GamepadButtonName(binding.gamepadButton));
+                    into = &controller;
+                    break;
+                default: continue;
+                }
+                if (into->find(name) != std::string::npos) continue;
+                *into += (into->empty() ? "" : " / ") + name;
+            }
+            return std::pair{ keyboard.empty() ? std::string("-") : keyboard, controller.empty() ? std::string("-") : controller };
+        };
+        std::vector<MenuModel::ControlRow> rows;
+        const auto section = [&](std::string title) { rows.push_back({ std::move(title), {}, {} }); };
+        const auto action = [&](std::string what, std::string_view name) {
+            auto [keyboard, controller] = bound(name);
+            rows.push_back({ std::move(what), std::move(keyboard), std::move(controller) });
+        };
+        const auto fixed = [&](std::string what, std::string keyboard, std::string controller) {
+            rows.push_back({ std::move(what), std::move(keyboard), std::move(controller) });
+        };
+        const auto pair = [&](std::string what, std::string_view first, std::string_view second) {
+            const auto [k1, c1] = bound(first);
+            const auto [k2, c2] = bound(second);
+            rows.push_back({ std::move(what), k1 + " / " + k2, c1 == "-" ? c2 : c1 });
+        };
+
+        section("EXPLORING");
+        fixed("Move", "W A S D / arrows", "Left stick");
+        action("Talk, trade", InteractAction);
+        action("Map", MapAction);
+        pair("Turn the camera", RotateCameraLeftAction, RotateCameraRightAction);
+        rows.back().controller = "Right stick left / right";
+        fixed("Zoom", "Mouse wheel", "Right stick up / down");
+
+        section("FIGHTING");
+        action("Attack", AttackAction);
+        std::string spellKeys, spellButtons;
+        for (std::size_t slot = 0; slot < SpellSlots; ++slot) {
+            const auto [keyboard, controller] = bound(SpellActions[slot]);
+            spellKeys += (slot ? " " : "") + keyboard;
+            spellButtons += (slot ? " " : "") + controller;
+        }
+        fixed("Spells, abilities", spellKeys, spellButtons);
+        action("Drink a potion", UsePotionAction);
+
+        section("TACTICAL PAUSE");
+        action("Pause, resume", TacticalPauseAction);
+        action("Walk to, attack it", OrderAction);
+        const auto [leftKeys, leftButtons] = bound(MenuLeftAction);
+        const auto [rightKeys, rightButtons] = bound(MenuRightAction);
+        fixed("Pick an enemy", leftKeys + " / " + rightKeys, leftButtons + " / " + rightButtons);
+        action("Attack it", AttackAction);
+        fixed("Cast at it", spellKeys, spellButtons);
+
+        section("SCREENS AND MENUS");
+        action("Character", CharacterScreenAction);
+        action("Pause menu", PauseAction);
+        action("Quick save", QuickSaveAction);
+        action("Quick load", QuickLoadAction);
+        const auto [upKeys, upButtons] = bound(MenuUpAction);
+        const auto [downKeys, downButtons] = bound(MenuDownAction);
+        fixed("Move in menus", upKeys + " / " + downKeys, upButtons + " / " + downButtons);
+        action("Choose", MenuConfirmAction);
+        action("Back", MenuBackAction);
+        return rows;
     }
 
 } // namespace LB::Engine

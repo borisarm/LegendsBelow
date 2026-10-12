@@ -708,3 +708,38 @@ TEST(InputSystemActionTests, IsActionDown_GamepadButton) {
 
     EXPECT_TRUE(system.IsActionDown("Attack"));
 }
+
+// ============================================================================
+// Bindings and names
+// ============================================================================
+
+TEST(InputSystemTests, GetBindings_InRegistrationOrder) {
+    InputSystem system;
+    system.Initialize();
+    InputAction key{};
+    key.name = "Jump";
+    key.keyCode = Keys::Space;
+    InputAction pad{};
+    pad.name = "Jump";
+    pad.deviceType = InputDevice::Gamepad;
+    pad.gamepadButton = GamepadButton::A;
+    system.RegisterAction(key);
+    system.RegisterAction(pad);
+
+    const auto bindings = system.GetBindings("Jump");
+    ASSERT_EQ(bindings.size(), 2u);
+    EXPECT_EQ(bindings[0].keyCode, Keys::Space);
+    EXPECT_EQ(bindings[1].gamepadButton, GamepadButton::A);
+    EXPECT_TRUE(system.GetBindings("Nothing").empty());
+}
+
+TEST(InputSystemTests, Names_ForPlayers) {
+    EXPECT_EQ(Keys::Name(Keys::FromChar('w')), "W");
+    EXPECT_EQ(Keys::Name('7'), "7");
+    EXPECT_EQ(Keys::Name(Keys::F5), "F5");
+    EXPECT_EQ(Keys::Name(Keys::Escape), "Esc");
+    EXPECT_EQ(Keys::Name(Keys::Space), "Space");
+    EXPECT_EQ(GamepadButtonName(GamepadButton::LeftShoulder), "LB");
+    EXPECT_EQ(GamepadButtonName(GamepadButton::Back), "View");
+    EXPECT_EQ(GamepadButtonName(GamepadButton::DPadUp), "D-pad up");
+}

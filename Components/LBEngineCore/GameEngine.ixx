@@ -808,6 +808,12 @@ export namespace LB::Engine {
         [[nodiscard]] EventBus& GetEvents() noexcept { return session_->events; }
 
         /// <summary>
+        /// The controls page's rows: each action with its keys and mouse buttons and its
+        /// controller buttons, from the bindings (sections are rows with only a title)
+        /// </summary>
+        [[nodiscard]] std::vector<MenuModel::ControlRow> GetControls() const;
+
+        /// <summary>
         /// A companion from allies.json joins the hero (beside them, at their level); null for an
         /// unknown key, without a hero, or with the party full. The merchant hires them for gold.
         /// </summary>

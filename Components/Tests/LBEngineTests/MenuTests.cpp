@@ -309,3 +309,81 @@ TEST(GameEngineMenuFrameTests, MissingUiImages_StopStartup) {
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .uiDirectory = "Z:/no/ui" }));
     EXPECT_NE(engine.GetInitializationError().find("UI images in"), std::string::npos);
 }
+
+// ============================================================================
+// The controls page
+// ============================================================================
+
+namespace {
+    std::optional<MenuModel::ControlRow> ControlRow(const GameEngine& engine, std::string_view action) {
+        const auto rows = engine.GetControls();
+        const auto it = std::ranges::find(rows, action, &MenuModel::ControlRow::action);
+        return it != rows.end() ? std::optional{ *it } : std::nullopt;
+    }
+}
+
+TEST(GameEngineMenuTests, Controls_FromTheTitle_ShowTheKeysAndButtons) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+
+    Choose(engine, "Controls");
+    engine.Tick(OneSixtieth);
+
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Controls);
+    EXPECT_TRUE(Drawn(engine, "CONTROLS"));
+    EXPECT_TRUE(Drawn(engine, "KEYBOARD AND MOUSE"));
+    EXPECT_TRUE(Drawn(engine, "CONTROLLER"));
+    EXPECT_TRUE(Drawn(engine, "EXPLORING"));
+
+    Press(engine, Keys::Escape);
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Title);
+}
+
+TEST(GameEngineMenuTests, Controls_FromThePauseMenu) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+    Choose(engine, "New Game");
+    Choose(engine, "Warrior");
+    Press(engine, Keys::Escape);
+    ASSERT_EQ(engine.GetMenu().Page(), MenuPage::Pause);
+
+    Choose(engine, "Controls");
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Controls);
+}
+
+TEST(GameEngineMenuTests, Controls_FollowTheBindings) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+
+    const auto interact = ControlRow(engine, "Talk, trade");
+    ASSERT_TRUE(interact.has_value());
+    EXPECT_EQ(interact->keyboard, "F");
+    EXPECT_EQ(interact->controller, "D-pad up");
+    const auto attack = ControlRow(engine, "Attack");
+    ASSERT_TRUE(attack.has_value());
+    EXPECT_EQ(attack->keyboard, "Space / Left click");
+    EXPECT_EQ(attack->controller, "A");
+    const auto spells = ControlRow(engine, "Spells, abilities");
+    ASSERT_TRUE(spells.has_value());
+    EXPECT_EQ(spells->keyboard, "1 2 3 4");
+    EXPECT_EQ(spells->controller, "LB RB Y B");
+    const auto save = ControlRow(engine, "Quick save");
+    ASSERT_TRUE(save.has_value());
+    EXPECT_EQ(save->controller, "-");   // keyboard only
+    const auto section = ControlRow(engine, "FIGHTING");
+    ASSERT_TRUE(section.has_value());
+    EXPECT_TRUE(section->keyboard.empty());
+}
+
+TEST(GameEngineMenuTests, Controls_ScrollToTheLastRows) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+    Choose(engine, "Controls");
+    ASSERT_GT(engine.GetControls().size(), MenuView::ControlRowsShown);
+    EXPECT_FALSE(Drawn(engine, "Quick load"));
+
+    for (int i = 0; i < 10; ++i) Press(engine, Keys::Down);
+
+    EXPECT_TRUE(Drawn(engine, "Quick load"));
+    EXPECT_EQ(engine.GetMenu().ScrollPosition(), engine.GetControls().size() - MenuView::ControlRowsShown);
+}

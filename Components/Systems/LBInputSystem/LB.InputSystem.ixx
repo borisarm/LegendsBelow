@@ -82,6 +82,52 @@ export namespace LB::Systems::Input {
             if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return c;
             return -1;
         }
+
+        /// <summary>
+        /// How a key is written for players ("Space", "F5", "W")
+        /// </summary>
+        inline std::string Name(std::int32_t keyCode) {
+            if ((keyCode >= 'A' && keyCode <= 'Z') || (keyCode >= '0' && keyCode <= '9')) return std::string(1, static_cast<char>(keyCode));
+            if (keyCode >= F1 && keyCode <= F12) return std::format("F{}", keyCode - F1 + 1);
+            switch (keyCode) {
+            case Backspace: return "Backspace";
+            case Tab: return "Tab";
+            case Enter: return "Enter";
+            case Shift: return "Shift";
+            case Control: return "Ctrl";
+            case Alt: return "Alt";
+            case Escape: return "Esc";
+            case Space: return "Space";
+            case Left: return "Left";
+            case Up: return "Up";
+            case Right: return "Right";
+            case Down: return "Down";
+            default: return std::format("Key {}", keyCode);
+            }
+        }
+    }
+
+    /// <summary>
+    /// How a gamepad button is written for players (Xbox controller labels)
+    /// </summary>
+    inline std::string_view GamepadButtonName(GamepadButton button) noexcept {
+        switch (button) {
+        case GamepadButton::A: return "A";
+        case GamepadButton::B: return "B";
+        case GamepadButton::X: return "X";
+        case GamepadButton::Y: return "Y";
+        case GamepadButton::LeftShoulder: return "LB";
+        case GamepadButton::RightShoulder: return "RB";
+        case GamepadButton::Back: return "View";
+        case GamepadButton::Start: return "Menu";
+        case GamepadButton::LeftThumb: return "Left stick click";
+        case GamepadButton::RightThumb: return "Right stick click";
+        case GamepadButton::DPadUp: return "D-pad up";
+        case GamepadButton::DPadDown: return "D-pad down";
+        case GamepadButton::DPadLeft: return "D-pad left";
+        case GamepadButton::DPadRight: return "D-pad right";
+        }
+        return "?";
     }
 
     /// <summary>
@@ -285,6 +331,14 @@ export namespace LB::Systems::Input {
         /// </summary>
         void RegisterAction(const InputAction& action) {
             actions_[action.name].push_back(action);
+        }
+
+        /// <summary>
+        /// The bindings of an action, in the order they were registered (empty: none)
+        /// </summary>
+        [[nodiscard]] std::vector<InputAction> GetBindings(const String& actionName) const {
+            const auto it = actions_.find(actionName);
+            return it != actions_.end() ? it->second : std::vector<InputAction>{};
         }
 
         /// <summary>

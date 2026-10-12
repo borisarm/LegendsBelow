@@ -5,6 +5,7 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ## [Unreleased]
 
 ### Added
+- **A controls page** (Controls in the title and pause menus, `MenuPage::Controls`): every action with its keys and mouse buttons and its controller buttons, in sections (exploring, fighting, the tactical pause, screens and menus), scrolling with up and down. The rows are read from the input bindings (`GameEngine::GetControls`, `MenuModel::ControlRow`), so the page follows them; `InputSystem::GetBindings`, `Keys::Name`, and `GamepadButtonName` (Xbox labels) give the names.
 - Technical health:
   - **`LB::EventBus`** (LB.Core `:Events`): typed, queued publish and subscribe (`Subscribe<T>`, `Publish`, `Dispatch`, `Pending`, `Clear`; events published while dispatching arrive in the same dispatch, up to `MaxDeliveries`). The engine publishes `EnemyKilledEvent`, `LevelGainedEvent`, and `PathChosenEvent` (`:GameEvents`) on the run's bus (`GameEngine::GetEvents`), dispatched at the end of each step: experience and loot, and the level-up and path fanfare, now answer events instead of being called from the combat code.
   - **Equipment in one place**: the InventoryService's equipment slots are the only record of what is equipped (`GameEngine::EquippedItem`, `WornItems`); the weapon and CharacterService's armour pieces follow from them (`SyncEquipment`). Saves are unchanged.

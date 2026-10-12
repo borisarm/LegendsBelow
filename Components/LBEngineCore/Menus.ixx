@@ -17,7 +17,8 @@ export namespace LB::Engine {
         Pause,      // during a game (the game is paused while any menu is open)
         Options,
         Credits,
-        ChooseClass  // New Game: the hero's class
+        ChooseClass, // New Game: the hero's class
+        Controls     // the keyboard and controller assignments
     };
 
     /// <summary>
@@ -30,6 +31,7 @@ export namespace LB::Engine {
         SaveGame,       // to the quick save slot
         LoadGame,       // the quick save
         Options,
+        Controls,
         Credits,
         QuitToTitle,
         Quit,           // leave the game (the host closes the window)
@@ -207,6 +209,13 @@ export namespace LB::Engine {
         std::string message;
         std::vector<std::string> lines;          // the credits
         std::size_t firstLine{0};
+        // The controls: what, on the keyboard and mouse, on a controller (a row with only `action` is a section's title)
+        struct ControlRow {
+            std::string action;
+            std::string keyboard;
+            std::string controller;
+        };
+        std::vector<ControlRow> controls;
         MenuArt art;
     };
 
@@ -217,6 +226,7 @@ export namespace LB::Engine {
     class MenuView {
     public:
         static constexpr std::size_t CreditLinesShown = 12;   // the rest scroll (fits an 800 x 600 window)
+        static constexpr std::size_t ControlRowsShown = 13;
 
         // Display (sRGB) colors to the renderer's linear ones
         static Systems::Rendering::Color Display(float r, float g, float b, float a = 1.0f) {
@@ -296,11 +306,12 @@ export namespace LB::Engine {
             renderer.GetUiSize(width, height);
             const std::int32_t center = width / 2;
 
-            // Panel behind the page
-            const std::int32_t panelWidth = std::min(width - 40, 560);
+            // Panel behind the page (wider for the controls' three columns)
+            const std::int32_t panelWidth = std::min(width - 40, menu.controls.empty() ? 560 : 740);
             const std::int32_t panelTop = menu.titlePage ? height / 3 : height / 6;
             // Tall enough for what the page holds: the heading, the credit lines, the items, a message
-            const std::int32_t shownLines = static_cast<std::int32_t>(std::min(menu.lines.size(), CreditLinesShown));
+            const std::int32_t shownLines = static_cast<std::int32_t>(std::min(menu.lines.size(), CreditLinesShown))
+                                          + (menu.controls.empty() ? 0 : static_cast<std::int32_t>(std::min(menu.controls.size(), ControlRowsShown)) + 1);
             const std::int32_t content = (menu.titlePage ? 30 : 90) + (shownLines > 0 ? shownLines * 24 + 12 : 0)
                                        + static_cast<std::int32_t>(menu.items.size()) * 40 + (menu.message.empty() ? 0 : 40) + 24;
             const std::int32_t panelHeight = std::min(content, height - panelTop - 16);
@@ -331,6 +342,34 @@ export namespace LB::Engine {
 
             const std::int32_t left = center - panelWidth / 2 + 48;
             const std::int32_t right = center + panelWidth / 2 - 48;
+            if (!menu.controls.empty()) {
+                // Three columns under their titles; section rows in gold; the rest scroll
+                const std::int32_t keyboardX = left + (right - left) * 34 / 100;
+                const std::int32_t controllerX = left + (right - left) * 66 / 100;
+                const auto dim = display(0.70f, 0.66f, 0.58f);
+                text("KEYBOARD AND MOUSE", keyboardX, y, 1.4f, dim);
+                text("CONTROLLER", controllerX, y, 1.4f, dim);
+                y += 24;
+                const auto last = std::min(menu.controls.size(), menu.firstLine + ControlRowsShown);
+                for (std::size_t i = menu.firstLine; i < last; ++i) {
+                    const auto& row = menu.controls[i];
+                    if (row.keyboard.empty() && row.controller.empty()) {
+                        text(row.action, left, y, 1.6f, gold);
+                    }
+                    else {
+                        const auto light = display(0.88f, 0.86f, 0.80f);
+                        text(row.action, left + 12, y, 1.5f, light);
+                        text(row.keyboard, keyboardX, y, 1.5f, light);
+                        text(row.controller, controllerX, y, 1.5f, light);
+                    }
+                    y += 24;
+                }
+                if (menu.controls.size() > ControlRowsShown) {
+                    const auto more = std::format("{}-{} of {}  (up and down to scroll)", menu.firstLine + 1, last, menu.controls.size());
+                    centered(more, center, y, 1.2f, dim);
+                }
+                y += 24;
+            }
             for (std::size_t i = 0; i < menu.items.size(); ++i) {
                 const auto& item = menu.items[i];
                 const bool selected = i == menu.cursor && item.enabled;
