@@ -218,7 +218,7 @@ namespace LB::Systems::Rendering {
             gpu_->renderer.BeginFrame(clearColor_.r, clearColor_.g, clearColor_.b, clearColor_.a);
 
             // World pass: lit 3D shapes and models through the camera, depth-tested
-            if (!meshQueue_.empty() || !modelQueue_.empty() || !particleQueue_.empty()) {
+            if (!meshQueue_.empty() || !modelQueue_.empty() || !particleQueue_.empty() || !shadowQueue_.empty()) {
                 const auto& view = cameraView_;
                 gpu_->renderer.SetCamera(view.eye.x, view.eye.y, view.eye.z, view.target.x, view.target.y, view.target.z,
                                          view.verticalFovRadians, view.nearPlane, view.farPlane);
@@ -256,8 +256,20 @@ namespace LB::Systems::Rendering {
                     }
                 };
                 drawGroups(opaqueInstances_, Pass::Opaque);
+
                 drawGroups(fadedInstances_, Pass::DepthOnly);
                 drawGroups(fadedInstances_, Pass::Transparent);
+
+                // Shadows on the floor, under everything else blended (the faded walls, written to
+                // depth, hide those behind them)
+                if (!shadowQueue_.empty()) {
+                    std::vector<float> discs;
+                    discs.reserve(shadowQueue_.size() * 8);
+                    for (const auto& shadow : shadowQueue_) {
+                        discs.insert(discs.end(), { shadow.position.x, shadow.position.y, shadow.position.z, shadow.size, 0.0f, 0.0f, 0.0f, shadow.opacity });
+                    }
+                    gpu_->renderer.DrawGroundShadows(discs.data(), discs.size() / 8);
+                }
 
                 // Particles over everything already drawn (depth-tested): dust blended first, then the
                 // glowing ones adding their light on top
@@ -305,6 +317,7 @@ namespace LB::Systems::Rendering {
         stats_.meshesRendered = static_cast<std::uint32_t>(meshQueue_.size());
         stats_.drawCalls += std::ranges::any_of(particleQueue_, &ParticleRenderData::glowing) ? 1 : 0;
         stats_.drawCalls += std::ranges::any_of(particleQueue_, [](const ParticleRenderData& p) { return !p.glowing; }) ? 1 : 0;
+        stats_.drawCalls += shadowQueue_.empty() ? 0 : 1;
         stats_.drawCalls += stats_.meshesRendered;
         stats_.modelsRendered = static_cast<std::uint32_t>(modelQueue_.size());
         for (std::size_t i = 0; i < models_.size(); ++i) {

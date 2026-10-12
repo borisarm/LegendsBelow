@@ -60,7 +60,7 @@ TEST(GameEngineSoundTests, InvalidSoundDirectory_StopsStartupListingClips) {
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{
         .contentDirectory = ShippedContentDirectory(), .soundDirectory = "Z:/no/such/sounds" }));
 
-    EXPECT_NE(engine.GetInitializationError().find(std::format("({} problems)", SoundBank::AllClips().size())), std::string::npos)
+    EXPECT_NE(engine.GetInitializationError().find(std::format("({} problems)", SoundBank::AllClips().size() + Ambience::Clips.size())), std::string::npos)
         << engine.GetInitializationError();
 }
 

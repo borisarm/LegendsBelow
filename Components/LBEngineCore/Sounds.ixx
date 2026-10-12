@@ -40,6 +40,8 @@ export namespace LB::Engine {
         FrostBurst,     // any other spell burst (a frost nova)
         NoMana,         // a spell that cannot be cast
         Spikes,         // a trap's spikes coming up
+        FootstepDirt,   // walking a cave's earth
+        FootstepGrass,  // walking the weeds of the ruins
         Count
     };
 
@@ -119,6 +121,23 @@ export namespace LB::Engine {
 
     // ------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A tier's ambience: a quiet loop under everything (Scripts/MakeAmbience.py, .wav), and the
+    /// footsteps on its floors
+    /// </summary>
+    namespace Ambience {
+        inline constexpr std::array<std::string_view, 3> Clips = { "ambience_crypts", "ambience_caves", "ambience_ruins" };
+        inline constexpr float Volume = 0.35f;
+
+        [[nodiscard]] inline std::string_view For(std::string_view theme) noexcept {
+            return theme == "Caves" ? Clips[1] : theme == "Ruins" ? Clips[2] : Clips[0];
+        }
+
+        [[nodiscard]] inline GameSound FootstepsFor(std::string_view theme) noexcept {
+            return theme == "Caves" ? GameSound::FootstepDirt : theme == "Ruins" ? GameSound::FootstepGrass : GameSound::Footstep;
+        }
+    }
+
     namespace SoundClips {
         inline constexpr std::string_view Footstep[] = { "footstep_concrete_000", "footstep_concrete_001", "footstep_concrete_002", "footstep_concrete_003", "footstep_concrete_004" };
         inline constexpr std::string_view Swing[] = { "knifeSlice", "knifeSlice2" };
@@ -147,6 +166,8 @@ export namespace LB::Engine {
         inline constexpr std::string_view FrostBurst[] = { "impactGlass_heavy_000", "impactGlass_heavy_001", "impactGlass_heavy_002", "impactGlass_heavy_003", "impactGlass_heavy_004" };
         inline constexpr std::string_view NoMana[] = { "metalClick" };
         inline constexpr std::string_view Spikes[] = { "metalLatch" };
+        inline constexpr std::string_view FootstepDirt[] = { "footstep00", "footstep01", "footstep02", "footstep03", "footstep04" };
+        inline constexpr std::string_view FootstepGrass[] = { "footstep_grass_000", "footstep_grass_001", "footstep_grass_002", "footstep_grass_003", "footstep_grass_004" };
         inline constexpr std::string_view ArrowHitsWall[] = { "impactWood_light_000", "impactWood_light_001", "impactWood_light_002", "impactWood_light_003", "impactWood_light_004" };
     }
 
@@ -181,6 +202,8 @@ export namespace LB::Engine {
         case GameSound::FrostBurst: return { FrostBurst, 0.8f };
         case GameSound::NoMana: return { NoMana, 0.6f, true };
         case GameSound::Spikes: return { Spikes, 0.6f };
+        case GameSound::FootstepDirt: return { FootstepDirt, 0.35f };
+        case GameSound::FootstepGrass: return { FootstepGrass, 0.3f };
         default: return {};
         }
     }

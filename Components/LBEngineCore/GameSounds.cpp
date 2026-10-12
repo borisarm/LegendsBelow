@@ -22,6 +22,10 @@ namespace LB::Engine {
             const auto result = audioSystem_.LoadClip(std::string(clip), directory / (std::string(clip) + ".ogg"));
             if (!result.Succeeded()) errors.push_back(result.error);
         }
+        for (const auto clip : Ambience::Clips) {
+            const auto result = audioSystem_.LoadClip(std::string(clip), directory / (std::string(clip) + ".wav"));
+            if (!result.Succeeded()) errors.push_back(result.error);
+        }
         if (!errors.empty()) {
             initializationError_ = std::format("Sounds in '{}' could not be loaded ({} problems):", soundDirectory, errors.size());
             for (const auto& error : errors) initializationError_ += "\n" + error;
@@ -146,6 +150,7 @@ namespace LB::Engine {
     void GameEngine::UpdateSounds(float elapsedSeconds, bool running) {
         audioSystem_.Update(elapsedSeconds);
         UpdateMusic(elapsedSeconds);
+        UpdateAmbience();
         if (!running) {
             session_->soundPlayerPosition = session_->playerPosition;
             return;
@@ -158,7 +163,7 @@ namespace LB::Engine {
             session_->strideTiles += moved;
             if (session_->strideTiles >= SoundBank::StrideTiles) {
                 session_->strideTiles -= SoundBank::StrideTiles;
-                PlaySound(GameSound::Footstep, session_->playerPosition);
+                PlaySound(Ambience::FootstepsFor(GetTheme().name), session_->playerPosition);
             }
         }
 
@@ -173,6 +178,18 @@ namespace LB::Engine {
             now.emplace(enemy.id, enemy.state);
         }
         heard = std::move(now);
+    }
+
+    // The floor's ambience loops quietly under everything (none in the arena); a new tier swaps it
+    void GameEngine::UpdateAmbience() {
+        if (!assets_.soundsLoaded) return;
+        const std::string_view wanted = session_->dungeonMode ? Ambience::For(GetTheme().name) : std::string_view{};
+        if (wanted == session_->ambienceClip) return;
+        if (session_->ambienceClip.size() > 0) audioSystem_.Stop(session_->ambienceSource);
+        session_->ambienceClip = std::string(wanted);
+        if (!wanted.empty()) {
+            session_->ambienceSource = audioSystem_.PlaySound(std::string(wanted), Systems::Audio::AudioChannel::SoundEffects, Ambience::Volume, true);
+        }
     }
 
 } // namespace LB::Engine

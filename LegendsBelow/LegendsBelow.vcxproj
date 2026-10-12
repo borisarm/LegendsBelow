@@ -466,8 +466,8 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Fonts\*.ttf;..\Assets\Fonts\OFL-*.txt">
       <DestinationFolders>$(OutDir)Assets\Fonts</DestinationFolders>
     </CopyFileToFolders>
-    <!-- Sound effects (Kenney, CC0), loaded at startup from <exe dir>\Assets\Sounds -->
-    <CopyFileToFolders Include="..\Assets\Sounds\*.ogg;..\Assets\Sounds\LICENSE-*.txt">
+    <!-- Sound effects (Kenney, CC0) and the tiers' ambience (Scripts\MakeAmbience.py, CC0), loaded at startup from <exe dir>\Assets\Sounds -->
+    <CopyFileToFolders Include="..\Assets\Sounds\*.ogg;..\Assets\Sounds\*.wav;..\Assets\Sounds\LICENSE-*.txt">
       <DestinationFolders>$(OutDir)Assets\Sounds</DestinationFolders>
     </CopyFileToFolders>
     <!-- Music (see Assets\Music\CREDITS.txt), loaded at startup from <exe dir>\Assets\Music -->

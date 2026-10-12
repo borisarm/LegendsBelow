@@ -62,8 +62,17 @@ namespace LB::Engine {
             lighting.directional = dim;
         }
         renderingSystem_.SetLighting(lighting);
-        renderingSystem_.SetCamera(session_->camera.GetView());
+        // The camera, shaken by heavy blows (a quick wobble dying away)
+        auto view = session_->camera.GetView();
+        if (const float shake = GetShake(); shake > 0.0f) {
+            const auto t = static_cast<float>(timer_.GetTotalSeconds());
+            const Systems::Rendering::Vector3 offset{ shake * std::sin(t * 61.0f), shake * 0.6f * std::sin(t * 47.0f + 1.3f), shake * std::sin(t * 53.0f + 2.1f) };
+            view.eye = { view.eye.x + offset.x, view.eye.y + offset.y, view.eye.z + offset.z };
+            view.target = { view.target.x + offset.x, view.target.y + offset.y, view.target.z + offset.z };
+        }
+        renderingSystem_.SetCamera(view);
         DrawArena(shade);
+        DrawShadows();
         DrawRestPlace(shade(1.0f, 1.0f, 1.0f));
         DrawDecor(shade(1.0f, 1.0f, 1.0f));
         DrawPlayer(shade);
@@ -521,6 +530,46 @@ namespace LB::Engine {
             held.transform = HeldTransform(body, file, ally.definition->IsRanged() ? "handslot.l" : "handslot.r", data.animation);
             if (held.transform) renderingSystem_.DrawModel(held);
         }
+    }
+
+    // A soft shadow under every character standing (and the fallen, fading with their bodies):
+    // darkest at the feet, and, within a torch's light, stretched away from the flame by two
+    // fainter discs (the nearer the torch, the stronger)
+    void GameEngine::DrawShadows() {
+        const auto view = GetViewArea();
+        const auto cast = [&](WorldPoint at, float size, float strength) {
+            if (strength <= 0.0f || !view.Contains(at, 2.0f)) return;
+            renderingSystem_.DrawShadow({ { at.x, ShadowHeight, at.y }, size, ShadowOpacity * strength });
+            const Torch* nearest = nullptr;
+            float nearestDistance = TorchLightRadius;
+            for (const auto& torch : session_->torches.Torches()) {
+                const auto flame = TorchSet::FlameOf(torch);
+                const float distance = Distance(at, { flame.x, flame.z });
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearest = &torch;
+                }
+            }
+            if (!nearest || nearestDistance < 1e-3f) return;
+            const auto flame = TorchSet::FlameOf(*nearest);
+            const float dx = (at.x - flame.x) / nearestDistance;
+            const float dy = (at.y - flame.z) / nearestDistance;
+            const float reach = 1.0f - nearestDistance / TorchLightRadius;
+            for (int k = 1; k <= 2; ++k) {
+                const float along = size * 0.3f * static_cast<float>(k) * (0.6f + reach);
+                renderingSystem_.DrawShadow({ { at.x + dx * along, ShadowHeight, at.y + dy * along }, size * (1.0f - 0.12f * static_cast<float>(k)),
+                                              ShadowOpacity * strength * reach * 0.55f / static_cast<float>(k) });
+            }
+        };
+
+        if (session_->playerId) cast(session_->playerPosition, 1.5f, 1.0f);
+        for (const auto& ally : session_->allies.Allies()) cast(ally.position, 1.5f, 1.0f);
+        for (const auto& enemy : session_->encounter.GetEnemies()) {
+            if (enemy.state == EnemyState::Spawning) continue;
+            const float size = enemy.definition->rig == "Large" ? 2.4f : 1.5f;
+            cast(enemy.position, size, Encounter::Opacity(enemy));
+        }
+        if (session_->merchant) cast(*session_->merchant, 1.5f, 1.0f);
     }
 
 } // namespace LB::Engine

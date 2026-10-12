@@ -103,6 +103,7 @@ namespace LB::Engine {
             session_->camera.SnapTo({ session_->playerPosition.x, session_->playerPosition.y });
         }
         session_->allies.PlaceAround(session_->world, session_->playerPosition, true);   // the companions come along (on their feet)
+        session_->stats.deepest = std::max(session_->stats.deepest, depth);
         // The tier's look; props in the rooms, traps in the corridors (the same for the same floor)
         session_->decor.Build(session_->world, depth, FloorSeed(session_->baseSeed, depth) ^ 0x5EEDu, session_->restFloor);
         if (assets_.models.loaded) {

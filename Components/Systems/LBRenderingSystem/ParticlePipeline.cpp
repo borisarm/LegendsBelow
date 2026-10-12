@@ -1,5 +1,6 @@
 // ParticlePipeline.cpp - Camera-facing particle sprites: glowing ones added to the frame, dust
-// blended over it; depth-tested against the world without writing depth
+// blended over it; and shadows, the same quads laid flat on the ground. Depth-tested against the
+// world without writing depth
 //
 // Internal partition of LB.RenderingSystem (Particle*.hlsl).
 module;
@@ -18,6 +19,9 @@ namespace LB::Systems::Rendering::Detail
     class ParticlePipeline
     {
     public:
+        // How a draw's quads land on the frame
+        enum class Blend { Additive, Alpha, Shadow };
+
         // Floats per particle in Draw's input: x, y, z, size, r, g, b, a
         static constexpr std::size_t ParticleFloats = 8;
 
@@ -77,21 +81,27 @@ namespace LB::Systems::Rendering::Detail
             desc.PS = { alphaPs, psSize };
             desc.BlendState = CommonStates::NonPremultiplied;
             ThrowIfFailed(device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(m_alpha.ReleaseAndGetAddressOf())));
+
+            // Shadows: an even dark middle and a soft rim of their own (not the sprite's)
+            const auto* shadowPs = LBShaders::ParticleShadowPS(psSize);
+            desc.PS = { shadowPs, psSize };
+            ThrowIfFailed(device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(m_shadow.ReleaseAndGetAddressOf())));
         }
 
         void Reset() noexcept
         {
             m_additive.Reset();
             m_alpha.Reset();
+            m_shadow.Reset();
             m_rootSignature.Reset();
         }
 
         // Particles as camera-facing quads, facing along the camera's right and up vectors. Call
         // after the models.
         void Draw(ID3D12GraphicsCommandList* commandList, GpuResources& resources, const DirectX::XMFLOAT4X4& viewProjection,
-                  DirectX::XMFLOAT4 cameraRight, DirectX::XMFLOAT4 cameraUp, const float* particles, std::size_t count, bool additive)
+                  DirectX::XMFLOAT4 cameraRight, DirectX::XMFLOAT4 cameraUp, const float* particles, std::size_t count, Blend blend)
         {
-            auto* pipeline = additive ? m_additive.Get() : m_alpha.Get();
+            auto* pipeline = blend == Blend::Additive ? m_additive.Get() : blend == Blend::Alpha ? m_alpha.Get() : m_shadow.Get();
             const auto sprite = resources.Slot(&GpuResources::ParticleTexture());
             if (!pipeline || !resources.IsReady() || !sprite || count == 0) return;
 
@@ -127,5 +137,6 @@ namespace LB::Systems::Rendering::Detail
         ComPtr<ID3D12RootSignature> m_rootSignature;
         ComPtr<ID3D12PipelineState> m_additive;
         ComPtr<ID3D12PipelineState> m_alpha;
+        ComPtr<ID3D12PipelineState> m_shadow;
     };
 }

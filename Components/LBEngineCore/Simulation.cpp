@@ -53,7 +53,10 @@ namespace LB::Engine {
         }
 
         session_->combatEvents.clear();
-        const bool running = !session_->paused && !menu_.IsOpen() && !screenWasOpen && !ScreenOpen();
+        // A heavy blow froze the action: the world holds still a moment (the camera does not)
+        const bool frozen = session_->hitStopSeconds > 0.0f;
+        if (frozen) session_->hitStopSeconds = std::max(0.0f, session_->hitStopSeconds - static_cast<float>(elapsedSeconds));
+        const bool running = !session_->paused && !menu_.IsOpen() && !screenWasOpen && !ScreenOpen() && !frozen;
         if (running) {
             session_->gameTimeSeconds += elapsedSeconds;
             // Attacks first: a swing that starts this step roots the player at once
@@ -76,7 +79,9 @@ namespace LB::Engine {
             PlayCombatSounds();
             PlayProjectileSounds();
             PlaySpellSounds();
+            FeelCombat();
         }
+        session_->shakeSeconds = std::max(0.0f, session_->shakeSeconds - static_cast<float>(elapsedSeconds));
 
         if (session_->playerId) {
             session_->camera.Follow({ session_->playerPosition.x, session_->playerPosition.y });
@@ -124,9 +129,12 @@ namespace LB::Engine {
 
         if (!IsPlayerAlive()) {
             combat.swinging = false;
+            if (combat.deadSeconds == 0.0f) ++session_->stats.falls;
             combat.deadSeconds += elapsedSeconds;
             if (combat.deadSeconds >= PlayerRespawnSeconds) {
-                RespawnPlayer();
+                // The game asks what next (the run's summary); tools and tests rise at once
+                if (options_.deathScreen && session_->dungeonMode) OpenMenu(MenuPage::Fallen);
+                else RespawnPlayer();
             }
             return;
         }
@@ -953,6 +961,37 @@ namespace LB::Engine {
         }
         if (worst) healAlly(*worst);
         else HealPlayer(amount);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Feel: hit-stop and camera shake on heavy blows
+    // ------------------------------------------------------------------------------------------
+
+    // A critical hit by the hero, a boss's blow, or a blow taking a quarter of the hero's health
+    void GameEngine::FeelCombat() {
+        const auto* player = PlayerCharacter();
+        if (!player) return;
+        for (const auto& event : session_->combatEvents) {
+            if (!event.result.hit || event.result.finalDamage <= 0) continue;
+            if (event.kind == CombatEventKind::PlayerAttack) {
+                if (event.result.critical) Jolt(CritHitStopSeconds, 0.15f, 0.06f);
+                continue;
+            }
+            if (event.ally != 0) continue;
+            const auto* enemy = session_->encounter.FindEnemy(event.enemyId);
+            if (enemy && enemy->definition->boss) Jolt(HeavyHitStopSeconds, 0.4f, 0.28f);
+            else if (static_cast<float>(event.result.finalDamage) >= HeavyHitShare * static_cast<float>(player->GetMaxHitPoints())) Jolt(HeavyHitStopSeconds, 0.25f, 0.15f);
+        }
+        if (!session_->encounter.GetPhaseChanges().empty()) Jolt(0.0f, 0.5f, 0.2f);   // a boss enraged
+    }
+
+    void GameEngine::Jolt(float hitStopSeconds, float shakeSeconds, float shakeStrength) {
+        if (options_.hitStop) session_->hitStopSeconds = std::max(session_->hitStopSeconds, hitStopSeconds);
+        if (shakeStrength >= GetShake()) {
+            session_->shakeSeconds = shakeSeconds;
+            session_->shakeDuration = shakeSeconds;
+            session_->shakeStrength = shakeStrength;
+        }
     }
 
 } // namespace LB::Engine

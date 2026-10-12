@@ -380,6 +380,7 @@ TEST(GameEngineBatchingTests, Arena_FewDrawCalls) {
         expected += ModelNamed(engine, name).parts.size();
     }
     expected += 1;                         // the HUD's overlay batch
+    expected += 1;                         // the shadows under the characters
     const auto& stats = engine.GetRendering().GetStats();
     EXPECT_EQ(stats.drawCalls, expected);
     EXPECT_LT(stats.drawCalls, 35u);       // was one draw per part per copy: several hundred
@@ -404,6 +405,7 @@ TEST(GameEngineBatchingTests, FadedWalls_TwoExtraPassesPerPart) {
         if (rendering.GetModel(draw.model)->name == "pillar" && draw.tint.a < 1.0f) pillarFaded = true;
     }
     expected += 1;                         // the HUD's overlay batch
+    expected += 1;                         // the shadows under the characters
     expected += 2 * wallParts;
     if (pillarFaded) expected += 2 * ModelNamed(engine, "pillar").parts.size();
     EXPECT_EQ(rendering.GetStats().drawCalls, expected);

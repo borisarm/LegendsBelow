@@ -18,7 +18,8 @@ export namespace LB::Engine {
         Options,
         Credits,
         ChooseClass, // New Game: the hero's class
-        Controls     // the keyboard and controller assignments
+        Controls,    // the keyboard and controller assignments
+        Fallen       // the hero went down: the run so far, and what next
     };
 
     /// <summary>
@@ -32,6 +33,7 @@ export namespace LB::Engine {
         LoadGame,       // the quick save
         Options,
         Controls,
+        RiseAgain,      // a fallen hero gets up at the floor's entrance
         Credits,
         QuitToTitle,
         Quit,           // leave the game (the host closes the window)

@@ -222,6 +222,9 @@
     <FxCompile Include="Shaders\Particle_PS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FxCompile>
+    <FxCompile Include="Shaders\ParticleShadow_PS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FxCompile>
     <ClInclude Include="ShaderBytecode.h" />
     <ClInclude Include="Direct3D.h" />
   </ItemGroup>

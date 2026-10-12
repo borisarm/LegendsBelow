@@ -125,6 +125,16 @@ export namespace LB::Systems::Rendering {
     };
 
     /// <summary>
+    /// A soft dark disc lying on the ground (a shadow under a character): darkest in the middle,
+    /// fading to nothing at its edge
+    /// </summary>
+    struct ShadowRenderData {
+        Vector3 position{};                     // its center, just above the floor
+        float size{0.9f};                       // tiles across
+        float opacity{0.45f};                   // how dark its middle is
+    };
+
+    /// <summary>
     /// The light everything shares: directional lights scaled (1: the default rig), and ambient
     /// </summary>
     struct SceneLighting {
@@ -317,6 +327,7 @@ export namespace LB::Systems::Rendering {
             modelQueue_.clear();
             lightQueue_.clear();
             particleQueue_.clear();
+            shadowQueue_.clear();
 
             stats_.drawCalls = 0;
             stats_.meshesRendered = 0;
@@ -381,6 +392,19 @@ export namespace LB::Systems::Rendering {
 
         const std::vector<ParticleRenderData>& GetQueuedParticles() const {
             return particleQueue_;
+        }
+
+        /// <summary>
+        /// Queue a shadow on the ground for this frame (drawn after the solid models, under the
+        /// faded walls and the particles; one draw)
+        /// </summary>
+        void DrawShadow(const ShadowRenderData& shadow) {
+            if (!initialized_) return;
+            shadowQueue_.push_back(shadow);
+        }
+
+        const std::vector<ShadowRenderData>& GetQueuedShadows() const {
+            return shadowQueue_;
         }
 
         static constexpr std::size_t MaxPointLights = 16;
@@ -673,6 +697,7 @@ export namespace LB::Systems::Rendering {
         std::vector<ModelRenderData> modelQueue_;
         std::vector<PointLight> lightQueue_;
         std::vector<ParticleRenderData> particleQueue_;
+        std::vector<ShadowRenderData> shadowQueue_;
         SceneLighting lighting_{};
         std::vector<std::vector<ModelInstance>> opaqueInstances_;   // per model, rebuilt each frame
         std::vector<std::vector<ModelInstance>> fadedInstances_;

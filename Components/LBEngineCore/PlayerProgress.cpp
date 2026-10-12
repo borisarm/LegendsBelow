@@ -362,6 +362,7 @@ namespace LB::Engine {
     // sounds) to levels and paths. Subscribed once per run, on the run's own bus.
     void GameEngine::SubscribeToEvents() {
         auto& events = session_->events;
+        events.Subscribe<EnemyKilledEvent>([this](const EnemyKilledEvent&) { ++session_->stats.kills; });
         events.Subscribe<EnemyKilledEvent>([this](const EnemyKilledEvent& kill) {
             GrantExperience(kill.experience);
             if (!kill.lootTable.empty()) DropLoot(kill.lootTable, kill.at);
@@ -412,6 +413,7 @@ namespace LB::Engine {
             const Systems::Rendering::Vector3 at{ ground.position.x, 0.6f, ground.position.y };
             if (ground.IsGold()) {
                 session_->gold += ground.quantity;
+                session_->stats.goldFound += ground.quantity;
                 session_->combatText.Add(std::format("+{} GOLD", ground.quantity), at, { 0.95f, 0.80f, 0.35f, 1.0f }, 2.0f);
                 PlaySound(GameSound::Gold, ground.position);
                 return true;

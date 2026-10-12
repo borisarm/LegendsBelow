@@ -14,6 +14,7 @@
 #include "Particle_VS.inc"
 #include "Particle_PS.inc"
 #include "ParticleAlpha_PS.inc"
+#include "ParticleShadow_PS.inc"
 
 namespace LBShaders
 {
@@ -63,5 +64,11 @@ namespace LBShaders
     {
         size = sizeof(g_ParticleAlpha_PS);
         return g_ParticleAlpha_PS;
+    }
+
+    const unsigned char* ParticleShadowPS(std::size_t& size) noexcept
+    {
+        size = sizeof(g_ParticleShadow_PS);
+        return g_ParticleShadow_PS;
     }
 }

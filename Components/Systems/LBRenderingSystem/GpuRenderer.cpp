@@ -169,7 +169,17 @@ namespace LB::Systems::Rendering::Detail
         // after the models.
         void DrawParticles(const float* particles, std::size_t count, bool additive)
         {
-            m_particles.Draw(m_device->GetCommandList(), m_resources, m_models.ViewProjection(), m_cameraRight, m_cameraUp, particles, count, additive);
+            m_particles.Draw(m_device->GetCommandList(), m_resources, m_models.ViewProjection(), m_cameraRight, m_cameraUp, particles, count,
+                             additive ? ParticlePipeline::Blend::Additive : ParticlePipeline::Blend::Alpha);
+            m_models.InvalidateBinding();
+        }
+
+        // Shadows (the particle layout, black): the soft sprite lying flat on the ground (spanned
+        // by world X and Z instead of the camera's right and up), blended over the floor
+        void DrawGroundShadows(const float* shadows, std::size_t count)
+        {
+            m_particles.Draw(m_device->GetCommandList(), m_resources, m_models.ViewProjection(), DirectX::XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f),
+                             DirectX::XMFLOAT4(0.0f, 0.0f, 1.0f, 0.0f), shadows, count, ParticlePipeline::Blend::Shadow);
             m_models.InvalidateBinding();
         }
 

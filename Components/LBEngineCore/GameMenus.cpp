@@ -97,6 +97,12 @@ namespace LB::Engine {
         case MenuPage::Credits:
         case MenuPage::Controls:
             return { { "Back", MenuCommand::Back } };
+        case MenuPage::Fallen:
+            return {
+                { "Rise Again", MenuCommand::RiseAgain, true, "at the entrance" },
+                { "Load Game", MenuCommand::LoadGame, saved },
+                { "Quit to Title", MenuCommand::QuitToTitle },
+            };
         case MenuPage::ChooseClass:
             return {
                 { "Warrior", MenuCommand::PlayWarrior, true, "sword and bow" },
@@ -117,7 +123,7 @@ namespace LB::Engine {
         menu_.SetItems(BuildMenuItems());
 
         if (triggered(MenuBackAction) || triggered(PauseAction)) {
-            if (menu_.Page() == MenuPage::Title) return;   // nowhere to go back to
+            if (menu_.Page() == MenuPage::Title || menu_.Page() == MenuPage::Fallen) return;   // nowhere to go back to
             PlaySound(GameSound::ScreenClose);
             if (!menu_.Back()) {
                 SetPaused(false);   // the pause menu closed: back to the game
@@ -206,6 +212,10 @@ namespace LB::Engine {
         case MenuCommand::Controls:
             menu_.Push(MenuPage::Controls);
             break;
+        case MenuCommand::RiseAgain:
+            RespawnPlayer();
+            CloseMenu();
+            break;
         case MenuCommand::Credits:
             menu_.Push(MenuPage::Credits);
             break;
@@ -233,7 +243,7 @@ namespace LB::Engine {
         model.titlePage = menu_.Page() == MenuPage::Title;
         model.heading = menu_.Page() == MenuPage::Pause ? "PAUSED" : menu_.Page() == MenuPage::Options ? "OPTIONS"
                       : menu_.Page() == MenuPage::Credits ? "CREDITS" : menu_.Page() == MenuPage::ChooseClass ? "CHOOSE YOUR HERO"
-                      : menu_.Page() == MenuPage::Controls ? "CONTROLS" : "";
+                      : menu_.Page() == MenuPage::Controls ? "CONTROLS" : menu_.Page() == MenuPage::Fallen ? "YOU HAVE FALLEN" : "";
         model.items = menu_.Items();
         model.cursor = menu_.Cursor();
         model.message = menu_.Message();
@@ -246,6 +256,7 @@ namespace LB::Engine {
             model.controls = GetControls();
             model.firstLine = menu_.ScrollPosition();
         }
+        if (menu_.Page() == MenuPage::Fallen) model.lines = FallenSummary();
         MenuView::Draw(renderingSystem_, model);
     }
 
@@ -330,6 +341,23 @@ namespace LB::Engine {
         action("Choose", MenuConfirmAction);
         action("Back", MenuBackAction);
         return rows;
+    }
+
+    // The death screen's summary of the run so far
+    std::vector<std::string> GameEngine::FallenSummary() const {
+        const auto* player = PlayerCharacter();
+        const auto* classData = content_->FindClass(session_->playerClass);
+        const auto& stats = session_->stats;
+        const auto seconds = static_cast<std::int64_t>(session_->gameTimeSeconds);
+        return {
+            std::format("{}, level {}, on depth {}", classData ? classData->name : std::string("The hero"), player ? player->GetLevel() : 1, session_->depth),
+            "",
+            std::format("Deepest floor reached: {}", stats.deepest),
+            std::format("Enemies slain: {}", stats.kills),
+            std::format("Gold found: {}", stats.goldFound),
+            std::format("Time below: {}:{:02}", seconds / 60, seconds % 60),
+            std::format("Falls: {}", stats.falls),
+        };
     }
 
 } // namespace LB::Engine

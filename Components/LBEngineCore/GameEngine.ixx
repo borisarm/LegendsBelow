@@ -74,6 +74,10 @@ export namespace LB::Engine {
         bool dungeon{false};
         // The hero's class (classes.json): Warrior or Mage are playable; New Game asks
         LB::Character::CharacterClass playerClass{LB::Character::CharacterClass::Warrior};
+        // Heavy blows freeze the action for a moment (hit-stop); off: steps are never skipped (tests count them)
+        bool hitStop{false};
+        // A fallen hero sees the run's summary and chooses to rise again; off: they get up at once (tests, tools)
+        bool deathScreen{false};
     };
 
     /// <summary>
@@ -808,6 +812,35 @@ export namespace LB::Engine {
         [[nodiscard]] EventBus& GetEvents() noexcept { return session_->events; }
 
         /// <summary>
+        /// What a run has seen so far: the deepest floor, enemies slain, gold found, times fallen
+        /// (the death screen's summary; not kept in saves)
+        /// </summary>
+        struct RunStats {
+            std::int32_t deepest{1};
+            std::int32_t kills{0};
+            std::int32_t goldFound{0};
+            std::int32_t falls{0};
+        };
+        [[nodiscard]] const RunStats& GetRunStats() const noexcept { return session_->stats; }
+
+        // Feel: heavy blows freeze the action a moment (EngineOptions::hitStop) and shake the camera
+        static constexpr float CritHitStopSeconds = 0.05f;
+        static constexpr float HeavyHitStopSeconds = 0.08f;
+        static constexpr float HeavyHitShare = 0.25f;           // a blow taking this share of the hero's health is heavy
+        [[nodiscard]] float GetHitStopSeconds() const noexcept { return session_->hitStopSeconds; }
+
+        /// <summary>
+        /// How far the camera is shaking now (tiles; 0: still)
+        /// </summary>
+        [[nodiscard]] float GetShake() const noexcept {
+            return session_->shakeDuration > 0.0f ? session_->shakeStrength * session_->shakeSeconds / session_->shakeDuration : 0.0f;
+        }
+
+        // Shadows under characters: darkest at the feet, stretched away from a torch within its light
+        static constexpr float ShadowOpacity = 0.6f;
+        static constexpr float ShadowHeight = 0.03f;
+
+        /// <summary>
         /// The controls page's rows: each action with its keys and mouse buttons and its
         /// controller buttons, from the bindings (sections are rows with only a title)
         /// </summary>
@@ -974,6 +1007,11 @@ export namespace LB::Engine {
         // Equipment: record an item in a slot (or clear it), then bring the weapon and
         // CharacterService's armour pieces in line with the inventory's slots
         void SubscribeToEvents();
+        void UpdateAmbience();
+        void FeelCombat();
+        void Jolt(float hitStopSeconds, float shakeSeconds, float shakeStrength);
+        void DrawShadows();
+        [[nodiscard]] std::vector<std::string> FallenSummary() const;
         void UpdateAllies(float elapsedSeconds);
         void DrawAllies(const Shade& shade);
         void HealParty(const Content::SpellDefinition& spell, std::int32_t amount);
@@ -1224,6 +1262,13 @@ export namespace LB::Engine {
             FloorDecor decor;                        // props and traps of the floor
             EventBus events;                         // what happens in the run (GameEvents), dispatched after each step
             AllyParty allies;                        // the hero's companions
+            std::string ambienceClip;                // the loop playing under the floor (empty: none)
+            Systems::Audio::AudioSourceId ambienceSource{};
+            float hitStopSeconds{0.0f};              // the action is frozen (a heavy blow)
+            float shakeSeconds{0.0f};                // the camera shakes, dying away over shakeDuration
+            float shakeDuration{0.0f};
+            float shakeStrength{0.0f};               // tiles at its start
+            RunStats stats;
 
             Encounter encounter;
             bool spawnEnemies{true};
