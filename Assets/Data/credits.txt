@@ -17,7 +17,8 @@ by Kay Lousberg - www.kaylousberg.com (CC0)
 SOUND EFFECTS AND MENU FRAMES
 Impact Sounds, RPG Audio, and Fantasy UI Borders
 by Kenney - www.kenney.nl (CC0)
-Dungeon ambience made for LegendsBelow (CC0)
+Dungeon ambience and creature voices
+made for LegendsBelow (CC0)
 
 FONT
 MedievalSharp by wmk69

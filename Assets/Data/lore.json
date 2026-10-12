@@ -1,0 +1,18 @@
+[
+  { "id": "lore_crypts_first_burial", "tier": 1, "title": "The First Burial", "text": "The crypts were dug for the kings of Aldmere, who swore to guard the deep from their tombs. The oath outlived the kings." },
+  { "id": "lore_crypts_gravedigger", "tier": 1, "title": "A Gravedigger's Note", "text": "Third night the bones have stood. We nail the lids; by morning they are open from inside. Brother Ewan says not to worry. Brother Ewan is gone." },
+  { "id": "lore_crypts_bargain", "tier": 1, "title": "The Necromancer's Bargain", "text": "He came offering to quiet the dead. The abbot paid him in candles and silence. Now the dead walk in his name." },
+  { "id": "lore_crypts_candles", "tier": 1, "title": "Candles for the Lost", "text": "Light four flames for the four winds, the old rite says, and the sleepers will open what they guard." },
+  { "id": "lore_caves_ledger", "tier": 2, "title": "A Miner's Ledger", "text": "Struck a seam of black iron at the ninth fathom. The men hear howling in the rock. Pay doubled; nobody stays." },
+  { "id": "lore_caves_wolfkin", "tier": 2, "title": "Of the Wolf-Kin", "text": "They were miners once. The deep changed them, the healers wrote, or the moon did, though there is no moon this far down." },
+  { "id": "lore_caves_war_song", "tier": 2, "title": "An Orc War-Song", "text": "Stone is our mother, the drum our heart. We were here before the kings, and we will be here after their bones." },
+  { "id": "lore_caves_warlord", "tier": 2, "title": "The Warlord's Crown", "text": "The golem was built to dig, not to rule. But a crown fell in the dark, and the first hand to find it was stone." },
+  { "id": "lore_ruins_city", "tier": 3, "title": "The Drowned City", "text": "Before the crypts, before the mines, a city stood here under the sky. The sky is a ceiling now; the city remembers." },
+  { "id": "lore_ruins_invitation", "tier": 3, "title": "An Invitation", "text": "Come in from the cold, the voice said, there is wine. There was no wine." },
+  { "id": "lore_ruins_proverb", "tier": 3, "title": "A Tiefling Proverb", "text": "Fire forgives nothing and forgets nothing. Be fire." },
+  { "id": "lore_ruins_frost_oath", "tier": 3, "title": "The Frost Oath", "text": "When the city's last fire died, the cold kept its promise: nothing here would rot, and nothing would leave." },
+  { "id": "lore_archive_keepers", "tier": 4, "title": "The Archivists", "text": "They swore to keep every word ever written. When the words ran out above, they came below for more." },
+  { "id": "lore_archive_marginalia", "tier": 4, "title": "Marginalia", "text": "Do not read the red books. Do not read the red books. Do not" },
+  { "id": "lore_archive_abomination", "tier": 4, "title": "On the Abomination", "text": "Stitched from every guardian that failed, it was meant to be the last guard. It has never failed." },
+  { "id": "lore_archive_last_page", "tier": 4, "title": "The Last Page", "text": "Whoever reads this has come further than any of us. The way goes on. So, we hope, do you." }
+]

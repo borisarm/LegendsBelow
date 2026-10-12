@@ -60,6 +60,13 @@ export namespace LB::Systems::Persistence {
         float masterVolume{1.0f};
         float musicVolume{0.7f};
         float sfxVolume{1.0f};
+        // The interface's share of the screen (RenderingSystem::SetUiSafeArea): a console's TV
+        // crops its edges
+#if defined(_GAMING_XBOX)
+        float uiSafeArea{0.9f};
+#else
+        float uiSafeArea{1.0f};
+#endif
         bool fullscreen{true};
         std::int32_t resolutionWidth{1920};
         std::int32_t resolutionHeight{1080};

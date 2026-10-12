@@ -78,6 +78,8 @@ export namespace LB::Engine {
     /// </summary>
     class Hud {
     public:
+        static constexpr float GoalWidth = 190.0f;   // the objective's and the bounty's lines, at most (UI units)
+
         static void Draw(Systems::Rendering::RenderingSystem& renderer, const HudModel& hud) {
             using Systems::Rendering::Color;
             using Systems::Rendering::Rectangle;
@@ -194,7 +196,11 @@ export namespace LB::Engine {
             for (std::size_t i = 0; i < hud.goals.size(); ++i) {
                 const auto y = 16 + static_cast<std::int32_t>(hud.allies.size()) * 34 + (hud.savedNotice > 0.0f ? 20 : 0) + static_cast<std::int32_t>(i) * 20;
                 const bool done = i < hud.goalsDone.size() && hud.goalsDone[i];
-                label(done ? hud.goals[i] + " - done" : hud.goals[i], 24, y, 1.5f, done ? display(0.55f, 0.55f, 0.50f) : display(0.95f, 0.88f, 0.60f));
+                const auto text = done ? hud.goals[i] + " - done" : hud.goals[i];
+                // Kept left of the banner (top center): smaller when long
+                float scale = 1.5f;
+                while (scale > 1.1f && renderer.MeasureText(text, scale).width > GoalWidth) scale -= 0.1f;
+                label(text, 24, y, scale, done ? display(0.55f, 0.55f, 0.50f) : display(0.95f, 0.88f, 0.60f));
             }
 
             // Companions: a name and a health bar each (top left; grey while down)

@@ -67,8 +67,8 @@ protected:
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
     EXPECT_EQ(content_.GetSpells().size(), 55u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells
-    EXPECT_EQ(content_.GetWeapons().size(), 29u);   // 12, and tier 2 and 3 of each kind (17)
-    EXPECT_EQ(content_.GetArmour().size(), 41u);   // 15, and tier 2 and 3 of each kind (26)
+    EXPECT_EQ(content_.GetWeapons().size(), 40u);   // 12, tier 2 and 3 of each kind (17), and tier 4 (11)
+    EXPECT_EQ(content_.GetArmour().size(), 55u);   // 15, tier 2 and 3 of each kind (26), and tier 4 (14)
 }
 
 TEST_F(ShippedContentTests, ArcaneBolt_FieldsMapped) {
@@ -311,7 +311,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 12u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies, objectives
+    EXPECT_EQ(result.errors.size(), 13u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies, objectives, lore
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -626,7 +626,7 @@ namespace {
 }
 
 TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
-    ASSERT_EQ(content_.GetEnemies().size(), 15u);   // the crypts' skeletons and golem, the caves' and ruins' creatures, three bosses
+    ASSERT_EQ(content_.GetEnemies().size(), 20u);   // the crypts' skeletons and golem, the caves', ruins', and archive's creatures, four bosses
 
     const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
     ASSERT_NE(minion, nullptr);

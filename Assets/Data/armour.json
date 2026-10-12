@@ -961,5 +961,391 @@
     "affixSlots": 3,
     "value": 103,
     "physicalAR": 1
+  },
+  {
+    "id": "armor_head_astral_cowl_t4",
+    "name": "Astral Cowl",
+    "slot": "Head",
+    "category": "Cloth",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 80
+  },
+  {
+    "id": "armor_chest_astral_robe_t4",
+    "name": "Astral Robe",
+    "slot": "Chest",
+    "category": "Cloth",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Mage",
+      "Cleric"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 2,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 80
+  },
+  {
+    "id": "armor_hands_astral_gloves_t4",
+    "name": "Astral Gloves",
+    "slot": "Hands",
+    "category": "Cloth",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 80
+  },
+  {
+    "id": "armor_feet_astral_slippers_t4",
+    "name": "Astral Slippers",
+    "slot": "Feet",
+    "category": "Cloth",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 80
+  },
+  {
+    "id": "armor_head_nightweave_hood_t4",
+    "name": "Nightweave Hood",
+    "slot": "Head",
+    "category": "Light",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Rogue",
+      "Cleric"
+    ],
+    "physicalAR": 4,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 2,
+    "movementPenalty": 0.02,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 136
+  },
+  {
+    "id": "armor_chest_nightweave_vest_t4",
+    "name": "Nightweave Vest",
+    "slot": "Chest",
+    "category": "Light",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 10,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 5,
+    "movementPenalty": 0.05,
+    "castPenalty": 0.01,
+    "affixSlots": 3,
+    "value": 244
+  },
+  {
+    "id": "armor_hands_nightweave_gloves_t4",
+    "name": "Nightweave Gloves",
+    "slot": "Hands",
+    "category": "Light",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 4,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 2,
+    "movementPenalty": 0.02,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 136
+  },
+  {
+    "id": "armor_feet_nightweave_boots_t4",
+    "name": "Nightweave Boots",
+    "slot": "Feet",
+    "category": "Light",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 4,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 3,
+    "movementPenalty": 0.03,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 136
+  },
+  {
+    "id": "armor_head_runed_coif_t4",
+    "name": "Runed Coif",
+    "slot": "Head",
+    "category": "Medium",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 7,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 4,
+    "movementPenalty": 0.05,
+    "castPenalty": 0.01,
+    "affixSlots": 3,
+    "value": 188
+  },
+  {
+    "id": "armor_chest_runed_hauberk_t4",
+    "name": "Runed Hauberk",
+    "slot": "Chest",
+    "category": "Medium",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 15,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 8,
+    "movementPenalty": 0.1,
+    "castPenalty": 0.03,
+    "affixSlots": 3,
+    "value": 352
+  },
+  {
+    "id": "armor_hands_runed_gauntlets_t4",
+    "name": "Runed Gauntlets",
+    "slot": "Hands",
+    "category": "Medium",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 7,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 6,
+    "movementPenalty": 0.06,
+    "castPenalty": 0.02,
+    "affixSlots": 3,
+    "value": 206
+  },
+  {
+    "id": "armor_head_dragonscale_helm_t4",
+    "name": "Dragonscale Helm",
+    "slot": "Head",
+    "category": "Heavy",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "physicalAR": 10,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 6,
+    "movementPenalty": 0.08,
+    "castPenalty": 0.03,
+    "affixSlots": 3,
+    "value": 244
+  },
+  {
+    "id": "armor_chest_dragonscale_plate_t4",
+    "name": "Dragonscale Plate",
+    "slot": "Chest",
+    "category": "Heavy",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 24,
+    "elementalAR": {
+      "Fire": 4,
+      "Cold": 3,
+      "Lightning": 3,
+      "Acid": 3
+    },
+    "spiritualAR": {
+      "Radiant": 3,
+      "Necrotic": 3,
+      "Psychic": 3
+    },
+    "weight": 12,
+    "movementPenalty": 0.15,
+    "castPenalty": 0.05,
+    "affixSlots": 3,
+    "value": 604
+  },
+  {
+    "id": "armor_shield_aegis_t4",
+    "name": "Aegis",
+    "slot": "OffHand",
+    "category": "Shield",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "armorBonus": 5,
+    "blockChance": 20,
+    "blockValue": 10,
+    "weight": 8,
+    "movementPenalty": 0.05,
+    "affixSlots": 3,
+    "value": 206,
+    "physicalAR": 2
   }
 ]

@@ -98,6 +98,37 @@ export namespace LB::Engine {
     }
 
     /// <summary>
+    /// A floor's book of lore (design-dungeon-and-world.md 8.3): where it lies and its codex entry
+    /// </summary>
+    struct LoreBook {
+        WorldPoint at{};
+        std::string key;                          // lore.json
+        bool read{false};                         // in the codex already
+    };
+
+    /// <summary>
+    /// Text broken into lines of at most `width` characters, at spaces (the codex, a book's banner)
+    /// </summary>
+    [[nodiscard]] inline std::vector<std::string> WrapText(std::string_view text, std::size_t width) {
+        std::vector<std::string> lines;
+        std::string line;
+        std::size_t start = 0;
+        while (start < text.size()) {
+            auto end = text.find(' ', start);
+            if (end == std::string_view::npos) end = text.size();
+            const auto word = text.substr(start, end - start);
+            if (!line.empty() && line.size() + 1 + word.size() > width) {
+                lines.push_back(line);
+                line.clear();
+            }
+            line += (line.empty() ? "" : " ") + std::string(word);
+            start = end + 1;
+        }
+        if (!line.empty()) lines.push_back(line);
+        return lines;
+    }
+
+    /// <summary>
     /// "Werewolves", "Witches", "Orc Raiders": a kind's name for many
     /// </summary>
     [[nodiscard]] inline std::string Plural(std::string_view name) {

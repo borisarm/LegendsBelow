@@ -107,6 +107,10 @@ namespace LB::Engine::EffectDetail {
                          .lifeMin = 3.0f, .lifeMax = 5.0f, .startSize = 0.045f, .endSize = 0.0f, .sizeJitter = 0.3f,
                          .start = { 1.0f, 0.62f, 0.22f }, .middle = { 0.95f, 0.35f, 0.08f }, .end = { 0.5f, 0.1f, 0.02f },
                          .brightness = 1.1f };
+            case ParticleEffect::ArchiveMotes:
+                return { .outwardMin = 0.02f, .outwardMax = 0.08f, .upwardMin = 0.02f, .upwardMax = 0.12f, .buoyancy = 0.01f, .drag = 0.1f,
+                         .lifeMin = 4.0f, .lifeMax = 7.0f, .startSize = 0.05f, .endSize = 0.0f, .sizeJitter = 0.3f,
+                         .start = { 0.65f, 0.75f, 1.0f }, .middle = { 0.55f, 0.55f, 1.0f }, .end = { 0.35f, 0.25f, 0.7f }, .brightness = 0.9f };
             case ParticleEffect::TrapdoorMist:
                 return { .radius = 0.6f, .outwardMin = 0.0f, .outwardMax = 0.1f, .upwardMin = 0.2f, .upwardMax = 0.5f,
                          .buoyancy = 0.1f, .drag = 0.5f, .lifeMin = 1.2f, .lifeMax = 2.0f, .startSize = 0.2f, .endSize = 0.45f,

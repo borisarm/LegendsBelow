@@ -1,6 +1,7 @@
 // BalanceTests.cpp - LB.Engine tests: a simple bot plays each class headless through the first
-// tier (three floors and its boss), the second (the caves' creatures and the Golem Warlord), and the
-// third (the ruins' creatures and the Frost Golem) and must reach the resting place below each; it
+// tier (three floors and its boss), the second (the caves' creatures and the Golem Warlord), the
+// third (the ruins' creatures and the Frost Golem), and the fourth (the archive's and the
+// Abomination) and must reach the resting place below each; it
 // reports deaths, potions, and time for balancing. It
 // grows as a player would (attribute points, a path, better finds, a companion and potions from
 // the merchant, the locked gate's treasure). A run is minutes of game time, so these are built
@@ -481,6 +482,39 @@ TEST(BalanceTests, Cleric_ClearsTheThirdTier) {
     const auto report = Play(CharacterClass::Cleric, ThirdRestingPlace, ThirdBudgetMinutes);
     EXPECT_EQ(report.depth, ThirdRestingPlace);
     EXPECT_LE(report.deaths, MostThirdTierDeaths);
+}
+
+// The fourth tier: the archive's creatures and the Abomination, toward the level cap
+namespace {
+    constexpr std::int32_t FourthRestingPlace = 4 * GameEngine::BossFloorInterval + 1;
+    constexpr float FourthBudgetMinutes = 60.0f;
+    // At the last pass: Warrior 0, Mage 36, Rogue 42, Cleric 3 deaths, level 19 or 20 (the cap),
+    // 24 to 47 minutes
+    constexpr std::int32_t MostFourthTierDeaths = 60;
+}
+
+TEST(BalanceTests, Warrior_ClearsTheFourthTier) {
+    const auto report = Play(CharacterClass::Warrior, FourthRestingPlace, FourthBudgetMinutes);
+    EXPECT_EQ(report.depth, FourthRestingPlace);
+    EXPECT_LE(report.deaths, MostFourthTierDeaths);
+}
+
+TEST(BalanceTests, Mage_ClearsTheFourthTier) {
+    const auto report = Play(CharacterClass::Mage, FourthRestingPlace, FourthBudgetMinutes);
+    EXPECT_EQ(report.depth, FourthRestingPlace);
+    EXPECT_LE(report.deaths, MostFourthTierDeaths);
+}
+
+TEST(BalanceTests, Rogue_ClearsTheFourthTier) {
+    const auto report = Play(CharacterClass::Rogue, FourthRestingPlace, FourthBudgetMinutes);
+    EXPECT_EQ(report.depth, FourthRestingPlace);
+    EXPECT_LE(report.deaths, MostFourthTierDeaths);
+}
+
+TEST(BalanceTests, Cleric_ClearsTheFourthTier) {
+    const auto report = Play(CharacterClass::Cleric, FourthRestingPlace, FourthBudgetMinutes);
+    EXPECT_EQ(report.depth, FourthRestingPlace);
+    EXPECT_LE(report.deaths, MostFourthTierDeaths);
 }
 
 #endif // NDEBUG

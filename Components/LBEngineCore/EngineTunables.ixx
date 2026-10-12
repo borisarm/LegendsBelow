@@ -184,12 +184,13 @@ export namespace LB::Engine {
         static constexpr std::string_view BruteEnemy = "enemy_skeleton_golem";
         static constexpr std::string_view BossEnemy = "enemy_necromancer";
         // The bosses of the tiers, in turn (design-dungeon-and-world.md 7.1)
-        static constexpr std::array<std::string_view, 3> BossEnemies = { "enemy_necromancer", "enemy_golem_warlord", "enemy_frost_golem" };
+        static constexpr std::array<std::string_view, 4> BossEnemies = { "enemy_necromancer", "enemy_golem_warlord", "enemy_frost_golem", "enemy_abomination" };
 
         /// <summary>
         /// Who fills a tier's rooms (design-dungeon-and-world.md 5: each theme its inhabitants): the
         /// crypts' skeletons; the caves' werewolves, orcs, and witches; the ruins' vampires,
-        /// tieflings, and black knights (skeletons still shoot in all of them)
+        /// tieflings, and black knights (skeletons shoot in the first three); the archive's shadow
+        /// blades, avian blademasters, thornbow wardens, and lorekeepers
         /// </summary>
         struct Roster {
             std::string_view light;
@@ -198,10 +199,11 @@ export namespace LB::Engine {
             std::string_view caster;
             std::string_view brute;
         };
-        static constexpr std::array<Roster, 3> Rosters{ {
+        static constexpr std::array<Roster, 4> Rosters{ {
             { "enemy_skeleton_minion", "enemy_skeleton_warrior", "enemy_skeleton_rogue", "enemy_skeleton_mage", "enemy_skeleton_golem" },
             { "enemy_werewolf", "enemy_orc_raider", "enemy_skeleton_rogue", "enemy_witch", "enemy_orc_brute" },
             { "enemy_vampire", "enemy_skeleton_warrior", "enemy_skeleton_rogue", "enemy_tiefling", "enemy_black_knight" },
+            { "enemy_shadow_blade", "enemy_avian_blademaster", "enemy_thornbow_warden", "enemy_lorekeeper", "enemy_black_knight" },
         } };
 
         [[nodiscard]] static constexpr const Roster& RosterForDepth(std::int32_t depth) noexcept {
@@ -273,6 +275,10 @@ export namespace LB::Engine {
         static constexpr float RelicReach = 1.0f;
         static constexpr float CaptiveReach = 1.5f;
         static constexpr float ChampionScale = 1.2f;
+        static constexpr double VoiceCooldownSeconds = 1.5;   // a creature cries out when hurt at most this often
+        static constexpr float CageHeightStretch = 2.6f;   // the cage's bars stand this many times their height
+        static constexpr std::string_view LoreBookModel = "book_grey.gltf";
+        static constexpr float LoreReach = 1.3f;                // how near the hero reads a book
         static constexpr float CandleReach = 1.2f;
         static constexpr float InteractRadius = 1.0f;
 
@@ -297,10 +303,11 @@ export namespace LB::Engine {
             float lowest;
             float highest;
         };
-        static constexpr std::array<Atmosphere, 3> Atmospheres{ {
+        static constexpr std::array<Atmosphere, 4> Atmospheres{ {
             { ParticleEffect::CryptDust, 18.0f, 0.3f, 2.6f },
             { ParticleEffect::CaveMist, 6.0f, 0.05f, 0.3f },
             { ParticleEffect::RuinEmbers, 8.0f, 0.1f, 1.2f },
+            { ParticleEffect::ArchiveMotes, 10.0f, 0.4f, 2.4f },
         } };
         static constexpr float AtmosphereHalfExtent = 7.0f;   // tiles around the hero
         static constexpr float HeavyKnockbackTiles = 1.0f;

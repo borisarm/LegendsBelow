@@ -1,5 +1,6 @@
 // ObjectivesTests.cpp - LB.Engine tests: each floor's objective (a named champion, a relic, a
-// captive, every room cleared), its reward, and the merchant's bounties
+// captive, every room cleared), its reward, the merchant's bounties, and the books of lore and
+// the codex
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -184,4 +185,57 @@ TEST(BountyTests, TheObjectiveAndTheBounty_KeptInSaves) {
     EXPECT_EQ(engine.GetBounty().enemyKey, key);
     EXPECT_EQ(engine.GetBounty().killed, 1);
     EXPECT_EQ(engine.GetObjective().kind != ObjectiveKind::None, true);
+}
+
+TEST(LoreTests, AFloorsBook_JoinsTheCodex_AndIsKept) {
+    TempSaveDir dir;
+    auto options = Options(CombatSeed);
+    options.saveDirectory = dir.Utf8();
+    std::string key;
+    {
+        GameEngine engine;
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, options));
+        ASSERT_TRUE(engine.GetLoreBook().has_value());
+        key = engine.GetLoreBook()->key;
+        const auto* entry = engine.GetContent()->FindLore(key);
+        ASSERT_NE(entry, nullptr);
+        EXPECT_EQ(entry->tier, 1);   // the crypts' pages on the first floors
+        EXPECT_FALSE(engine.GetLoreBook()->read);
+
+        engine.EnterFloorPosition(engine.GetLoreBook()->at);
+        TapKey(engine, Keys::FromChar('F'));
+        engine.Tick(OneSixtieth);
+
+        EXPECT_TRUE(engine.GetLoreBook()->read);
+        EXPECT_TRUE(engine.GetLegacy().lore.contains(key));
+        ASSERT_NE(engine.GetFanfare().Current(), nullptr);
+        EXPECT_EQ(engine.GetFanfare().Current()->title, entry->title);
+        engine.EnterFloor(4);   // a resting place: no book
+        EXPECT_FALSE(engine.GetLoreBook().has_value());
+    }
+    GameEngine engine;   // a later run: the page stays in the codex
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, options));
+    EXPECT_TRUE(engine.GetLegacy().lore.contains(key));
+}
+
+TEST(LoreTests, TheCodexPage_ListsWhatWasFound) {
+    TempSaveDir dir;
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(),
+        .titleScreen = true, .randomSeed = CombatSeed, .dungeon = true }));
+    engine.Tick(OneSixtieth);
+    for (int i = 0; i < 12 && !(engine.GetMenu().Selected() && engine.GetMenu().Selected()->text == "Codex"); ++i) {
+        TapKey(engine, Keys::Down);
+        engine.Tick(OneSixtieth);
+    }
+    ASSERT_EQ(engine.GetMenu().Selected()->text, "Codex");
+    TapKey(engine, Keys::Enter);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Codex);
+    const auto drawn = [&](std::string_view text) {
+        return std::ranges::any_of(engine.GetRendering().GetQueuedText(), [&](const auto& t) { return t.text.find(text) != std::string::npos; });
+    };
+    EXPECT_TRUE(drawn(std::format("Pages found: 0 of {}", engine.GetContent()->GetLore().size())));
+    EXPECT_TRUE(drawn("???"));
 }

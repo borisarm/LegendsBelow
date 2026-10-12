@@ -1,5 +1,5 @@
 // MenuTests.cpp - LB.Engine tests: the menu model and the title, pause, options, and credits pages,
-// and the Controls page (remapping)
+// the Controls page (remapping), pausing when the game is left, and the screen margin
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -466,4 +466,93 @@ TEST(GameEngineMenuTests, Controls_ResetToTheDefaults) {
     Press(engine, Keys::Enter);
 
     EXPECT_EQ(ControlRow(engine, "Drink a potion")->keyboard, "R");
+}
+
+namespace {
+    void InitializeInPlay(GameEngine& engine, const std::string& saveDirectory = {}) {
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = saveDirectory, .contentDirectory = ShippedContentDirectory(),
+            .spawnEnemies = false, .randomSeed = 7u, .dungeon = true }));
+        engine.Tick(OneSixtieth);
+    }
+}
+
+TEST(InterruptionTests, LeavingTheGame_PausesTheRun) {
+    GameEngine engine;
+    InitializeInPlay(engine);
+    ASSERT_FALSE(engine.GetMenu().IsOpen());
+
+    engine.OnDeactivated();
+
+    EXPECT_TRUE(engine.GetMenu().IsOpen());
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Pause);
+}
+
+TEST(InterruptionTests, SuspendingAndAControllerUnplugged_PauseTheRunToo) {
+    GameEngine suspended;
+    InitializeInPlay(suspended);
+    suspended.OnSuspending();
+    EXPECT_EQ(suspended.GetMenu().Page(), MenuPage::Pause);
+
+    GameEngine engine;
+    InitializeInPlay(engine);
+    engine.OnGamepadState(0, PadWith(0));   // there
+    engine.Tick(OneSixtieth);
+    ASSERT_FALSE(engine.GetMenu().IsOpen());
+    engine.OnGamepadState(0, GamepadState{});   // gone
+    engine.Tick(OneSixtieth);
+    EXPECT_TRUE(engine.GetMenu().IsOpen());
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Pause);
+}
+
+TEST(InterruptionTests, BehindTheTitle_NothingToPause) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+    engine.OnDeactivated();
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Title);
+}
+
+TEST(ScreenMarginTests, TheMargin_ShrinksTheLayout_AndIsKept) {
+    TempSaveDir dir;
+    {
+        GameEngine engine;
+        InitializeInPlay(engine, dir.Utf8());
+        std::int32_t width = 0, height = 0;
+        engine.GetRendering().GetUiSize(width, height);
+        EXPECT_FLOAT_EQ(engine.GetUiSafeArea(), 1.0f);
+
+        engine.SetUiSafeArea(0.9f);
+        engine.Tick(OneSixtieth);
+
+        EXPECT_FLOAT_EQ(engine.GetRendering().GetUiSafeArea(), 0.9f);
+        std::int32_t narrow = 0, low = 0;
+        engine.GetRendering().GetUiSize(narrow, low);
+        EXPECT_LE(narrow, width);   // the layout fits inside the margins (its scale shrinks with them)
+        EXPECT_GT(engine.GetRendering().UiOffsetX(), 0.0f);
+    }
+    GameEngine engine;   // a later start: kept
+    InitializeInPlay(engine, dir.Utf8());
+    EXPECT_NEAR(engine.GetUiSafeArea(), 0.9f, 1e-4f);
+}
+
+TEST(ScreenMarginTests, TheOptionsPage_SetsIt) {
+    GameEngine engine;
+    InitializeWithTitle(engine);
+    Choose(engine, "Options");
+    Select(engine, "Screen margin");
+    EXPECT_EQ(engine.GetMenu().Selected()->value, "0%");
+
+    Press(engine, Keys::Right);
+    Press(engine, Keys::Right);
+
+    EXPECT_EQ(engine.GetMenu().Selected()->value, "2%");
+    EXPECT_NEAR(engine.GetUiSafeArea(), 0.96f, 1e-4f);
+}
+
+TEST(GameEngineMenuTests, OnAConsole_TheTitleHasNoQuit) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .titleScreen = true,
+        .randomSeed = 7u, .dungeon = true, .canQuit = false }));
+    engine.Tick(OneSixtieth);
+    EXPECT_FALSE(HasItem(engine, "Quit", true));
+    EXPECT_TRUE(HasItem(engine, "Credits", true));
 }

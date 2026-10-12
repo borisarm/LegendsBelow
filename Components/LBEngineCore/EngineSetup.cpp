@@ -103,8 +103,11 @@ namespace LB::Engine {
         session_->lootRoller = options_.randomSeed ? LootRoller(*options_.randomSeed + 1) : LootRoller();
         session_->spawnEnemies = options_.spawnEnemies;
         GiveStartingKit();
+        if (options_.startLevel > 1 && session_->playerId) {
+            GrantExperience(session_->characterService.GetExperienceForLevel(options_.startLevel));
+        }
         if (session_->dungeonMode && session_->playerId) {
-            StartFloor(1);
+            StartFloor(std::max(1, options_.startDepth));
         }
         StartEncounter();
         StartMusic();
@@ -114,7 +117,7 @@ namespace LB::Engine {
     void GameEngine::Shutdown() {
         if (initialized_) {
             AutoSave();   // closing the game keeps the run for Continue
-            SaveVolumePreferences();
+            SaveOptions();
 
             inputSystem_.Shutdown();
             audioSystem_.Shutdown();
@@ -264,9 +267,9 @@ namespace LB::Engine {
                 if (!file->empty() && !assets_.characterModels.contains(*file)) assets_.characterModels[*file] = load(*file);
             }
         }
-        // The floors' objectives: the relics, the captive, and their cage
+        // The floors' objectives: the relics, the captive, and their cage; the books of lore
         const auto& objectives = content_->GetObjectives();
-        std::vector<std::string> objectiveModels{ objectives.captiveModel, objectives.cageModel };
+        std::vector<std::string> objectiveModels{ objectives.captiveModel, objectives.cageModel, std::string(LoreBookModel) };
         for (const auto& relic : objectives.relics) objectiveModels.push_back(relic.model);
         for (const auto& file : objectiveModels) {
             if (!file.empty() && !assets_.characterModels.contains(file)) assets_.characterModels[file] = load(file);
@@ -466,14 +469,16 @@ namespace LB::Engine {
         audioSystem_.SetChannelVolume(AudioChannel::Master, prefs.masterVolume);
         audioSystem_.SetChannelVolume(AudioChannel::Music, prefs.musicVolume);
         audioSystem_.SetChannelVolume(AudioChannel::SoundEffects, prefs.sfxVolume);
+        uiSafeArea_ = std::clamp(prefs.uiSafeArea, Systems::Rendering::RenderingSystem::MinUiSafeArea, 1.0f);
     }
 
-    void GameEngine::SaveVolumePreferences() {
+    void GameEngine::SaveOptions() {
         using Systems::Audio::AudioChannel;
         auto prefs = persistenceSystem_.LoadPreferences();
         prefs.masterVolume = audioSystem_.GetChannelVolume(AudioChannel::Master);
         prefs.musicVolume = audioSystem_.GetChannelVolume(AudioChannel::Music);
         prefs.sfxVolume = audioSystem_.GetChannelVolume(AudioChannel::SoundEffects);
+        prefs.uiSafeArea = uiSafeArea_;
         persistenceSystem_.SavePreferences(prefs);
     }
 

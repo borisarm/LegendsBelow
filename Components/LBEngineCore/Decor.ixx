@@ -20,10 +20,11 @@ export namespace LB::Engine {
         std::string_view corner;
     };
 
-    inline constexpr std::array<FloorTheme, 3> FloorThemes{ {
+    inline constexpr std::array<FloorTheme, 4> FloorThemes{ {
         { "Crypts", "tileBrickB_small.glb", "tileBrickA_small.glb", "wall.glb", "pillar.glb" },
         { "Caves", "floor_dirt_small_A.gltf", "floor_dirt_small_weeds.gltf", "wall_cracked.gltf", "pillar.glb" },
         { "Ruins", "floor_tile_small_broken_A.gltf", "floor_tile_small_weeds_A.gltf", "wall_broken.gltf", "pillar.glb" },
+        { "Archive", "floor_wood_small_dark.gltf", "floor_wood_small.gltf", "wall_inset_shelves_decoratedA.gltf", "pillar.glb" },
     } };
 
     /// <summary>
@@ -89,7 +90,8 @@ export namespace LB::Engine {
             "crate_large_decorated.gltf", "trunk_large_A.gltf", "coin_stack_large.gltf", "table_medium_decorated_A.gltf",
             "rocks.gltf", "rubble_half.gltf", "floor_tile_big_spikes.gltf", "floor_tile_big_grate.gltf",
             "floor_dirt_small_A.gltf", "floor_dirt_small_weeds.gltf", "floor_tile_small_broken_A.gltf" };
-        static constexpr std::array<std::string_view, 3> MoreModels = { "floor_tile_small_weeds_A.gltf", "wall_cracked.gltf", "wall_broken.gltf" };
+        static constexpr std::array<std::string_view, 6> MoreModels = { "floor_tile_small_weeds_A.gltf", "wall_cracked.gltf", "wall_broken.gltf",
+            "floor_wood_small_dark.gltf", "floor_wood_small.gltf", "wall_inset_shelves_decoratedA.gltf" };
         static constexpr std::string_view SpikesModel = "floor_tile_big_spikes.gltf";
         static constexpr std::string_view GrateModel = "floor_tile_big_grate.gltf";
 

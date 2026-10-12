@@ -19,7 +19,11 @@ namespace LB::Engine {
         const auto directory = std::filesystem::path(std::u8string(soundDirectory.begin(), soundDirectory.end()));
         std::vector<std::string> errors;
         for (const auto clip : SoundBank::AllClips()) {
-            const auto result = audioSystem_.LoadClip(std::string(clip), directory / (std::string(clip) + ".ogg"));
+            // Recorded sounds are .ogg, synthesized ones (the voices) .wav
+            auto path = directory / (std::string(clip) + ".ogg");
+            std::error_code missing;   // an unreachable directory: the .ogg's own error is reported
+            if (!std::filesystem::exists(path, missing) && !missing) path = directory / (std::string(clip) + ".wav");
+            const auto result = audioSystem_.LoadClip(std::string(clip), path);
             if (!result.Succeeded()) errors.push_back(result.error);
         }
         for (const auto clip : Ambience::Clips) {
@@ -116,6 +120,15 @@ namespace LB::Engine {
                 if (!enemy) continue;
                 PlaySound(event.result.critical ? GameSound::CriticalHit : GameSound::HitEnemy, enemy->position);
                 if (event.killed) PlaySound(GameSound::EnemyDies, enemy->position);
+                // Its voice: a cry when hurt (not more than one each VoiceCooldownSeconds), and its death
+                if (const auto voice = VoiceSounds(enemy->definition->voice)) {
+                    auto& next = session_->voiceAgain[enemy->id];
+                    if (event.killed) PlaySound(voice->second, enemy->position);
+                    else if (session_->gameTimeSeconds >= next) {
+                        PlaySound(voice->first, enemy->position);
+                        next = session_->gameTimeSeconds + VoiceCooldownSeconds;
+                    }
+                }
             }
             else {
                 PlaySound(GameSound::PlayerHurt, session_->playerPosition);

@@ -1,5 +1,6 @@
 # MakeAmbience.py - Synthesizes the dungeon tiers' ambience loops (Assets/Sounds/ambience_*.wav):
-# a crypt's low drone with distant drips, a cave's dripping water, the wind through ruins.
+# a crypt's low drone with distant drips, a cave's dripping water, the wind through ruins, and the
+# hush of an archive (pages stirring, a faint glassy chime).
 # Made for LegendsBelow and released as CC0. Plain Python (no packages); deterministic.
 #
 #   python Scripts/MakeAmbience.py [output directory, default Assets/Sounds]
@@ -123,6 +124,38 @@ def ruins(rng):
     return normalize(loop(out), 0.6)
 
 
+def archive(rng):
+    count = int((SECONDS + FADE) * RATE)
+    # A hushed hall: soft room tone breathing slowly
+    tone = band_pass(noise(count, rng), [420.0] * count, 0.9)
+    rumble = one_pole(brown(count, rng), 70.0)
+    out = []
+    for i, (t_, r) in enumerate(zip(tone, rumble)):
+        t = i / RATE
+        breath = 0.7 + 0.3 * math.sin(2.0 * math.pi * t / (SECONDS + FADE) * 2.0)
+        out.append(t_ * 0.05 * breath + r * 0.9)
+    # Pages stirring somewhere: short soft bursts of high noise
+    for _ in range(5):
+        start = rng.randrange(0, int(SECONDS * RATE))
+        length = int(rng.uniform(0.15, 0.35) * RATE)
+        rustle = band_pass(noise(length, rng), [3200.0] * length, 1.2)
+        for i, x in enumerate(rustle):
+            if start + i >= count:
+                break
+            envelope = math.sin(math.pi * i / length)
+            out[start + i] += x * 0.05 * envelope
+    # A faint glassy chime now and then (two partials, ringing out)
+    for _ in range(3):
+        start = rng.randrange(int(0.5 * RATE), int(SECONDS * RATE))
+        pitch = rng.choice([660.0, 784.0, 880.0])
+        for i in range(int(2.5 * RATE)):
+            if start + i >= count:
+                break
+            t = i / RATE
+            out[start + i] += 0.035 * math.exp(-t * 2.2) * (math.sin(2.0 * math.pi * pitch * t) + 0.4 * math.sin(2.0 * math.pi * pitch * 2.76 * t))
+    return normalize(loop(out), 0.55)
+
+
 def write(path, samples):
     with wave.open(str(path), 'wb') as file:
         file.setnchannels(1)
@@ -133,6 +166,7 @@ def write(path, samples):
 
 if __name__ == '__main__':
     directory = Path(sys.argv[1] if len(sys.argv) > 1 else 'Assets/Sounds')
-    for name, make, seed in (('ambience_crypts', crypts, 11), ('ambience_caves', caves, 23), ('ambience_ruins', ruins, 37)):
+    for name, make, seed in (('ambience_crypts', crypts, 11), ('ambience_caves', caves, 23), ('ambience_ruins', ruins, 37),
+                             ('ambience_archive', archive, 41)):
         write(directory / f'{name}.wav', make(random.Random(seed)))
         print(f'{name}.wav')

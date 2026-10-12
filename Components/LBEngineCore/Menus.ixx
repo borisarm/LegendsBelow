@@ -22,7 +22,8 @@ export namespace LB::Engine {
         Fallen,      // the hero went down: the run so far, and what next
         SaveSlots,   // Save Game: the slots to save into
         LoadSlots,   // Load Game: the saves to load (autosave, quick save, the slots)
-        Legacy       // the records of every run, and the boons they unlock
+        Legacy,      // the records of every run, and the boons they unlock
+        Codex        // the pages of lore found (lore.json), kept across runs
     };
 
     /// <summary>
@@ -42,6 +43,7 @@ export namespace LB::Engine {
         SaveToSlot,     // the item's slot
         LoadFromSlot,
         Legacy,
+        Codex,
         Credits,
         QuitToTitle,
         Quit,           // leave the game (the host closes the window)
@@ -49,6 +51,7 @@ export namespace LB::Engine {
         MasterVolume,   // left/right change it
         MusicVolume,
         EffectsVolume,
+        ScreenMargin,       // the interface's safe area (left and right)
         PlayWarrior,    // a new game as this class
         PlayMage,
         PlayRogue,
@@ -66,7 +69,8 @@ export namespace LB::Engine {
         std::int32_t slot{-1};   // a save slot (SaveToSlot, LoadFromSlot)
 
         [[nodiscard]] bool IsAdjustable() const noexcept {
-            return command == MenuCommand::MasterVolume || command == MenuCommand::MusicVolume || command == MenuCommand::EffectsVolume;
+            return command == MenuCommand::MasterVolume || command == MenuCommand::MusicVolume || command == MenuCommand::EffectsVolume
+                || command == MenuCommand::ScreenMargin;
         }
     };
 

@@ -161,6 +161,7 @@ The shell → engine → renderer split from `modularized-game-architecture.md` 
 - [x] Each tier its inhabitants (`GameEngine::Rosters`: the caves' and ruins' creatures, the Frost Golem), remappable controls, the key light's shadow map (`:ShadowMap`), knockback, each tier's air, animated gates, walls, and chest lids
 - [x] Item levels, attribute and hit point affixes (`CharacterService::SetGear`), legendary powers, item icons
 - [x] Save slots and the legacy: records across runs, boons for new heroes (`:Legacy`, the profile)
+- [x] A fourth tier (the Archive: its look, creatures, boss, gear), the codex (lore.json, `LoreBook`, kept with the legacy), creatures' voices, playtest launches (`--class --depth --level`), Xbox readiness (pausing on interruption, the screen margin, no Quit on a console, `PackageLayout.ps1` checks and packages)
 - [x] Floor objectives and the merchant's bounties (`:Objectives`, objectives.json); each tier its gear (`ForTier`); coverage in CI (OpenCppCoverage); the tunables in `:EngineTunables`, the character screen in `CharacterScreens.cpp`
 
 ### 4.2 Repositories

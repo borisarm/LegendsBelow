@@ -131,6 +131,7 @@ namespace LB::Engine {
         }
         session_->decor.Build(session_->world, depth, FloorSeed(session_->baseSeed, depth) ^ 0x5EEDu, session_->restFloor);
         SetUpObjective(depth);
+        PlaceLoreBook(depth);
         if (session_->restFloor && !session_->bounty.Active()) PostBounty(depth);
         if (assets_.models.loaded) {
             const auto& theme = ThemeForDepth(depth);
@@ -280,6 +281,10 @@ namespace LB::Engine {
         const auto& layout = session_->world.Layout();
         UpdateFeatures();
         UpdateObjective();
+        if (session_->book && Distance(session_->book->at, session_->playerPosition) <= LoreReach
+            && inputSystem_.IsActionTriggered(std::string(InteractAction))) {
+            ReadLoreBook();
+        }
         for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
             const auto type = layout.rooms[i].type;
             const auto room = static_cast<std::int32_t>(i);
@@ -344,6 +349,13 @@ namespace LB::Engine {
         }
         DrawFeatures(tint);
         DrawObjective(tint);
+        if (session_->book && assets_.models.loaded && GetViewArea().Contains(session_->book->at, 1.0f)) {
+            const auto& book = *session_->book;
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(LoreBookModel), { book.at.x, 0.0f, book.at.y }, 0.6f, ModelScale * 2.0f, tint });
+            if (!book.read) {   // unread: a pale glow
+                renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ { book.at.x, 0.3f, book.at.y }, 0.4f, { 0.6f, 0.75f, 1.0f, 0.5f }, true });
+            }
+        }
         draw(TrapdoorModel, session_->world.RoomCenter(layout.exitRoom), { 0.10f, 0.08f, 0.06f, 1.0f });
     }
 
@@ -857,14 +869,95 @@ namespace LB::Engine {
                 if (const auto idle = renderingSystem_.FindAnimation("Idle_B")) captive.animation.current = { *idle, static_cast<float>(session_->gameTimeSeconds), true };
                 renderingSystem_.DrawModel(captive);
             }
-            // The cage: a side of bars on each of the four sides
+            // The cage: a side of bars on each of the four sides, stretched to stand over the captive
             constexpr float half = 0.75f;
+            Systems::Rendering::Matrix4 tall;
+            tall.m[5] = CageHeightStretch;
             for (const auto [dx, dz, yaw] : { std::tuple{ 0.0f, half, 0.0f }, std::tuple{ 0.0f, -half, 0.0f },
                                               std::tuple{ half, 0.0f, 1.5708f }, std::tuple{ -half, 0.0f, 1.5708f } }) {
-                renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(settings.cageModel), { at.x + dx, 0.0f, at.z + dz }, yaw,
-                    ModelScale * 0.75f, tint });
+                Systems::Rendering::ModelRenderData side{ ModelOf(settings.cageModel), { at.x + dx, 0.0f, at.z + dz }, yaw, ModelScale * 0.75f, tint };
+                side.transform = tall;
+                renderingSystem_.DrawModel(side);
             }
         }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Books of lore and the codex (design-dungeon-and-world.md 8.3; lore.json)
+    // ------------------------------------------------------------------------------------------
+
+    // One book a floor, in a room away from the entrance and the objective, its entry one of its
+    // tier's (by the floor's seed: the same floor, the same book)
+    void GameEngine::PlaceLoreBook(std::int32_t depth) {
+        session_->book.reset();
+        if (session_->restFloor || !session_->dungeonMode) return;
+        const auto tier = static_cast<std::int32_t>(ThemeIndexForDepth(depth)) + 1;
+        std::vector<const Content::LoreDefinition*> entries;
+        for (const auto& lore : content_->GetLore()) {
+            if (lore.tier == tier) entries.push_back(&lore);
+        }
+        if (entries.empty()) return;
+        std::mt19937 rng(FloorSeed(session_->baseSeed, depth) ^ 0x10EBu);
+        const auto& layout = session_->world.Layout();
+        std::vector<std::int32_t> rooms;
+        for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
+            const auto index = static_cast<std::int32_t>(i);
+            const auto type = layout.rooms[i].type;
+            if (index == layout.entranceRoom || index == session_->objective.room || type == RoomType::Puzzle) continue;
+            if (std::ranges::any_of(session_->features.Gates(), [&](const Gate& gate) { return gate.room == index; })) continue;
+            rooms.push_back(index);
+        }
+        if (rooms.empty()) return;
+        const auto room = rooms[rng() % rooms.size()];
+        const auto* entry = entries[rng() % entries.size()];
+        const auto center = session_->world.RoomCenter(room);
+        for (const auto [dx, dy] : { std::pair{ -1.4f, 1.4f }, std::pair{ 1.4f, -1.4f }, std::pair{ -1.4f, -1.4f }, std::pair{ 1.4f, 1.4f } }) {
+            const WorldPoint at{ center.x + dx, center.y + dy };
+            if (session_->world.CircleFits(at, 0.5f)) {
+                session_->book = LoreBook{ at, entry->key, legacy_.lore.contains(entry->key) };
+                return;
+            }
+        }
+    }
+
+    bool GameEngine::ReadLoreBook() {
+        if (!session_->book) return false;
+        const auto* entry = content_->FindLore(session_->book->key);
+        if (!entry) return false;
+        const bool first = !legacy_.lore.contains(entry->key);
+        session_->book->read = true;
+        if (first) {
+            auto next = legacy_;
+            next.lore.insert(entry->key);
+            legacy_ = next;
+            SaveLegacy();
+        }
+        session_->fanfare.Show(FanfareCard{ entry->title, first ? "A new page for the codex" : "From the codex", WrapText(entry->text, 52),
+                                            { 0.70f, 0.80f, 1.0f } });
+        PlaySound(GameSound::ScreenOpen, session_->book->at);
+        return true;
+    }
+
+    // The codex: how much is found, then each tier's pages (the unread as "???")
+    std::vector<std::string> GameEngine::CodexLines() const {
+        const auto& lore = content_->GetLore();
+        const auto found = std::ranges::count_if(lore, [&](const Content::LoreDefinition& entry) { return legacy_.lore.contains(entry.key); });
+        std::vector<std::string> lines{ std::format("Pages found: {} of {}", found, lore.size()), "" };
+        std::int32_t tier = 0;
+        for (const auto& entry : lore) {
+            if (entry.tier != tier) {
+                tier = entry.tier;
+                const auto& theme = FloorThemes[static_cast<std::size_t>(tier - 1) % FloorThemes.size()];
+                lines.push_back(std::format("- {} -", theme.name));
+            }
+            if (!legacy_.lore.contains(entry.key)) {
+                lines.push_back("???");
+                continue;
+            }
+            lines.push_back(entry.title);
+            for (auto& line : WrapText(entry.text, 56)) lines.push_back("  " + line);
+        }
+        return lines;
     }
 
 } // namespace LB::Engine

@@ -12,7 +12,7 @@ TEST(SoundBankTests, EverySound_HasClips_AllShipped) {
     }
     const auto directory = std::filesystem::path(ShippedSoundDirectory());
     for (const auto clip : SoundBank::AllClips()) {
-        EXPECT_TRUE(std::filesystem::exists(directory / (std::string(clip) + ".ogg"))) << clip;
+        EXPECT_TRUE(std::filesystem::exists(directory / (std::string(clip) + ".ogg")) || std::filesystem::exists(directory / (std::string(clip) + ".wav"))) << clip;
     }
 }
 
@@ -218,4 +218,17 @@ TEST(GameEngineMusicTests, MissingMusic_StopsStartup) {
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{
         .contentDirectory = ShippedContentDirectory(), .musicDirectory = "Z:/no/music" }));
     EXPECT_NE(engine.GetInitializationError().find("Music in"), std::string::npos);
+}
+
+TEST(GameEngineSoundTests, ACreature_CriesOut_AndDies_InItsVoice) {
+    GameEngine engine;
+    InitializeWithSounds(engine);
+    const auto id = *engine.SpawnEnemy("enemy_werewolf", { 1.0f, 0.0f });   // a beast's voice
+
+    KillWithSword(engine, id);
+
+    const auto played = engine.GetAudio().TakePlayedClips();
+    EXPECT_EQ(CountPlayed(played, GameSound::VoiceBeastDeath), 1u);
+    EXPECT_FALSE(Played(played, GameSound::VoiceGiantDeath));
+    EXPECT_FALSE(VoiceSounds("").has_value());   // skeletons only clatter
 }

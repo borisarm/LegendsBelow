@@ -625,6 +625,10 @@ namespace LB::Content {
             reader.ReadFloat("lungeCooldownSeconds", enemy.lungeCooldownSeconds, false);
             reader.ReadFloat("lifeSteal", enemy.lifeSteal, false);
             reader.ReadBool("rises", enemy.rises);
+            reader.ReadString("voice", enemy.voice, false);
+            if (!enemy.voice.empty() && enemy.voice != "beast" && enemy.voice != "brute" && enemy.voice != "shriek" && enemy.voice != "giant") {
+                reader.Error("'voice' must be beast, brute, shriek, or giant");
+            }
             if (enemy.lungeRange < 0.0f || enemy.lungeSpeed <= 0.0f) reader.Error("'lungeRange' must not be negative and 'lungeSpeed' must be positive");
             if (enemy.lifeSteal < 0.0f || enemy.lifeSteal > 1.0f) reader.Error("'lifeSteal' must be in [0, 1]");
             reader.ReadBool("boss", enemy.boss);
@@ -677,6 +681,16 @@ namespace LB::Content {
                 reader.Error("'keepAwayRange' must be between 0 and 'attackRange'");
             }
             return enemy;
+        }
+
+        LoreDefinition ReadLore(EntryReader& reader) {
+            LoreDefinition lore;
+            reader.ReadString("id", lore.key, true);
+            reader.ReadInt("tier", lore.tier, true);
+            reader.ReadString("title", lore.title, true);
+            reader.ReadString("text", lore.text, true);
+            if (lore.tier < 1) reader.Error("'tier' must be at least 1");
+            return lore;
         }
 
         // objectives.json: one object of settings
@@ -1051,10 +1065,10 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[12];
-        constexpr const char* files[12] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
-                                            "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json" };
-        for (int i = 0; i < 12; ++i) {
+        String texts[13];
+        constexpr const char* files[13] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
+                                            "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json" };
+        for (int i = 0; i < 13; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -1063,14 +1077,14 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10], texts[11]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10], texts[11], texts[12]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                                     const String& classesJson, const String& enemiesJson,
                                                     const String& consumablesJson, const String& lootJson, const String& statusesJson,
                                                     const String& raritiesJson, const String& affixesJson, const String& alliesJson,
-                                                    const String& objectivesJson) {
+                                                    const String& objectivesJson, const String& loreJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -1085,6 +1099,7 @@ namespace LB::Content {
         auto affixes = ReadArray<AffixDefinition>(affixesJson, "affixes.json", ReadAffix, result.errors);
         auto allies = ReadArray<AllyDefinition>(alliesJson, "allies.json", ReadAlly, result.errors);
         auto objectives = objectivesJson.empty() ? ObjectiveSettings{} : ReadObjectives(objectivesJson, result.errors);
+        auto lore = ReadArray<LoreDefinition>(loreJson, "lore.json", ReadLore, result.errors);
         if (!rarities.empty() && std::ranges::none_of(rarities, [](const RarityDefinition& r) { return r.weight > 0.0f; })) {
             result.errors.push_back("rarities.json: at least one rarity needs a positive 'weight'");
         }
@@ -1116,6 +1131,7 @@ namespace LB::Content {
         affixes_ = std::move(affixes);
         allies_ = std::move(allies);
         objectives_ = std::move(objectives);
+        lore_ = std::move(lore);
         return result;
     }
 

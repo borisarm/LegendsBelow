@@ -72,22 +72,26 @@ namespace LB::Engine {
         };
         using Systems::Audio::AudioChannel;
         switch (menu_.Page()) {
-        case MenuPage::Title:
-            return {
+        case MenuPage::Title: {
+            std::vector<MenuItem> items{
                 { "New Game", MenuCommand::NewGame },
                 { "Continue", MenuCommand::Continue, saved },
                 { "Load Game", MenuCommand::OpenLoadSlots, saved },
                 { "Legacy", MenuCommand::Legacy },
+                { "Codex", MenuCommand::Codex },
                 { "Options", MenuCommand::Options },
                 { "Controls", MenuCommand::Controls },
                 { "Credits", MenuCommand::Credits },
-                { "Quit", MenuCommand::Quit },
             };
+            if (options_.canQuit) items.push_back({ "Quit", MenuCommand::Quit });   // a console's games never quit
+            return items;
+        }
         case MenuPage::Pause:
             return {
                 { "Resume", MenuCommand::Resume },
                 { "Save Game", MenuCommand::OpenSaveSlots },
                 { "Load Game", MenuCommand::OpenLoadSlots, saved },
+                { "Codex", MenuCommand::Codex },
                 { "Options", MenuCommand::Options },
                 { "Controls", MenuCommand::Controls },
                 { "Credits", MenuCommand::Credits },
@@ -98,11 +102,13 @@ namespace LB::Engine {
                 { "Master volume", MenuCommand::MasterVolume, true, percent(AudioChannel::Master) },
                 { "Music volume", MenuCommand::MusicVolume, true, percent(AudioChannel::Music) },
                 { "Effects volume", MenuCommand::EffectsVolume, true, percent(AudioChannel::SoundEffects) },
+                { "Screen margin", MenuCommand::ScreenMargin, true, std::format("{}%", static_cast<int>(std::lround((1.0f - uiSafeArea_) * 50.0f))) },
                 { "Back", MenuCommand::Back },
             };
         case MenuPage::Credits:
         case MenuPage::Controls:
         case MenuPage::Legacy:
+        case MenuPage::Codex:
             return { { "Back", MenuCommand::Back } };
         case MenuPage::SaveSlots:
         case MenuPage::LoadSlots: {
@@ -166,6 +172,9 @@ namespace LB::Engine {
             if (menu_.Page() == MenuPage::Credits) {
                 menu_.Scroll(vertical * 3, credits_.size(), MenuView::CreditLinesShown);
             }
+            else if (menu_.Page() == MenuPage::Codex) {
+                menu_.Scroll(vertical * 3, CodexLines().size(), MenuView::CreditLinesShown);
+            }
             else if (menu_.Step(vertical)) {
                 PlaySound(GameSound::MenuMove);
             }
@@ -187,11 +196,17 @@ namespace LB::Engine {
     // A volume a tenth up or down, kept in the preferences at once
     void GameEngine::AdjustMenuItem(MenuCommand command, int direction) {
         using Systems::Audio::AudioChannel;
+        if (command == MenuCommand::ScreenMargin) {   // a margin of 0 to 10% of each side, by 1%
+            SetUiSafeArea(uiSafeArea_ - 0.02f * static_cast<float>(direction));
+            PlaySound(GameSound::MenuMove);
+            menu_.SetItems(BuildMenuItems());
+            return;
+        }
         const auto channel = command == MenuCommand::MusicVolume ? AudioChannel::Music
                            : command == MenuCommand::EffectsVolume ? AudioChannel::SoundEffects : AudioChannel::Master;
         const float tenths = std::round(audioSystem_.GetChannelVolume(channel) * 10.0f) + static_cast<float>(direction);
         audioSystem_.SetChannelVolume(channel, std::clamp(tenths, 0.0f, 10.0f) / 10.0f);
-        SaveVolumePreferences();
+        SaveOptions();
         PlaySound(GameSound::MenuMove);
         menu_.SetItems(BuildMenuItems());
     }
@@ -252,6 +267,9 @@ namespace LB::Engine {
         case MenuCommand::Legacy:
             menu_.Push(MenuPage::Legacy);
             break;
+        case MenuCommand::Codex:
+            menu_.Push(MenuPage::Codex);
+            break;
         case MenuCommand::SaveToSlot:
             menu_.SetMessage(slot >= 0 && SaveGame(slot) ? "Game saved" : "The game could not be saved");
             break;
@@ -296,7 +314,7 @@ namespace LB::Engine {
                       : menu_.Page() == MenuPage::Credits ? "CREDITS" : menu_.Page() == MenuPage::ChooseClass ? "CHOOSE YOUR HERO"
                       : menu_.Page() == MenuPage::Controls ? "CONTROLS" : menu_.Page() == MenuPage::Fallen ? "YOU HAVE FALLEN"
                       : menu_.Page() == MenuPage::SaveSlots ? "SAVE GAME" : menu_.Page() == MenuPage::LoadSlots ? "LOAD GAME"
-                      : menu_.Page() == MenuPage::Legacy ? "LEGACY" : "";
+                      : menu_.Page() == MenuPage::Legacy ? "LEGACY" : menu_.Page() == MenuPage::Codex ? "CODEX" : "";
         model.items = menu_.Items();
         model.cursor = menu_.Cursor();
         model.message = menu_.Message();
@@ -313,6 +331,10 @@ namespace LB::Engine {
         }
         if (menu_.Page() == MenuPage::Fallen) model.lines = FallenSummary();
         if (menu_.Page() == MenuPage::Legacy) model.lines = LegacyLines();
+        if (menu_.Page() == MenuPage::Codex) {
+            model.lines = CodexLines();
+            model.firstLine = menu_.ScrollPosition();
+        }
         MenuView::Draw(renderingSystem_, model);
     }
 
@@ -683,6 +705,22 @@ namespace LB::Engine {
             return true;
         }
         return false;
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Away from the game, and the TV's edges
+    // ------------------------------------------------------------------------------------------
+
+    // The window left, the console suspending, the controller gone: a run in play waits in the
+    // pause menu (not behind the title, not a hero already fallen)
+    void GameEngine::PauseForInterruption() {
+        if (!initialized_ || !session_->playing || menu_.IsOpen() || !IsPlayerAlive()) return;
+        OpenMenu(MenuPage::Pause);
+    }
+
+    void GameEngine::SetUiSafeArea(float fraction) {
+        uiSafeArea_ = std::clamp(std::round(fraction * 50.0f) / 50.0f, Systems::Rendering::RenderingSystem::MinUiSafeArea, 1.0f);
+        SaveOptions();
     }
 
 } // namespace LB::Engine

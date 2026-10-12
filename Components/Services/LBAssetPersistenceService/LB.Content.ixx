@@ -317,6 +317,7 @@ export namespace LB::Content {
         float lungeCooldownSeconds{6.0f};
         float lifeSteal{0.0f};                        // its blows heal it by this share of the damage
         bool rises{true};                             // rises from the ground (the undead); else it stands ready
+        String voice;                                 // "beast", "brute", "shriek", or "giant" (Scripts/MakeVoices.py); empty: bones only clatter
 
         // Movement and awareness
         float movementSpeed{3.0f};                    // tiles per second
@@ -344,6 +345,18 @@ export namespace LB::Content {
     /// A companion who fights beside the hero (Assets/Data/allies.json): hired from the merchant,
     /// growing with the hero's level (design-character-system.md 7, companions)
     /// </summary>
+    /// <summary>
+    /// A codex entry (lore.json, design-dungeon-and-world.md 8.3): a page found on a floor of its
+    /// tier, kept across runs once read
+    /// </summary>
+    struct LoreDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "lore_crypts_first_burial"
+        std::int32_t tier{1};                         // the dungeon tier whose floors hold it (1: the crypts)
+        String title;
+        String text;
+    };
+
     /// <summary>
     /// A relic a floor's objective asks for (objectives.json "relics")
     /// </summary>
@@ -539,7 +552,7 @@ export namespace LB::Content {
     public:
         /// <summary>
         /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json,
-        /// loot.json, statuses.json, rarities.json, affixes.json, allies.json, and objectives.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// loot.json, statuses.json, rarities.json, affixes.json, allies.json, objectives.json, and lore.json from a directory (UTF-8 path). On any error the database is left empty and
         /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
@@ -554,7 +567,7 @@ export namespace LB::Content {
                                        const String& classesJson = "[]", const String& enemiesJson = "[]",
                                        const String& consumablesJson = "[]", const String& lootJson = "[]",
                                        const String& statusesJson = "[]", const String& raritiesJson = "[]", const String& affixesJson = "[]",
-                                       const String& alliesJson = "[]", const String& objectivesJson = "");
+                                       const String& alliesJson = "[]", const String& objectivesJson = "", const String& loreJson = "[]");
 
         void Clear() {
             spells_.clear();
@@ -569,6 +582,7 @@ export namespace LB::Content {
             affixes_.clear();
             allies_.clear();
             objectives_ = {};
+            lore_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
@@ -590,6 +604,8 @@ export namespace LB::Content {
         [[nodiscard]] const AffixDefinition* FindAffix(std::string_view key) const { return FindByKey(affixes_, key); }
         [[nodiscard]] const std::vector<AllyDefinition>& GetAllies() const noexcept { return allies_; }
         [[nodiscard]] const ObjectiveSettings& GetObjectives() const noexcept { return objectives_; }
+        [[nodiscard]] const std::vector<LoreDefinition>& GetLore() const noexcept { return lore_; }
+        [[nodiscard]] const LoreDefinition* FindLore(std::string_view key) const { return FindByKey(lore_, key); }
         [[nodiscard]] const AllyDefinition* FindAlly(std::string_view key) const { return FindByKey(allies_, key); }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
@@ -658,6 +674,7 @@ export namespace LB::Content {
         std::vector<AffixDefinition> affixes_;
         std::vector<AllyDefinition> allies_;
         ObjectiveSettings objectives_;
+        std::vector<LoreDefinition> lore_;
     };
 
 } // namespace LB::Content

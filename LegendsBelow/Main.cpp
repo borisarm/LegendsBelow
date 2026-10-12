@@ -116,7 +116,6 @@ namespace
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
-    UNREFERENCED_PARAMETER(lpCmdLine);
 
     if (!DirectX::XMVerifyCPUSupport())
         return 1;
@@ -177,9 +176,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         if (!hwnd)
             return 1;
 
-        ShowWindow(hwnd, nCmdShow);
-        // TODO: Change nCmdShow to SW_SHOWMAXIMIZED to default to fullscreen.
-
+        // Shown only once the game has started: content that fails to load leaves no empty window
         GetClientRect(hwnd, &rc);
 
         LB::Engine::EngineOptions options;
@@ -195,14 +192,39 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
         options.hitStop = true;
         options.deathScreen = true;
         options.autoSave = true;
+#if defined(_GAMING_XBOX)
+        options.canQuit = false;
+#endif
+
+        // Playtests: "--class rogue --depth 3 --level 4" starts a run there, past the title
+        {
+            std::wistringstream arguments(lpCmdLine ? lpCmdLine : L"");
+            std::wstring name, value;
+            while (arguments >> name >> value)
+            {
+                if (name == L"--depth") options.startDepth = std::max(1, _wtoi(value.c_str()));
+                else if (name == L"--level") options.startLevel = std::clamp(_wtoi(value.c_str()), 1, 20);
+                else if (name == L"--class")
+                {
+                    for (auto& c : value) c = static_cast<wchar_t>(towlower(c));
+                    using LB::Character::CharacterClass;
+                    options.playerClass = value == L"mage" ? CharacterClass::Mage : value == L"rogue" ? CharacterClass::Rogue
+                                        : value == L"cleric" ? CharacterClass::Cleric : CharacterClass::Warrior;
+                }
+                else continue;
+                options.titleScreen = false;
+            }
+        }
 
         if (!g_engine->Initialize(hwnd, rc.right - rc.left, rc.bottom - rc.top, options))
         {
-            std::ignore = MessageBoxW(hwnd, FromUtf8(g_engine->GetInitializationError()).c_str(), g_szAppName, MB_ICONERROR | MB_OK);
+            std::ignore = MessageBoxW(nullptr, FromUtf8(g_engine->GetInitializationError()).c_str(), g_szAppName, MB_ICONERROR | MB_OK | MB_TOPMOST | MB_SETFOREGROUND);
             // Destroy the window first: it holds a pointer to the engine
             DestroyWindow(hwnd);
             return 1;
         }
+        ShowWindow(hwnd, nCmdShow);
+        // TODO: Change nCmdShow to SW_SHOWMAXIMIZED to default to fullscreen.
     }
 
     // Main message loop

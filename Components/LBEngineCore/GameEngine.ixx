@@ -86,6 +86,12 @@ export namespace LB::Engine {
         // Save the run on its own (a new game, each floor down, quitting, closing, suspending) so
         // Continue picks it up; off: only Save Game and the quick save write saves (tests)
         bool autoSave{false};
+        // Where a run starts (playtests: "--depth 3 --level 4" on the game's command line): the
+        // floor, and the hero's level (the experience it takes, the points spent as levels give them)
+        std::int32_t startDepth{1};
+        std::int32_t startLevel{1};
+        // The title offers Quit; off on a console (its games are left from its own menu, never quit)
+        bool canQuit{true};
     };
 
     /// <summary>
@@ -105,6 +111,13 @@ export namespace LB::Engine {
         /// The records of every run and the boons they unlock (the profile)
         /// </summary>
         [[nodiscard]] const Legacy& GetLegacy() const noexcept { return legacy_; }
+
+        /// <summary>
+        /// The interface's share of the screen, centered (Options: screen margin; kept in the
+        /// preferences): 1 the whole screen, down to RenderingSystem::MinUiSafeArea
+        /// </summary>
+        [[nodiscard]] float GetUiSafeArea() const noexcept { return uiSafeArea_; }
+        void SetUiSafeArea(float fraction);
 
         /// <summary>
         /// Save the run in the autosave slot (EngineOptions::autoSave): not behind the title screen,
@@ -166,6 +179,7 @@ export namespace LB::Engine {
         }
 
         void OnDeactivated() {
+            PauseForInterruption();   // back to the pause menu, not to a fight
             // Key/button up events are not delivered while unfocused; avoid stuck input.
             // Gamepads are not polled until the window is active again.
             active_ = false;
@@ -173,6 +187,7 @@ export namespace LB::Engine {
         }
 
         void OnSuspending() {
+            PauseForInterruption();
             AutoSave();   // the console may not resume the game
             audioSystem_.Suspend();
         }
@@ -387,6 +402,13 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] const FloorObjective& GetObjective() const noexcept { return session_->objective; }
         [[nodiscard]] const Bounty& GetBounty() const noexcept { return session_->bounty; }
+
+        /// <summary>
+        /// The floor's book of lore (none on a resting place, or with no entries for its tier), and
+        /// reading it (as F does beside it): its entry joins the codex, kept with the legacy
+        /// </summary>
+        [[nodiscard]] const std::optional<LoreBook>& GetLoreBook() const noexcept { return session_->book; }
+        bool ReadLoreBook();
 
         /// <summary>
         /// Attacks resolved during the last simulation step (the player's and the enemies')
@@ -947,7 +969,8 @@ export namespace LB::Engine {
         bool SpawnPlayer();
         void SetPaused(bool paused);
         void ApplyPreferences(const Systems::Persistence::PlayerPreferences& prefs);
-        void SaveVolumePreferences();
+        void SaveOptions();
+        void PauseForInterruption();
         static bool ParseDouble(const Systems::Persistence::SaveData& data, const std::string& key, double& value);
         void RegisterGamepadBinding(std::string_view action, Systems::Input::GamepadButton button);
         void RegisterKeyBinding(std::string_view action, std::int32_t keyCode);
@@ -988,6 +1011,8 @@ export namespace LB::Engine {
         void PostBounty(std::int32_t depth);
         void CountBounty(const std::string& enemyKey);
         void DrawObjective(const Systems::Rendering::Color& tint);
+        void PlaceLoreBook(std::int32_t depth);
+        [[nodiscard]] std::vector<std::string> CodexLines() const;
         void DrawFeatures(const Systems::Rendering::Color& tint);
         void UpdatePathChoice();
         void DrawFanfare();
@@ -1256,6 +1281,8 @@ export namespace LB::Engine {
             FloorFeatures features;                  // gates, secret walls, candle puzzles
             FloorObjective objective;                // the floor's secondary objective
             Bounty bounty;                           // the merchant's, until fulfilled
+            std::optional<LoreBook> book;            // the floor's book of lore
+            std::map<std::uint32_t, double> voiceAgain;   // game time each enemy may cry out again
             EventBus events;                         // what happens in the run (GameEvents), dispatched after each step
             AllyParty allies;                        // the hero's companions
             std::map<std::uint32_t, std::pair<ItemRef, ItemRef>> allyItems;   // what each carries: weapon, armour
@@ -1311,6 +1338,8 @@ export namespace LB::Engine {
         std::vector<std::string> credits_;
         std::unique_ptr<Session> session_ = std::make_unique<Session>();   // on the heap: it is large (~20 KB)
         Legacy legacy_;                             // outlives runs: loaded from the profile at startup
+        float uiSafeArea_{1.0f};                    // the interface's share of the screen (Options: screen margin)
+        bool gamepadConnected_{false};              // the controller was there last step
         std::size_t controlsCursor_{0};          // the Controls page's chosen row
         bool listening_{false};                  // waiting for the chosen row's new key or button
         StepTimer timer_;

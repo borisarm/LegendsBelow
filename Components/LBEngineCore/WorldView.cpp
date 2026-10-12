@@ -43,7 +43,10 @@ namespace LB::Engine {
         std::int32_t screenWidth = 0;
         std::int32_t screenHeight = 0;
         renderingSystem_.GetScreenSize(screenWidth, screenHeight);
-        renderingSystem_.SetUiScale(UiScaleFor(screenWidth, screenHeight));
+        // ...within the safe area a TV leaves
+        renderingSystem_.SetUiSafeArea(uiSafeArea_);
+        renderingSystem_.SetUiScale(UiScaleFor(static_cast<std::int32_t>(static_cast<float>(screenWidth) * uiSafeArea_),
+                                               static_cast<std::int32_t>(static_cast<float>(screenHeight) * uiSafeArea_)));
 
         // Placeholder pause feedback until there is a pause menu: dim the whole frame.
         // Colors are picked as display (sRGB) values and handed to the renderer as linear.
@@ -478,6 +481,9 @@ namespace LB::Engine {
         // The tactical pause and the order in hand; by the merchant, how to trade
         if (IsTacticallyPaused()) hud.hint = "PAUSED - right click or arrows + Space: target   1-4: cast at it   Tab: resume";
         else if (NearMerchant() && !session_->trade.IsOpen()) hud.hint = "F or d-pad up: trade with the merchant";
+        else if (session_->book && Distance(session_->book->at, session_->playerPosition) <= LoreReach) {
+            hud.hint = session_->book->read ? "F or d-pad up: read the book again" : "F or d-pad up: read the book";
+        }
         else {
             // A cracked wall, or a puzzle's candles, nearby
             for (const auto& gate : session_->features.Gates()) {

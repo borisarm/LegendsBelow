@@ -703,5 +703,299 @@
     ],
     "affixSlots": 3,
     "value": 150
+  },
+  {
+    "id": "weapon_sword_dawnbringer_t4",
+    "name": "Dawnbringer",
+    "category": "Sword",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "damageDice": "2d10",
+    "damageBonus": 6,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.5,
+    "critRange": "20",
+    "critMultiplier": 1.75,
+    "attributeScale": "STR",
+    "scaleFactor": 1.2,
+    "isTwoHanded": true,
+    "specialProperties": [
+      "HighDamage"
+    ],
+    "affixSlots": 3,
+    "value": 220
+  },
+  {
+    "id": "weapon_axe_worldsplitter_t4",
+    "name": "Worldsplitter",
+    "category": "Axe",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "damageDice": "2d8",
+    "damageBonus": 7,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.6,
+    "critRange": "20",
+    "critMultiplier": 1.8,
+    "attributeScale": "STR",
+    "scaleFactor": 1.25,
+    "isTwoHanded": true,
+    "specialProperties": [
+      "Cleave"
+    ],
+    "affixSlots": 3,
+    "value": 224
+  },
+  {
+    "id": "weapon_sword_runeblade_t4",
+    "name": "Runeblade",
+    "category": "Sword",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Rogue",
+      "Cleric"
+    ],
+    "damageDice": "2d8",
+    "damageBonus": 7,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.0,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "STR",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "value": 378
+  },
+  {
+    "id": "weapon_axe_stormcleaver_t4",
+    "name": "Stormcleaver",
+    "category": "Axe",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "damageDice": "1d12",
+    "damageBonus": 7,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.0,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "STR",
+    "scaleFactor": 1.1,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "value": 216
+  },
+  {
+    "id": "weapon_mace_seraphs_mace_t4",
+    "name": "Seraph's Mace",
+    "category": "Mace",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "damageDice": "1d12",
+    "damageBonus": 6,
+    "damageType": [
+      "Bludgeoning"
+    ],
+    "attackTimeSeconds": 1.1,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "STR",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "BonusVsArmored"
+    ],
+    "affixSlots": 3,
+    "value": 198
+  },
+  {
+    "id": "weapon_dagger_nightfang_t4",
+    "name": "Nightfang",
+    "category": "Dagger",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d10",
+    "damageBonus": 7,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 0.7,
+    "critRange": "19-20",
+    "critMultiplier": 1.5,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SneakBonus"
+    ],
+    "affixSlots": 3,
+    "value": 188
+  },
+  {
+    "id": "weapon_bow_starshot_longbow_t4",
+    "name": "Starshot Longbow",
+    "category": "Bow",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d12",
+    "damageBonus": 6,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.2,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "ammoType": "Arrow",
+    "range": 10.0,
+    "projectileSpeed": 12.0,
+    "value": 198
+  },
+  {
+    "id": "weapon_crossbow_dragonbone_arbalest_t4",
+    "name": "Dragonbone Arbalest",
+    "category": "Crossbow",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "2d8",
+    "damageBonus": 7,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.6,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "ammoType": "Bolt",
+    "range": 11.0,
+    "projectileSpeed": 15.0,
+    "value": 342
+  },
+  {
+    "id": "weapon_staff_staff_of_ages_t4",
+    "name": "Staff of Ages",
+    "category": "Staff",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Mage",
+      "Cleric"
+    ],
+    "damageDice": "1d10",
+    "damageBonus": 6,
+    "damageType": [
+      "Bludgeoning"
+    ],
+    "attackTimeSeconds": 1.1,
+    "critRange": "20",
+    "critMultiplier": 1.3,
+    "attributeScale": "INT",
+    "scaleFactor": 0.8,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SpellFocus"
+    ],
+    "affixSlots": 3,
+    "value": 162
+  },
+  {
+    "id": "weapon_wand_archive_wand_t4",
+    "name": "The Archivist's Wand",
+    "category": "Wand",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Mage"
+    ],
+    "damageDice": "1d8",
+    "damageBonus": 6,
+    "damageType": [
+      "Arcane"
+    ],
+    "attackTimeSeconds": 0.8,
+    "critRange": "20",
+    "critMultiplier": 1.25,
+    "attributeScale": "INT",
+    "scaleFactor": 0.7,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SpellFocus"
+    ],
+    "affixSlots": 3,
+    "range": 11.0,
+    "projectileSpeed": 14.0,
+    "value": 152
+  },
+  {
+    "id": "weapon_polearm_celestial_glaive_t4",
+    "name": "Celestial Glaive",
+    "category": "Polearm",
+    "slot": "MainHand",
+    "requiredLevel": 14,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "damageDice": "2d8",
+    "damageBonus": 6,
+    "damageType": [
+      "Slashing",
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.4,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "STR",
+    "scaleFactor": 1.1,
+    "isTwoHanded": true,
+    "specialProperties": [
+      "Reach"
+    ],
+    "affixSlots": 3,
+    "value": 300
   }
 ]

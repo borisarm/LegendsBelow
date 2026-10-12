@@ -27,7 +27,8 @@ export namespace LB::Engine {
         SpellCharge,    // magic gathering in the caster's hands
         CryptDust,      // each tier's air: dust motes hanging in the crypts...
         CaveMist,       // ...mist creeping over the caves' floors...
-        RuinEmbers,     // ...embers drifting up through the ruins
+        RuinEmbers,     // ...embers drifting up through the ruins...
+        ArchiveMotes,   // ...and pale motes of old magic floating among the archive's shelves
     };
 
     /// <summary>

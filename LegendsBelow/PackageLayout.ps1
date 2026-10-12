@@ -1,32 +1,36 @@
 <#
 
 .NOTES
-Copyright (c) Microsoft Corporation.
+Copyright (c) Microsoft Corporation (the GDK template it started from).
 Licensed under the MIT License.
 
 .SYNOPSIS
-Creates a layout and packages a build.
+Creates the game's layout from a build and packages it with makepkg.
 
 .DESCRIPTION
-This script generates a layout from a build and then runs makepkg to create a package.
+PackageLayout.ps1 - Copies what the game ships (LegendsBelow.exe, MicrosoftGame.config, the
+Agility SDK's D3D12 folder, and Assets) from x64\<Configuration> into <Destination>\Loose, checks
+that the layout is complete (every Assets\Data file the game loads, the models, fonts, sounds,
+music, menu art, and the Store logos MicrosoftGame.config names), and then runs makepkg (genmap,
+then pack) unless -NoPackage. Tests, libraries, and symbols stay out.
 
 .PARAMETER Destination
-Set the layout path for the build.
+Where the layout (Destination\Loose) and the package go.
 
 .PARAMETER Configuration
-Set to 'Debug' or 'Release' to package the build.
+'Debug' or 'Release' (default) build to lay out.
 
 .PARAMETER Overwrite
-Indicates overwrite of existing content if present.
+Lay out over an existing layout.
 
 .PARAMETER Clean
-Delete content in the layout directory before copying.
+Delete the existing layout first.
 
 .PARAMETER Quiet
-Copy quietly.
+Print only problems and the summary.
 
 .PARAMETER NoPackage
-If this is set, then the loose layout is created, but makepkg is not run.
+Lay out and check, without makepkg.
 
 .LINK
 https://aka.ms/gdkdocs
@@ -36,6 +40,7 @@ https://aka.ms/gdkdocs
 param(
     [Parameter(Mandatory)]
     [string]$Destination,
+    [ValidateSet('Debug', 'Release')]
     [string]$Configuration = "Release",
     [switch]$Overwrite,
     [switch]$Clean,
@@ -43,89 +48,63 @@ param(
     [switch]$NoPackage
 )
 
-$xcopyFlags = "/Y/S"
-if($Quiet) {
-    $xcopyFlags += "/Q"
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+$build = Join-Path $root "x64\$Configuration"
+if (-not (Test-Path (Join-Path $build 'LegendsBelow.exe'))) { throw "No build at $build (build the solution first)" }
+
+$layout = Join-Path $Destination 'Loose'
+if ($Clean -and (Test-Path $layout)) { Remove-Item -Recurse -Force $layout }
+if ((Test-Path $layout) -and -not $Overwrite) { throw "$layout exists: use -Overwrite or -Clean" }
+New-Item -ItemType Directory -Force $layout | Out-Null
+if (-not $Quiet) { Write-Host "Laying out $build in $layout" }
+
+# What ships: the game, its configuration, the Agility SDK, and its assets (nothing else)
+Copy-Item (Join-Path $build 'LegendsBelow.exe') $layout -Force
+Copy-Item (Join-Path $build 'MicrosoftGame.config') $layout -Force
+foreach ($folder in 'D3D12', 'Assets') {
+    $source = Join-Path $build $folder
+    if (-not (Test-Path $source)) { throw "The build has no $folder folder" }
+    Copy-Item $source $layout -Recurse -Force
 }
-else {
-    $xcopyFlags += "/F"
+
+# Complete: every data file of the repository, and every kind of asset the game loads
+$problems = @()
+foreach ($file in Get-ChildItem (Join-Path $root 'Assets\Data') -File) {
+    if (-not (Test-Path (Join-Path $layout "Assets\Data\$($file.Name)"))) { $problems += "Assets\Data\$($file.Name) is missing (is it in LegendsBelow.vcxproj's CopyFileToFolders?)" }
 }
-
-function Copy-Build {
-
-    param(
-        [Parameter(Mandatory)]
-        [string]$Path,
-        [Parameter(Mandatory)]
-        [string]$Destination
-        )
-
-    $excludefile = Join-Path $PSScriptRoot -Child "PackageLayout.flt"
-
-    $filters | ForEach-Object {
-        $files = Join-Path -Path $Path -ChildPath $_
-        xcopy $xcopyFlags /EXCLUDE:$excludefile $files $Destination
-        if ($LastExitCode -ne 0) {
-            Write-Error "Failed copying source files" -ErrorAction Stop
-        }
+foreach ($folder in 'Models', 'Models\Animations', 'Fonts', 'Sounds', 'Music', 'UI') {
+    $path = Join-Path $layout "Assets\$folder"
+    if (-not (Test-Path $path) -or -not (Get-ChildItem $path -File)) { $problems += "Assets\$folder is missing or empty" }
+}
+$config = [xml](Get-Content (Join-Path $layout 'MicrosoftGame.config'))
+foreach ($logo in $config.SelectNodes('//*[@StoreLogo or @Square150x150Logo or @Square44x44Logo or @SplashScreenImage]')) {
+    foreach ($attribute in 'StoreLogo', 'Square150x150Logo', 'Square44x44Logo', 'SplashScreenImage') {
+        $value = $logo.GetAttribute($attribute)
+        if ($value -and -not (Test-Path (Join-Path $layout $value))) { $problems += "$value (MicrosoftGame.config $attribute) is missing" }
     }
 }
-
-$arch = Join-Path -Path $PSScriptRoot -ChildPath "x64"
-
-$config = Join-Path -Path $arch -ChildPath $Configuration
-
-if (-Not (Test-Path $config)) {
-    Write-Error ("ERROR: Cannot find a build at " + $config) -ErrorAction Stop
+if ($problems) {
+    $problems | ForEach-Object { Write-Host "MISSING  $_" -ForegroundColor Red }
+    throw "The layout is incomplete ($($problems.Count) problem(s))"
 }
+$size = (Get-ChildItem $layout -Recurse -File | Measure-Object Length -Sum).Sum
+Write-Host ("Layout complete: {0} files, {1:N1} MB" -f (Get-ChildItem $layout -Recurse -File).Count, ($size / 1MB)) -ForegroundColor Green
 
-$vcpkg = Join-Path -Path $PSScriptRoot -ChildPath "vcpkg_installed"
+if ($NoPackage) { return }
 
-if(-Not $NoPackage) {
-    $makepkg = Get-ChildItem -Path $vcpkg -Recurse -Filter makepkg*.exe
-
-    if ($makepkg.Count -eq 0) {
-        Write-Error "ERROR: makepkg not found in VCPKG directory" -ErrorAction Stop
-    }
+# makepkg from the GDK vcpkg installed: the chunk map first, then the package, each waited for
+$makepkg = Get-ChildItem (Join-Path $root 'vcpkg_installed') -Recurse -Filter 'makepkg*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $makepkg) { $makepkg = Get-ChildItem (Join-Path $PSScriptRoot 'vcpkg_installed') -Recurse -Filter 'makepkg*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1 }
+if (-not $makepkg) { throw 'makepkg was not found in vcpkg_installed' }
+Push-Location $Destination
+try {
+    & $makepkg.FullName genmap /f chunks.xml /d Loose
+    if ($LASTEXITCODE -ne 0) { throw "makepkg genmap failed ($LASTEXITCODE)" }
+    & $makepkg.FullName pack /f chunks.xml /d Loose /pd . /pc
+    if ($LASTEXITCODE -ne 0) { throw "makepkg pack failed ($LASTEXITCODE)" }
 }
-
-$exes = Get-ChildItem -Path $config -Filter *.exe
-
-if ($exes.Count -eq 0) {
-    Write-Error "ERROR: No executable found" -ErrorAction Stop
+finally {
+    Pop-Location
 }
-
-$layout = Join-Path $Destination -ChildPath "Loose"
-
-if ((Test-Path $layout) -And (-Not $Overwrite)) {
-    Write-Error "ERROR: Destination path exists. Use -Overwrite or change path." -ErrorAction Stop
-}
-
-if (-Not $Quiet) {
-    Write-Host ("Source: " + $config)
-    Write-Host ("Destination: " + $layout)
-}
-
-if($Clean) {
-    if (-Not $Quiet) {
-        Write-Host "Clean..."
-    }
-
-    Remove-Item $layout -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
-}
-
-New-Item -Path $Destination -Name "Loose" -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
-
-Copy-Build -Path $config -Destination $layout
-
-Set-Location -Path $Destination
-
-if(-Not $NoPackage) {
-    <# makepkg genmap /f chunks.xml /d Loose #>
-    $makepkgArgs = @( "genmap", "/f", "chunks.xml", "/d", "Loose" )
-    Start-Process -FilePath $makepkg[0].FullName -ArgumentList $makepkgArgs -ErrorAction Stop
-
-    <# makepkg pack /f chunks.xml /d Loose /pd . /pc #>
-    $makepkgArgs = @( "pack", "/f", "chunks.xml", "/d", "Loose", "/pd", ".", "/pc" )
-    Start-Process -FilePath $makepkg[0].FullName -ArgumentList $makepkgArgs -ErrorAction Stop
-}
+Write-Host "Packaged in $Destination" -ForegroundColor Green

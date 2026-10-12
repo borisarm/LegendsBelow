@@ -45,6 +45,14 @@ export namespace LB::Engine {
         GateOpens,      // a key turned, bars sinking
         WallBreaks,     // a secret wall crumbling
         CandleTouched,  // a puzzle candle flaring or snuffed
+        VoiceBeastHurt, // the creatures' voices (EnemyDefinition::voice): hurt, and dying
+        VoiceBeastDeath,
+        VoiceBruteHurt,
+        VoiceBruteDeath,
+        VoiceShriekHurt,
+        VoiceShriekDeath,
+        VoiceGiantHurt,
+        VoiceGiantDeath,
         Count
     };
 
@@ -129,16 +137,28 @@ export namespace LB::Engine {
     /// footsteps on its floors
     /// </summary>
     namespace Ambience {
-        inline constexpr std::array<std::string_view, 3> Clips = { "ambience_crypts", "ambience_caves", "ambience_ruins" };
+        inline constexpr std::array<std::string_view, 4> Clips = { "ambience_crypts", "ambience_caves", "ambience_ruins", "ambience_archive" };
         inline constexpr float Volume = 0.35f;
 
         [[nodiscard]] inline std::string_view For(std::string_view theme) noexcept {
-            return theme == "Caves" ? Clips[1] : theme == "Ruins" ? Clips[2] : Clips[0];
+            return theme == "Caves" ? Clips[1] : theme == "Ruins" ? Clips[2] : theme == "Archive" ? Clips[3] : Clips[0];
         }
 
         [[nodiscard]] inline GameSound FootstepsFor(std::string_view theme) noexcept {
             return theme == "Caves" ? GameSound::FootstepDirt : theme == "Ruins" ? GameSound::FootstepGrass : GameSound::Footstep;
         }
+    }
+
+    /// <summary>
+    /// A creature's voice (EnemyDefinition::voice): its hurt sound and its death; none for the
+    /// silent (bones only clatter)
+    /// </summary>
+    [[nodiscard]] inline std::optional<std::pair<GameSound, GameSound>> VoiceSounds(std::string_view voice) noexcept {
+        if (voice == "beast") return std::pair{ GameSound::VoiceBeastHurt, GameSound::VoiceBeastDeath };
+        if (voice == "brute") return std::pair{ GameSound::VoiceBruteHurt, GameSound::VoiceBruteDeath };
+        if (voice == "shriek") return std::pair{ GameSound::VoiceShriekHurt, GameSound::VoiceShriekDeath };
+        if (voice == "giant") return std::pair{ GameSound::VoiceGiantHurt, GameSound::VoiceGiantDeath };
+        return std::nullopt;
     }
 
     namespace SoundClips {
@@ -174,6 +194,15 @@ export namespace LB::Engine {
         inline constexpr std::string_view GateOpens[] = { "doorOpen_1", "doorOpen_2" };
         inline constexpr std::string_view WallBreaks[] = { "impactMining_000", "impactMining_001", "impactMining_002" };
         inline constexpr std::string_view CandleTouched[] = { "clothBelt", "clothBelt2" };
+        // Synthesized (Scripts/MakeVoices.py, .wav)
+        inline constexpr std::string_view VoiceBeastHurt[] = { "voice_beast_hurt_0", "voice_beast_hurt_1", "voice_beast_hurt_2" };
+        inline constexpr std::string_view VoiceBeastDeath[] = { "voice_beast_death" };
+        inline constexpr std::string_view VoiceBruteHurt[] = { "voice_brute_hurt_0", "voice_brute_hurt_1", "voice_brute_hurt_2" };
+        inline constexpr std::string_view VoiceBruteDeath[] = { "voice_brute_death" };
+        inline constexpr std::string_view VoiceShriekHurt[] = { "voice_shriek_hurt_0", "voice_shriek_hurt_1", "voice_shriek_hurt_2" };
+        inline constexpr std::string_view VoiceShriekDeath[] = { "voice_shriek_death" };
+        inline constexpr std::string_view VoiceGiantHurt[] = { "voice_giant_hurt_0", "voice_giant_hurt_1", "voice_giant_hurt_2" };
+        inline constexpr std::string_view VoiceGiantDeath[] = { "voice_giant_death" };
         inline constexpr std::string_view ArrowHitsWall[] = { "impactWood_light_000", "impactWood_light_001", "impactWood_light_002", "impactWood_light_003", "impactWood_light_004" };
     }
 
@@ -187,6 +216,14 @@ export namespace LB::Engine {
         case GameSound::CriticalHit: return { CriticalHit, 0.9f };
         case GameSound::PlayerHurt: return { PlayerHurt, 0.9f };
         case GameSound::EnemyDies: return { EnemyDies, 0.8f };
+        case GameSound::VoiceBeastHurt: return { VoiceBeastHurt, 0.55f };
+        case GameSound::VoiceBeastDeath: return { VoiceBeastDeath, 0.7f };
+        case GameSound::VoiceBruteHurt: return { VoiceBruteHurt, 0.55f };
+        case GameSound::VoiceBruteDeath: return { VoiceBruteDeath, 0.7f };
+        case GameSound::VoiceShriekHurt: return { VoiceShriekHurt, 0.45f };
+        case GameSound::VoiceShriekDeath: return { VoiceShriekDeath, 0.6f };
+        case GameSound::VoiceGiantHurt: return { VoiceGiantHurt, 0.65f };
+        case GameSound::VoiceGiantDeath: return { VoiceGiantDeath, 0.8f };
         case GameSound::EnemyRises: return { EnemyRises, 0.6f };
         case GameSound::Gold: return { Gold, 0.7f };
         case GameSound::ItemPickup: return { ItemPickup, 0.7f };

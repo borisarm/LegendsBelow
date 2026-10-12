@@ -46,6 +46,7 @@ export namespace LB::Engine {
         std::int32_t bosses{0};
         std::int32_t runs{0};
         std::int32_t kills{0};
+        std::set<std::string> lore;   // codex entries read (lore.json keys)
 
         [[nodiscard]] bool Has(Boon boon) const noexcept {
             switch (boon) {
@@ -73,7 +74,15 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] std::map<std::string, std::string> ToProfile() const {
             return { { "legacy.deepest", std::to_string(deepest) }, { "legacy.bosses", std::to_string(bosses) },
-                     { "legacy.runs", std::to_string(runs) }, { "legacy.kills", std::to_string(kills) } };
+                     { "legacy.runs", std::to_string(runs) }, { "legacy.kills", std::to_string(kills) },
+                     { "legacy.lore", JoinLore() } };
+        }
+
+        // "a,b,c"
+        [[nodiscard]] std::string JoinLore() const {
+            std::string text;
+            for (const auto& key : lore) text += (text.empty() ? "" : ",") + key;
+            return text;
         }
 
         static Legacy FromProfile(const std::map<std::string, std::string>& profile) {
@@ -88,6 +97,14 @@ export namespace LB::Engine {
             legacy.bosses = read("legacy.bosses");
             legacy.runs = read("legacy.runs");
             legacy.kills = read("legacy.kills");
+            if (const auto it = profile.find("legacy.lore"); it != profile.end()) {
+                std::string key;
+                for (const char c : it->second + ',') {
+                    if (c != ',') { key += c; continue; }
+                    if (!key.empty()) legacy.lore.insert(key);
+                    key.clear();
+                }
+            }
             return legacy;
         }
     };

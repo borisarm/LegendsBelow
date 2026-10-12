@@ -101,6 +101,7 @@ namespace LB::Systems::Persistence {
                 {"masterVolume", prefs.masterVolume},
                 {"musicVolume", prefs.musicVolume},
                 {"sfxVolume", prefs.sfxVolume},
+                {"uiSafeArea", prefs.uiSafeArea},
                 {"fullscreen", prefs.fullscreen},
                 {"resolutionWidth", prefs.resolutionWidth},
                 {"resolutionHeight", prefs.resolutionHeight},
@@ -114,6 +115,7 @@ namespace LB::Systems::Persistence {
             prefs.masterVolume = json.value("masterVolume", defaults.masterVolume);
             prefs.musicVolume = json.value("musicVolume", defaults.musicVolume);
             prefs.sfxVolume = json.value("sfxVolume", defaults.sfxVolume);
+            prefs.uiSafeArea = json.value("uiSafeArea", defaults.uiSafeArea);
             prefs.fullscreen = json.value("fullscreen", defaults.fullscreen);
             prefs.resolutionWidth = json.value("resolutionWidth", defaults.resolutionWidth);
             prefs.resolutionHeight = json.value("resolutionHeight", defaults.resolutionHeight);

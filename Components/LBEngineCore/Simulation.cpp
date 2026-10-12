@@ -22,6 +22,11 @@ namespace LB::Engine {
 
         // An open menu takes the input; else the character screen does while open (Esc closes it
         // instead of opening the pause menu)
+        // The controller gone (unplugged, its batteries out): the pause menu waits for it
+        const bool gamepadConnected = inputSystem_.GetGamepadState(0).connected;
+        if (gamepadConnected_ && !gamepadConnected) PauseForInterruption();
+        gamepadConnected_ = gamepadConnected;
+
         const bool menuWasOpen = menu_.IsOpen();
         const bool screenWasOpen = ScreenOpen();
         if (menuWasOpen) {

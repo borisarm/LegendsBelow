@@ -253,8 +253,8 @@ TEST(GameEngineContentTests, ShippedContent_Loads) {
     ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = *dir })) << engine.GetInitializationError();
 
     EXPECT_EQ(engine.GetContent()->GetSpells().size(), 55u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells
-    EXPECT_EQ(engine.GetContent()->GetWeapons().size(), 29u);
-    EXPECT_EQ(engine.GetContent()->GetArmour().size(), 41u);
+    EXPECT_EQ(engine.GetContent()->GetWeapons().size(), 40u);
+    EXPECT_EQ(engine.GetContent()->GetArmour().size(), 55u);
     EXPECT_NE(engine.GetContent()->FindWeapon("weapon_sword_rusted_shortsword_t1"), nullptr);
 }
 
@@ -276,6 +276,7 @@ TEST(GameEngineContentTests, InvalidContent_FailsWithAllErrors) {
         "championDamageBonus": 1, "championExperienceMultiplier": 2, "championNames": ["A"], "championTitles": ["B"],
         "relics": [{ "name": "C", "model": "c.gltf" }], "captiveName": "D", "captiveModel": "d.glb", "cageModel": "e.gltf",
         "bountyKills": 1, "bountyGoldPerDepth": 1 })";
+    std::ofstream(dir.path / "lore.json") << "[]";
     GameEngine engine;
 
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() }));
@@ -320,7 +321,7 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
     TempSaveDir dir;
     std::filesystem::create_directories(dir.path);
     const std::filesystem::path source(std::u8string(shipped->begin(), shipped->end()));
-    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json" }) {
+    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json" }) {
         std::filesystem::copy_file(source / file, dir.path / file);
     }
 
@@ -387,4 +388,25 @@ TEST(GameEngineArmorTests, EquipPlayerArmor_WithoutPlayer_Fails) {
     engine.Initialize(nullptr, 800, 600);
 
     EXPECT_FALSE(engine.EquipPlayerArmor("armor_chest_rusted_breastplate_t1"));
+}
+
+// The game copies its data files one by one (LegendsBelow.vcxproj): one missing there and the game
+// stops at startup while these tests, reading Assets/Data directly, pass
+TEST(GameEngineContentTests, EveryDataFile_IsCopiedWithTheGame) {
+    const auto shipped = ShippedContentDirectory();
+    ASSERT_FALSE(shipped.empty());
+    const std::filesystem::path data(std::u8string(shipped.begin(), shipped.end()));
+    const auto project = data.parent_path().parent_path() / "LegendsBelow" / "LegendsBelow.vcxproj";
+    std::ifstream in(project);
+    ASSERT_TRUE(in.good()) << project.string();
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+    std::size_t files = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(data)) {
+        if (!entry.is_regular_file()) continue;
+        ++files;
+        const auto copied = "..\\Assets\\Data\\" + entry.path().filename().string();
+        EXPECT_NE(text.find(copied), std::string::npos) << entry.path().filename().string() << " is not in LegendsBelow.vcxproj's CopyFileToFolders";
+    }
+    EXPECT_GE(files, 13u);
 }

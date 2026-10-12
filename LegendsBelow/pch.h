@@ -48,7 +48,10 @@
 // XMVerifyCPUSupport
 #include <DirectXMath.h>
 
+#include <algorithm>
+#include <cwctype>
 #include <memory>
+#include <sstream>
 #include <tuple>
 
 // Game Runtime

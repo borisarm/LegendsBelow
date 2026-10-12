@@ -16,7 +16,8 @@ TEST(DecorTests, Themes_ChangeWithEachTier) {
     EXPECT_EQ(ThemeForDepth(3).name, "Crypts");
     EXPECT_EQ(ThemeForDepth(4).name, "Caves");
     EXPECT_EQ(ThemeForDepth(7).name, "Ruins");
-    EXPECT_EQ(ThemeForDepth(10).name, "Crypts");   // and around again
+    EXPECT_EQ(ThemeForDepth(10).name, "Archive");
+    EXPECT_EQ(ThemeForDepth(13).name, "Crypts");   // and around again
 }
 
 TEST(DecorTests, Props_StandInRoomsAndBlockBodies) {

@@ -392,3 +392,21 @@ To use the workaround, edit the ``.vcxproj`` and add after the ``<PropertyGroup 
 [StepTimer](https://walbourn.github.io/understanding-game-time-revisited/)
 
 [Vcpkg for Xbox](https://learn.microsoft.com/vcpkg/users/platforms/xbox/)
+
+# LegendsBelow: playtests and packaging
+
+## Playtest launches
+
+`LegendsBelow.exe --class rogue --depth 3 --level 4` skips the title and starts a run with that class (warrior, mage, rogue, cleric), on that floor, at that level (the experience it takes, the points spent as levels give them). Any of the three alone works too. The run saves itself as any run does.
+
+## Packaging
+
+```powershell
+# Lay out a Release build in <dir>\Loose, check it is complete, and package it with makepkg
+.\LegendsBelow\PackageLayout.ps1 -Destination <dir> -Configuration Release -Clean
+
+# Only lay out and check (no makepkg)
+.\LegendsBelow\PackageLayout.ps1 -Destination <dir> -NoPackage -Clean
+```
+
+The layout holds what ships: `LegendsBelow.exe`, `MicrosoftGame.config`, the Agility SDK's `D3D12` folder, and `Assets`. The script fails when an `Assets\Data` file, a kind of asset, or a Store logo named in `MicrosoftGame.config` is missing. makepkg writes a submission validation report (`Validator_*.xml`) next to the package: a Release build passes but for `ILI_DefaultTitleId` and `ILI_DefaultMSAAppId`, which need the title's Title ID and MSA App ID from Partner Center in `MicrosoftGame.config`. Debug builds also fail on their debug runtime dependencies, as expected.
