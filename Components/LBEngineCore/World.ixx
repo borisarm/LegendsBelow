@@ -98,9 +98,19 @@ export namespace LB::Engine {
         }
 
         /// <summary>
-        /// Does a circle stand only on open cells?
+        /// A round obstacle (a prop): bodies keep out of it; sight passes over it
+        /// </summary>
+        void AddObstacle(WorldPoint center, float radius) { obstacles_.push_back({ center, radius }); }
+        void ClearObstacles() noexcept { obstacles_.clear(); }
+        [[nodiscard]] std::size_t ObstacleCount() const noexcept { return obstacles_.size(); }
+
+        /// <summary>
+        /// Does a circle stand only on open cells, clear of the obstacles?
         /// </summary>
         [[nodiscard]] bool CircleFits(WorldPoint p, float radius) const noexcept {
+            for (const auto& obstacle : obstacles_) {
+                if (Distance(p, obstacle.center) < radius + obstacle.radius) return false;
+            }
             const auto [x0, y0] = CellOf({ p.x - radius, p.y - radius });
             const auto [x1, y1] = CellOf({ p.x + radius, p.y + radius });
             for (std::int32_t y = y0; y <= y1; ++y) {
@@ -124,6 +134,19 @@ export namespace LB::Engine {
             WorldPoint p = from;
             p.x = MoveAxis(p, step.x, radius, true);
             p.y = MoveAxis(p, step.y, radius, false);
+            // Out of the obstacles it ran into (sliding around them); back where it was when that
+            // would put it in a wall
+            for (const auto& obstacle : obstacles_) {
+                const float dx = p.x - obstacle.center.x;
+                const float dy = p.y - obstacle.center.y;
+                const float distance = std::hypot(dx, dy);
+                const float minimum = radius + obstacle.radius;
+                if (distance >= minimum) continue;
+                const float nx = distance > 1e-4f ? dx / distance : 1.0f;
+                const float ny = distance > 1e-4f ? dy / distance : 0.0f;
+                const WorldPoint out{ obstacle.center.x + nx * minimum, obstacle.center.y + ny * minimum };
+                p = CircleFitsCells(out, radius) ? out : from;
+            }
             return p;
         }
 
@@ -205,6 +228,27 @@ export namespace LB::Engine {
         // The coordinate a circle reaches moving `delta` along one axis: the target, or the first
         // contact with a solid cell in the way (its face, or its corner where the circle only
         // grazes it)
+        struct Obstacle {
+            WorldPoint center{};
+            float radius{0.5f};
+        };
+
+        // Does a circle stand only on open cells (obstacles aside)?
+        [[nodiscard]] bool CircleFitsCells(WorldPoint p, float radius) const noexcept {
+            const auto [x0, y0] = CellOf({ p.x - radius, p.y - radius });
+            const auto [x1, y1] = CellOf({ p.x + radius, p.y + radius });
+            for (std::int32_t y = y0; y <= y1; ++y) {
+                for (std::int32_t x = x0; x <= x1; ++x) {
+                    if (layout_.IsFloor(x, y)) continue;
+                    const auto corner = CellCorner(x, y);
+                    const float cx = std::clamp(p.x, corner.x, corner.x + CellTiles);
+                    const float cy = std::clamp(p.y, corner.y, corner.y + CellTiles);
+                    if ((p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy) < radius * radius) return false;
+                }
+            }
+            return true;
+        }
+
         [[nodiscard]] float MoveAxis(WorldPoint p, float delta, float radius, bool alongX) const noexcept {
             const float start = alongX ? p.x : p.y;
             const float other = alongX ? p.y : p.x;
@@ -255,6 +299,7 @@ export namespace LB::Engine {
         }
 
         Dungeon::FloorLayout layout_;
+        std::vector<Obstacle> obstacles_;
         WorldPoint origin_{};
         // Last flow field (a cache: rebuilt when enemies need a path)
         mutable std::vector<std::int32_t> flow_;

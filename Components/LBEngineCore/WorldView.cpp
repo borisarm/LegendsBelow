@@ -47,7 +47,7 @@ namespace LB::Engine {
 
         // Placeholder pause feedback until there is a pause menu: dim the whole frame.
         // Colors are picked as display (sRGB) values and handed to the renderer as linear.
-        const float dim = session_->paused || session_->characterScreen.IsOpen() ? 0.4f : 1.0f;
+        const float dim = session_->paused || ScreenOpen() ? 0.4f : 1.0f;
         const Shade shade{ dim };
 
         // Dim ambient background (design-technical-directx12.md 2.2), then the 3D world
@@ -64,8 +64,11 @@ namespace LB::Engine {
         renderingSystem_.SetLighting(lighting);
         renderingSystem_.SetCamera(session_->camera.GetView());
         DrawArena(shade);
+        DrawRestPlace(shade(1.0f, 1.0f, 1.0f));
+        DrawDecor(shade(1.0f, 1.0f, 1.0f));
         DrawPlayer(shade);
         DrawEnemies(shade);
+        DrawTelegraphs();
         DrawProjectiles(shade);
         DrawOrderMarks();
         DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
@@ -73,7 +76,7 @@ namespace LB::Engine {
         session_->torches.Draw(renderingSystem_, session_->walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
                               ModelScale, shade(1.0f, 1.0f, 1.0f), timer_.GetTotalSeconds());
         session_->effects.Draw(renderingSystem_, shade(1.0f, 1.0f, 1.0f));
-        if (!menu_.IsOpen() && !session_->characterScreen.IsOpen()) {   // full-screen panels show only the dungeon behind them
+        if (!menu_.IsOpen() && !ScreenOpen()) {   // full-screen panels show only the dungeon behind them
             DrawHud();
             DrawMinimap();
         }
@@ -237,10 +240,17 @@ namespace LB::Engine {
             return renderingSystem_.GetModel(model)->boundsMax.y * ModelScale;
         };
 
+        const auto& theme = GetTheme();
+        const auto themed = [&](std::string_view file, Systems::Rendering::ModelId fallback) {
+            const auto model = ModelOf(file);
+            return model != Systems::Rendering::InvalidModelId ? model : fallback;
+        };
+        const auto floor = themed(theme.floor, assets_.models.floor);
+        const auto floorVariant = themed(theme.floorVariant, assets_.models.floorVariant);
         const auto& layout = session_->world.Layout();
         for (std::int32_t cy = 0; cy < layout.height; ++cy) {
             for (std::int32_t cx = 0; cx < layout.width; ++cx) {
-                if (!layout.IsFloor(cx, cy)) continue;
+                if (!layout.IsFloor(cx, cy) || session_->decor.IsTrapCell(cx, cy)) continue;
                 const auto corner = session_->world.CellCorner(cx, cy);
                 for (std::int32_t dy = 0; dy < static_cast<std::int32_t>(WorldMap::CellTiles); ++dy) {
                     for (std::int32_t dx = 0; dx < static_cast<std::int32_t>(WorldMap::CellTiles); ++dx) {
@@ -248,7 +258,7 @@ namespace LB::Engine {
                         const auto ty = static_cast<std::int32_t>(std::floor(corner.y)) + dy;
                         // A fixed scatter of the decorated variant breaks up the grid
                         const bool variant = ((tx * 7 + ty * 13) % 11 + 11) % 11 == 0;
-                        const auto model = variant ? assets_.models.floorVariant : assets_.models.floor;
+                        const auto model = variant ? floorVariant : floor;
                         place(model, static_cast<float>(tx) + 0.5f, -topOf(model), static_cast<float>(ty) + 0.5f, 0.0f);
                     }
                 }
@@ -397,7 +407,10 @@ namespace LB::Engine {
                 const auto character = session_->characterService.GetCharacter(*session_->playerId);
                 player.pointsToSpend = character && character->get().GetUnspentAttributePoints() > 0;
                 const auto* classData = PlayerClassDefinition();
-                player.usesMana = classData && classData->resource == "Mana";
+                player.usesMana = classData && (classData->resource == "Mana" || !classData->spellBar.empty());
+                player.resource = classData && classData->resource == "Stamina" ? "ST" : "MP";
+                player.pathToChoose = classData && !classData->specializations.empty() && session_->path.empty()
+                                   && status->level >= Content::ClassDefinition::SpecializationLevel;
                 if (const auto* weapon = session_->playerWeapon; weapon && !weapon->ammoType.empty()) {
                     const auto ammo = std::ranges::find(content_->GetConsumables(), weapon->ammoType, &Content::ConsumableDefinition::ammoType);
                     std::string name = ammo != content_->GetConsumables().end() ? ammo->name : weapon->ammoType;
@@ -442,8 +455,9 @@ namespace LB::Engine {
             hud.enemyBars.push_back({ { enemy.position.x, EnemyTop(enemy), enemy.position.y },
                                       static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints) });
         }
-        // The tactical pause and the order in hand
+        // The tactical pause and the order in hand; by the merchant, how to trade
         if (IsTacticallyPaused()) hud.hint = "PAUSED - right click or arrows + Space: target   1-4: cast at it   Tab: resume";
+        else if (NearMerchant() && !session_->trade.IsOpen()) hud.hint = "F or d-pad up: trade with the merchant";
         const auto& order = session_->order;
         const auto* target = order.target ? session_->encounter.FindEnemy(*order.target) : nullptr;
         if (order.kind == OrderKind::Move) hud.order = "Order: move";
@@ -454,11 +468,34 @@ namespace LB::Engine {
             hud.order = target ? std::format("Order: {} at {}", spell, target->definition->name) : std::format("Order: {}", spell);
         }
 
-        if (session_->depth > 0) hud.banner = std::format("DEPTH {}", session_->depth);
+        if (session_->depth > 0) hud.banner = session_->restFloor ? std::format("DEPTH {} - RESTING PLACE", session_->depth) : std::format("DEPTH {}", session_->depth);
         else if (session_->encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_->encounter.GetWave());
 
         Hud::Draw(renderingSystem_, hud);
         session_->combatText.Draw(renderingSystem_);
+    }
+
+    // Telegraphed attacks: a ring of red sparks where the blow will fall, and a second ring growing
+    // from the middle that meets it as the blow lands
+    void GameEngine::DrawTelegraphs() {
+        constexpr std::int32_t points = 40;
+        for (const auto& enemy : session_->encounter.GetEnemies()) {
+            if (enemy.slamSeconds <= 0.0f || enemy.IsDead()) continue;
+            const auto& type = *enemy.definition;
+            const float progress = std::clamp(1.0f - enemy.slamSeconds / type.slamWindupSeconds, 0.0f, 1.0f);
+            const float pulse = 0.75f + 0.25f * std::sin(static_cast<float>(session_->gameTimeSeconds) * 18.0f);
+            for (std::int32_t i = 0; i < points; ++i) {
+                const float angle = 2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / points;
+                const float c = std::cos(angle), s = std::sin(angle);
+                renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{
+                    { enemy.slamCenter.x + c * type.slamRadius, 0.08f, enemy.slamCenter.y + s * type.slamRadius }, 0.32f, { 1.0f, 0.15f, 0.06f, 3.2f * pulse }, true });
+                if (i % 2 == 0) {
+                    const float r = type.slamRadius * progress;
+                    renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{
+                        { enemy.slamCenter.x + c * r, 0.06f, enemy.slamCenter.y + s * r }, 0.22f, { 1.0f, 0.4f, 0.1f, 2.4f }, true });
+                }
+            }
+        }
     }
 
 } // namespace LB::Engine

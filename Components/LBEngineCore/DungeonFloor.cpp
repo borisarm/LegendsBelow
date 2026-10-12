@@ -75,13 +75,39 @@ namespace LB::Engine {
 
         session_->encounter.Reset();
         session_->groundItems.clear();
+
+        // A resting place: every room is quiet; the merchant and the shrine stand in the entrance
+        session_->restFloor = IsRestDepth(depth);
+        session_->merchant.reset();
+        session_->shrine.reset();
+        session_->shrineUsed = false;
+        session_->stock.clear();
+        session_->trade.Close();
+        if (session_->restFloor) {
+            for (auto& room : session_->rooms) {
+                room.triggered = true;
+                room.cleared = true;
+            }
+            const auto center = session_->world.RoomCenter(layout.entranceRoom);
+            const auto spot = [&](float dx) {
+                const WorldPoint at{ center.x + dx, center.y - 1.2f };
+                return session_->world.CircleFits(at, 0.5f) ? at : WorldPoint{ center.x + dx, center.y };
+            };
+            session_->merchant = spot(1.6f);
+            session_->shrine = spot(-1.6f);
+            StockMerchant();
+        }
         if (session_->playerId) {
             session_->playerPosition = session_->world.RoomCenter(layout.entranceRoom);
             session_->characterService.PlaceCharacter(*session_->playerId, ToTile(session_->playerPosition));
             session_->camera.SnapTo({ session_->playerPosition.x, session_->playerPosition.y });
         }
+        // The tier's look; props in the rooms, traps in the corridors (the same for the same floor)
+        session_->decor.Build(session_->world, depth, FloorSeed(session_->baseSeed, depth) ^ 0x5EEDu, session_->restFloor);
         if (assets_.models.loaded) {
-            session_->walls.Build(session_->world, renderingSystem_, assets_.models.wall, assets_.models.corner, ModelScale);
+            const auto& theme = ThemeForDepth(depth);
+            session_->walls.Build(session_->world, renderingSystem_, ModelOf(theme.wall) != Systems::Rendering::InvalidModelId ? ModelOf(theme.wall) : assets_.models.wall,
+                                  assets_.models.corner, ModelScale);
         }
         session_->torches.Build(session_->world, session_->walls);
         session_->effects.Clear();
@@ -111,25 +137,25 @@ namespace LB::Engine {
             const auto* ranged = content_->FindEnemy(RangedEnemy);
             const auto* caster = content_->FindEnemy(CasterEnemy);
             const auto* brute = content_->FindEnemy(BruteEnemy);
-            const auto* boss = content_->FindEnemy(BossEnemy);
+            const auto* boss = content_->FindEnemy(BossForDepth(session_->depth));
             const auto raise = [&](const Content::EnemyDefinition* kind, std::int32_t count) {
                 if (!kind || count <= 0) return;
                 for (const auto id : session_->encounter.SpawnInRoom(*kind, count, here, session_->playerPosition, session_->depth)) room.enemies.push_back(id);
             };
             switch (type) {
             case RoomType::Combat:
-                raise(light, std::min(2 + session_->depth / 2, 4));
+                raise(light, std::min(2 + (session_->depth - 1) / 2, 4));
                 raise(heavy, session_->depth >= 2 ? std::min(1 + session_->depth / 4, 2) : 0);
                 raise(ranged, session_->depth >= 2 ? std::min(1 + session_->depth / 4, 2) : 0);   // shooters from the second floor
                 raise(caster, session_->depth >= 3 ? 1 : 0);                                       // casters from the third
                 raise(brute, session_->depth >= 5 ? 1 : 0);
                 break;
             case RoomType::Elite:
-                raise(heavy, 2);
+                raise(heavy, session_->depth >= 2 ? 2 : 1);
                 raise(light, 1 + session_->depth / 3);
                 raise(ranged, 1);
-                raise(caster, session_->depth >= 2 ? 1 : 0);
-                raise(brute, session_->depth >= 2 ? 1 : 0);
+                raise(caster, session_->depth >= 3 ? 1 : 0);
+                raise(brute, session_->depth >= 3 ? 1 : 0);
                 break;
             case RoomType::Exit:
                 // The end of a tier: the boss guards the way down (it opens when the room is clear)
@@ -158,8 +184,37 @@ namespace LB::Engine {
     }
 
     // Chests open when the player steps up to them; the trapdoor of a cleared exit room leads down
+    // Spikes rising (heard nearby) and striking the player on their cell: 1d6 + half the depth,
+    // piercing, through armour
+    void GameEngine::UpdateTraps() {
+        const auto step = session_->decor.UpdateTraps(session_->gameTimeSeconds, session_->playerPosition, PlayerRadius, IsPlayerAlive());
+        for (const auto at : step.rose) PlaySound(GameSound::Spikes, at);
+        if (!step.playerStruck) return;
+        const auto damage = session_->lootRoller.RollDice(LB::Dice{ 1, 6, session_->depth / 2 });
+        CombatEvent event{ CombatEventKind::EnemyAttack, 0, Services::Combat::CombatService::ResolveSpellHit(damage, LB::Combat::DamageType::Piercing, GetPlayerDefense()), false };
+        session_->characterService.DamageCharacter(*session_->playerId, event.result.finalDamage);
+        session_->playerCombat.hitFlashSeconds = Encounter::HitFlashSeconds;
+        session_->combatEvents.push_back(event);
+        if (!IsPlayerAlive()) {
+            session_->playerCombat.swinging = false;
+            session_->playerCombat.deadSeconds = 0.0f;
+            CancelCast();
+        }
+    }
+
     void GameEngine::UpdateFloorInteractions() {
         if (!IsPlayerAlive()) return;
+        UpdateTraps();
+
+        // The shrine restores health and mana and lifts every status, once a floor
+        if (session_->shrine && !session_->shrineUsed && Encounter::Distance(*session_->shrine, session_->playerPosition) <= InteractRadius) {
+            session_->shrineUsed = true;
+            session_->characterService.RestCharacter(*session_->playerId);
+            session_->playerStatuses.Clear();
+            session_->combatText.Add("BLESSED", { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.95f, 0.85f, 0.45f, 1.0f }, 3.0f);
+            EmitLevelUpEffect();
+            PlaySound(GameSound::LevelUp, *session_->shrine);
+        }
         const auto& layout = session_->world.Layout();
         for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
             if (layout.rooms[i].type != RoomType::Treasure || session_->rooms[i].chestOpened) continue;
@@ -260,6 +315,155 @@ namespace LB::Engine {
             if (!enemy.IsDead() && session_->world.LineOfSight(session_->playerPosition, enemy.position)) markers.enemies.push_back(enemy.position);
         }
         session_->minimap.Draw(renderingSystem_, session_->world, markers);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // The merchant (rest floors)
+    // ------------------------------------------------------------------------------------------
+
+    // Potions and ammunition without end, and a few pieces of gear rolled for this depth
+    void GameEngine::StockMerchant() {
+        session_->stock.clear();
+        const auto add = [this](ItemRef item, std::int32_t quantity, bool unlimited) {
+            if (!item.IsValid()) return;
+            session_->stock.push_back(StockEntry{ item, quantity, PriceOf(item) * quantity, unlimited });
+        };
+        add(ItemRef::FromKey(*content_, HealingPotion), 1, true);
+        for (const auto& consumable : content_->GetConsumables()) {
+            if (consumable.IsAmmunition()) add(ItemRef{ ItemKind::Consumable, consumable.id }, MerchantArrowBundle, true);
+        }
+        if (const auto* table = content_->FindLootTable(MerchantStockTable)) {
+            for (std::int32_t i = 0; i < MerchantGearCount; ++i) {
+                for (const auto& drop : session_->lootRoller.Roll(*table, *content_)) {
+                    if (drop.item.IsValid()) add(RollDrop(drop.item), 1, false);
+                }
+            }
+        }
+    }
+
+    std::int32_t GameEngine::PriceOf(ItemRef item) const {
+        const auto base = session_->rolls.BaseOf(item);
+        std::int32_t value = 0;
+        if (base.kind == ItemKind::Weapon) value = content_->FindWeapon(base.id)->value;
+        else if (base.kind == ItemKind::Armor) value = content_->FindArmor(base.id)->value;
+        else if (base.kind == ItemKind::Consumable) value = content_->FindConsumable(base.id)->value;
+        const auto* rolled = session_->rolls.Find(item);
+        const float multiplier = rolled && rolled->rarity ? rolled->rarity->priceMultiplier : 1.0f;
+        return std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(value) * multiplier)));
+    }
+
+    bool GameEngine::BuyFromMerchant(std::size_t index) {
+        if (!NearMerchant() || index >= session_->stock.size()) return false;
+        const auto entry = session_->stock[index];
+        if (session_->gold < entry.price) return false;
+        if (GiveItemRef(entry.item, entry.quantity) < entry.quantity) return false;   // the bag is full
+        session_->gold -= entry.price;
+        if (!entry.unlimited) session_->stock.erase(session_->stock.begin() + static_cast<std::ptrdiff_t>(index));
+        return true;
+    }
+
+    bool GameEngine::SellToMerchant(ItemRef item) {
+        if (!NearMerchant() || !item.IsValid()) return false;
+        const auto inBag = std::ranges::any_of(GetInventory(), [&](const Inventory::InventoryItem& stack) { return stack.itemId == item.Pack(); });
+        if (!inBag || !session_->inventoryService.RemoveItem(*session_->playerId, item.Pack(), 1).success) return false;
+        session_->gold += SellPriceOf(item);
+        return true;
+    }
+
+    // The merchant's wares to buy, then the bag to sell
+    std::vector<ScreenRow> GameEngine::BuildTradeRows() const {
+        std::vector<ScreenRow> rows;
+        const auto heading = [&](std::string text) { rows.push_back(ScreenRow{ std::move(text), {}, ScreenAction::None, true, true }); };
+        heading(std::format("Buy - you have {} gold", session_->gold));
+        for (std::size_t i = 0; i < session_->stock.size(); ++i) {
+            const auto& entry = session_->stock[i];
+            ScreenRow row{ entry.quantity > 1 ? std::format("{} x{}", ItemName(entry.item), entry.quantity) : ItemName(entry.item), std::format("{} gold", entry.price) };
+            row.action = ScreenAction::Buy;
+            row.index = i;
+            row.item = entry.item;
+            row.color = RarityColorOf(entry.item);
+            row.enabled = session_->gold >= entry.price;
+            rows.push_back(std::move(row));
+        }
+        heading("Sell");
+        const auto bag = GetInventory();
+        if (bag.empty()) rows.push_back(ScreenRow{ "Nothing to sell" });
+        for (const auto& stack : bag) {
+            const auto item = ItemRef::Unpack(stack.itemId);
+            ScreenRow row{ stack.quantity > 1 ? std::format("{} x{}", stack.name, stack.quantity) : stack.name, std::format("{} gold", SellPriceOf(item)) };
+            row.action = ScreenAction::Sell;
+            row.item = item;
+            row.color = RarityColorOf(item);
+            rows.push_back(std::move(row));
+        }
+        return rows;
+    }
+
+    // Interact by the merchant opens the trade; up and down move, confirm buys or sells, back closes
+    void GameEngine::UpdateTradeScreen() {
+        const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
+        auto& trade = session_->trade;
+        if (!trade.IsOpen()) {
+            if (!session_->characterScreen.IsOpen() && NearMerchant() && triggered(InteractAction)) {
+                trade.Open();
+                trade.SetRows(BuildTradeRows());
+                PlaySound(GameSound::ScreenOpen);
+            }
+            return;
+        }
+        if (triggered(InteractAction) || triggered(MenuBackAction) || triggered(CharacterScreenAction) || !NearMerchant()) {
+            trade.Close();
+            PlaySound(GameSound::ScreenClose);
+            return;
+        }
+        trade.SetRows(BuildTradeRows());
+        if (triggered(MenuUpAction)) trade.Step(-1);
+        if (triggered(MenuDownAction)) trade.Step(+1);
+        if (triggered(MenuConfirmAction)) {
+            if (const auto* row = trade.Selected(); row && row->enabled) {
+                const bool done = row->action == ScreenAction::Buy ? BuyFromMerchant(row->index) : row->action == ScreenAction::Sell && SellToMerchant(row->item);
+                PlaySound(done ? GameSound::Gold : GameSound::NoMana);
+            }
+        }
+        trade.SetRows(BuildTradeRows());
+    }
+
+    // The merchant (idling, facing the room), the shrine with its candles (lit until used), and
+    // their light
+    void GameEngine::DrawRestPlace(const Systems::Rendering::Color& tint) {
+        if (!assets_.models.loaded) return;
+        if (session_->merchant) {
+            const auto model = ModelOf(MerchantModel);
+            Systems::Rendering::ModelRenderData body{ model, { session_->merchant->x, 0.0f, session_->merchant->y }, 0.0f, PlayerModelScale, tint };
+            if (const auto idle = renderingSystem_.FindAnimation("Idle_A")) {
+                body.animation.current = { *idle, static_cast<float>(session_->gameTimeSeconds), true };
+            }
+            renderingSystem_.DrawModel(body);
+        }
+        if (session_->shrine) {
+            const Systems::Rendering::Vector3 at{ session_->shrine->x, 0.0f, session_->shrine->y };
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(ShrineModel), at, 0.0f, ModelScale * 0.6f, tint });
+            if (!session_->shrineUsed) {
+                renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(CandlesModel), { at.x, 0.0f, at.z + 0.55f }, 0.0f, ModelScale, tint });
+                renderingSystem_.DrawLight(Systems::Rendering::PointLight{ { at.x, 1.2f, at.z + 0.4f }, { 1.0f, 0.78f, 0.45f, 1.0f }, 4.5f, 1.3f });
+            }
+        }
+    }
+
+    // The floor's props, and its traps: a grate over the cell, the spikes rising through it
+    void GameEngine::DrawDecor(const Systems::Rendering::Color& tint) {
+        if (!assets_.models.loaded || !session_->dungeonMode) return;
+        for (const auto& prop : session_->decor.Props()) {
+            const auto model = ModelOf(prop.model);
+            if (model == Systems::Rendering::InvalidModelId) continue;
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ model, { prop.position.x, 0.0f, prop.position.y }, prop.yaw, ModelScale, tint });
+        }
+        for (const auto& trap : session_->decor.Traps()) {
+            const float raise = FloorDecor::Raise(trap, session_->gameTimeSeconds);
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(FloorDecor::GrateModel), { trap.center.x, -0.03f, trap.center.y }, 0.0f, ModelScale, tint });
+            // The spikes stand a tile tall: sunk below the floor, they come up through the grate
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(FloorDecor::SpikesModel), { trap.center.x, -1.0f + 0.65f * raise, trap.center.y }, 0.0f, ModelScale, tint });
+        }
     }
 
 } // namespace LB::Engine

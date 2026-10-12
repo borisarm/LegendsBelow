@@ -59,5 +59,21 @@
     "categories": ["Control"],
     "durationSeconds": 4.0,
     "preventsActions": true
+  },
+  {
+    "id": "status_stun_basic",
+    "displayName": "Stunned",
+    "categories": ["Control"],
+    "durationSeconds": 1.5,
+    "movementMultiplier": 0.0,
+    "preventsActions": true
+  },
+  {
+    "id": "status_blinded_basic",
+    "displayName": "Blinded",
+    "categories": ["Control"],
+    "durationSeconds": 3.0,
+    "movementMultiplier": 0.0,
+    "preventsActions": true
   }
 ]

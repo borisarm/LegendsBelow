@@ -78,6 +78,9 @@ export namespace LB::Engine {
         std::uint32_t summoner{0};          // the enemy that raised it (it crumbles with it); 0: none
         float summonSeconds{0.0f};          // until it raises enemies again (summoners)
         bool phaseTwo{false};               // a boss below its phase-two health
+        float slamSeconds{0.0f};            // > 0: winding up a telegraphed attack, landing when it runs out
+        float slamCooldown{0.0f};           // until it may start another
+        WorldPoint slamCenter{};            // where the ring is
 
         [[nodiscard]] bool IsDead() const noexcept { return state == EnemyState::Dead; }
 
@@ -124,7 +127,17 @@ export namespace LB::Engine {
     enum class EnemyAction {
         None,
         Strike,
-        Shoot
+        Shoot,
+        Slam        // a telegraphed attack lands (at Enemy::slamCenter)
+    };
+
+    /// <summary>
+    /// Where an enemy's group stands this step (design-combat-system.md 9.1): how close its
+    /// nearest tank and its nearest melee fighter are to the player (infinity: none closing in)
+    /// </summary>
+    struct Formation {
+        float tank{std::numeric_limits<float>::infinity()};
+        float front{std::numeric_limits<float>::infinity()};
     };
 
 } // namespace LB::Engine

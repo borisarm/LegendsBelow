@@ -43,6 +43,10 @@ export namespace LB::Engine {
         static constexpr float WalkAnimationSpeed = 2.0f;
         // Backing away that gains less than this share of a step means a wall is behind
         static constexpr float BackAwayProgress = 0.3f;
+        // Group tactics: fighters keep this far behind their tank until it is within EngageDistance
+        // of the player; shooters keep twice it behind the front line
+        static constexpr float RankGap = 1.0f;
+        static constexpr float EngageDistance = 2.5f;
 
         /// <summary>
         /// The world enemies move in (kept by reference; null: open ground, always in sight)
@@ -100,7 +104,7 @@ export namespace LB::Engine {
         /// (in reach at the impact moment), Shoot when a ranged enemy's shot leaves; the caller
         /// resolves the strike or launches the shot.
         /// </summary>
-        [[nodiscard]] EnemyAction Update(Enemy& enemy, float dt, const PlayerTarget& player) {
+        [[nodiscard]] EnemyAction Update(Enemy& enemy, float dt, const PlayerTarget& player, const Formation& formation = {}) {
             enemy.hitFlashSeconds = std::max(0.0f, enemy.hitFlashSeconds - dt);
             // Frozen (or charmed): no acting, the pose held, until it wears off
             if (enemy.statuses.PreventsActions() && !enemy.IsDead() && enemy.state != EnemyState::Spawning) return EnemyAction::None;
@@ -149,7 +153,9 @@ export namespace LB::Engine {
             }
 
             enemy.recoverySeconds = std::max(0.0f, enemy.recoverySeconds - dt);
+            enemy.slamCooldown = std::max(0.0f, enemy.slamCooldown - dt);
             if (!player.alive) {
+                enemy.slamSeconds = 0.0f;
                 if (enemy.state != EnemyState::Idle) Enter(enemy, EnemyState::Idle);
                 return EnemyAction::None;
             }
@@ -157,6 +163,27 @@ export namespace LB::Engine {
             if (enemy.state == EnemyState::Idle) {
                 if (distance > type.aggroRange || !inSight) return EnemyAction::None;
                 Enter(enemy, EnemyState::Chasing);
+            }
+
+            // A telegraphed attack: standing still while its ring shows, landing when the wind-up
+            // runs out; started when ready and the player is close and in sight
+            if (enemy.slamSeconds > 0.0f) {
+                TurnToward(enemy, enemy.slamCenter.x - enemy.position.x, enemy.slamCenter.y - enemy.position.y, dt);
+                enemy.slamSeconds -= dt;
+                if (enemy.slamSeconds > 0.0f) return EnemyAction::None;
+                enemy.slamSeconds = 0.0f;
+                enemy.slamCooldown = type.slamCooldownSeconds * (enemy.phaseTwo ? 0.6f : 1.0f);
+                enemy.recoverySeconds = std::max(enemy.recoverySeconds, 0.6f);
+                return EnemyAction::Slam;
+            }
+            if (type.HasSlam() && enemy.slamCooldown <= 0.0f && distance <= type.slamTriggerRange && inSight) {
+                enemy.slamSeconds = type.slamWindupSeconds;
+                enemy.slamCenter = type.slamAtTarget ? player.position : enemy.position;
+                // The attack clip slowed so its blow falls as the wind-up ends
+                const auto own = ClipsOf(enemy).attacks.find(type.key);
+                const ClipInfo clip = own != ClipsOf(enemy).attacks.end() ? own->second : ClipInfo{ ClipsOf(enemy).attack, ClipsOf(enemy).attackSeconds };
+                enemy.animator.Play(clip.id, false, clip.seconds * type.attackImpactFraction / type.slamWindupSeconds, true, 0.1f);
+                return EnemyAction::None;
             }
 
             // Slowed or rooted: slower, or not moving at all
@@ -196,10 +223,25 @@ export namespace LB::Engine {
                 return EnemyAction::None;
             }
 
+            // Ranks: a fighter waits behind its group's tank until the tank closes in; a shooter keeps
+            // behind the front line (though never out of its own range)
+            float holdAt = 0.0f;
+            if (type.IsRanged() && !type.boss && std::isfinite(formation.front)) {
+                holdAt = std::min(formation.front + RankGap * 2.0f, type.attackRange * 0.9f);
+            }
+            else if (!type.IsRanged() && !type.tank && !type.boss && std::isfinite(formation.tank) && formation.tank > EngageDistance) {
+                holdAt = formation.tank + RankGap;
+            }
+            if (holdAt > 0.0f && distance <= holdAt) {
+                TurnToward(enemy, dx, dy, dt);
+                enemy.animator.Play(ClipsOf(enemy).idle, true);
+                return EnemyAction::None;
+            }
+
             // Close in: straight at the player when in sight (stopping a little inside reach), else
             // along the flow field around the walls
             float tx = dx, ty = dy;
-            float step = std::min(speed * dt, std::max(0.0f, distance - type.attackRange * 0.9f));
+            float step = std::min({ speed * dt, std::max(0.0f, distance - type.attackRange * 0.9f), std::max(0.0f, distance - holdAt) });
             if (!inSight && world_) {
                 if (!flowFieldReady_) {
                     world_->BuildFlowField(player.position);

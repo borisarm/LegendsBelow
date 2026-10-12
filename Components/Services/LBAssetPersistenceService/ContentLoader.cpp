@@ -363,6 +363,7 @@ namespace LB::Content {
             reader.ReadStringArray("specialProperties", weapon.specialProperties);
             reader.ReadInt("affixSlots", weapon.affixSlots, false);
             reader.ReadString("ammoType", weapon.ammoType, false);
+            reader.ReadInt("value", weapon.value, false);
             reader.ReadFloat("range", weapon.range, false);
             reader.ReadFloat("projectileSpeed", weapon.projectileSpeed, false);
 
@@ -381,6 +382,7 @@ namespace LB::Content {
             reader.ReadString("name", armor.name, true);
             reader.ReadEnum("slot", armor.slot, EquipmentSlots, true);
             reader.ReadEnum("category", armor.category, ArmorCategories, true);
+            reader.ReadInt("value", armor.value, false);
             reader.ReadInt("requiredLevel", armor.requiredLevel, false);
             reader.ReadEnumArray("allowedClasses", armor.allowedClasses, CharacterClasses, true);
             reader.ReadInt("physicalAR", armor.physicalAR, false);
@@ -415,6 +417,28 @@ namespace LB::Content {
             reader.ReadInt("spellPowerBase", definition.spellPowerBase, false);
             reader.ReadString("startingWeapon", definition.startingWeapon, false);
             reader.ReadDice("sneakAttackDice", definition.sneakAttackDice, false);
+            if (const Json* paths = reader.Nested("specializations", false, true)) {
+                std::size_t index = 0;
+                for (const auto& path : *paths) {
+                    const std::string context = std::format("{}: specializations[{}]", reader.Context(), index++);
+                    if (!path.is_object()) {
+                        reader.Errors().push_back(std::format("{}: must be a JSON object", context));
+                        continue;
+                    }
+                    EntryReader pathReader(path, context, reader.Errors());
+                    SpecializationDefinition specialization{};
+                    pathReader.ReadString("id", specialization.key, true);
+                    pathReader.ReadString("name", specialization.name, true);
+                    pathReader.ReadString("description", specialization.description, false);
+                    pathReader.ReadInt("damage", specialization.damage, false);
+                    pathReader.ReadInt("attackBonus", specialization.attackBonus, false);
+                    pathReader.ReadInt("armorClass", specialization.armorClass, false);
+                    pathReader.ReadInt("armor", specialization.armor, false);
+                    pathReader.ReadInt("spellPower", specialization.spellPower, false);
+                    pathReader.ReadFloat("manaRegen", specialization.manaRegen, false);
+                    definition.specializations.push_back(std::move(specialization));
+                }
+            }
             reader.ReadStringArray("startingItems", definition.startingItems);
             if (definition.spellBar.size() > 4) reader.Error("'spellBar' holds at most 4 spells");
             if (definition.manaRegenPerSecond < 0.0f) reader.Error("'manaRegenPerSecond' must not be negative");
@@ -579,6 +603,16 @@ namespace LB::Content {
             reader.ReadInt("maxSummons", enemy.maxSummons, false);
             reader.ReadFloat("summonCooldownSeconds", enemy.summonCooldownSeconds, false);
             reader.ReadFloat("phaseTwoHealthFraction", enemy.phaseTwoHealthFraction, false);
+            reader.ReadFloat("slamRadius", enemy.slamRadius, false);
+            reader.ReadFloat("slamWindupSeconds", enemy.slamWindupSeconds, false);
+            reader.ReadFloat("slamCooldownSeconds", enemy.slamCooldownSeconds, false);
+            reader.ReadFloat("slamTriggerRange", enemy.slamTriggerRange, false);
+            reader.ReadBool("slamAtTarget", enemy.slamAtTarget);
+            reader.ReadDice("slamDamage", enemy.slamDamage, false);
+            reader.ReadEnum("slamDamageType", enemy.slamDamageType, DamageTypes, false);
+            reader.ReadBool("tank", enemy.tank);
+            if (enemy.slamRadius < 0.0f) reader.Error("'slamRadius' must not be negative");
+            if (enemy.slamRadius > 0.0f && enemy.slamWindupSeconds <= 0.0f) reader.Error("'slamWindupSeconds' must be positive");
             if (enemy.rig != "Medium" && enemy.rig != "Large") reader.Error(std::format("'rig' must be Medium or Large, not '{}'", enemy.rig));
             if (!enemy.summon.empty() && (enemy.summonCount < 1 || enemy.maxSummons < 1 || enemy.summonCooldownSeconds <= 0.0f)) {
                 reader.Error("a summoner needs a positive 'summonCount', 'maxSummons', and 'summonCooldownSeconds'");
@@ -622,6 +656,7 @@ namespace LB::Content {
             reader.ReadInt("affixes", rarity.affixes, true);
             reader.ReadFloat("weight", rarity.weight, true);
             reader.ReadFloat("weightPerDepth", rarity.weightPerDepth, false);
+            reader.ReadFloat("priceMultiplier", rarity.priceMultiplier, false);
             if (const Json* color = reader.Nested("color", true, true)) {
                 if (color->size() != 3) reader.Error("'color' must be three numbers (display RGB, 0..1)");
                 else {
@@ -689,6 +724,7 @@ namespace LB::Content {
             reader.ReadDice("healing", consumable.healing, false);
             reader.ReadInt("maxStack", consumable.maxStack, false);
             reader.ReadString("ammoType", consumable.ammoType, false);
+            reader.ReadInt("value", consumable.value, false);
             reader.ReadString("model", consumable.model, true);
 
             if (consumable.maxStack < 1) reader.Error("'maxStack' must be at least 1");

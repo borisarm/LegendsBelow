@@ -212,7 +212,7 @@ TEST(GameEngineCombatTests, Hud_HealthBarsFollowHitPoints) {
     const auto fills = [&] {
         std::vector<LB::Systems::Rendering::RectangleRenderData> bars;
         for (const auto& rect : engine.GetRendering().GetQueuedRectangles()) {
-            if (rect.layerDepth == 12) bars.push_back(rect);
+            if (rect.layerDepth == 12 && rect.rect.height != 12) bars.push_back(rect);   // not the stamina bar
         }
         return bars;
     };

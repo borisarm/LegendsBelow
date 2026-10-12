@@ -158,9 +158,11 @@ export namespace LB::Engine {
             phaseChanges_.clear();
             behavior_.BeginStep();
             AlertGroups();
+            const auto formations = Formations(player.position);
             for (auto& enemy : enemies_) {
                 UpdateStatuses(enemy, elapsedSeconds, events);
-                switch (behavior_.Update(enemy, elapsedSeconds, player)) {
+                const auto formation = formations.find(enemy.group);
+                switch (behavior_.Update(enemy, elapsedSeconds, player, formation != formations.end() ? formation->second : Formation{})) {
                 case EnemyAction::Strike:
                     events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), player.defense), false });
                     break;
@@ -168,6 +170,18 @@ export namespace LB::Engine {
                     if (enemy.definition->IsCaster()) CastAtPlayer(enemy, player.position);
                     else ShootAtPlayer(enemy, player.position);
                     break;
+                case EnemyAction::Slam: {
+                    // Everyone inside the ring is struck (through armour, like a spell)
+                    const auto& type = *enemy.definition;
+                    bursts_.push_back({ enemy.slamCenter, type.slamRadius, type.slamDamageType });
+                    if (player.alive && Distance(player.position, enemy.slamCenter) <= type.slamRadius + player.radius) {
+                        auto dice = type.slamDamage;
+                        dice.bonus += enemy.bonusDamage;
+                        const auto damage = combat_.RollDice(dice);
+                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, Services::Combat::CombatService::ResolveSpellHit(damage, type.slamDamageType, player.defense), false });
+                    }
+                    break;
+                }
                 case EnemyAction::None:
                     break;
                 }
@@ -454,6 +468,20 @@ export namespace LB::Engine {
             shot.spell = SpellPayload{ spell, SpellDamage(*spell, enemy.definition->spellPower) };
             projectiles_.Launch(std::move(shot));
             shots_.push_back(enemy.position);
+        }
+
+        // Each group's formation: its nearest tank and nearest melee fighter closing in on the player
+        [[nodiscard]] std::unordered_map<std::uint32_t, Formation> Formations(WorldPoint player) const {
+            std::unordered_map<std::uint32_t, Formation> formations;
+            for (const auto& enemy : enemies_) {
+                if (enemy.group == 0 || enemy.IsDead() || enemy.definition->IsRanged()) continue;
+                if (enemy.state != EnemyState::Chasing && enemy.state != EnemyState::Attacking) continue;
+                auto& formation = formations[enemy.group];
+                const float distance = Distance(enemy.position, player);
+                formation.front = std::min(formation.front, distance);
+                if (enemy.definition->tank) formation.tank = std::min(formation.tank, distance);
+            }
+            return formations;
         }
 
         // Burning and other damage over time; a status that kills counts as the player's (only the

@@ -163,12 +163,15 @@ TEST(GameEngineMageTests, Mage_StartsWithWandStaffSpellsAndFullMana) {
     EXPECT_EQ(PlayerHitPoints(engine), 10);   // level 1 hpGain 10, CON 10 (no modifier)
 }
 
-TEST(GameEngineMageTests, Warrior_HasNoSpellBar) {
+TEST(GameEngineMageTests, Warrior_HasStaminaAbilities) {
     GameEngine engine;
     InitializeForCombat(engine);
 
-    EXPECT_TRUE(engine.GetSpellBar().empty());
-    EXPECT_EQ(engine.SpellBlocker(0), "empty");
+    ASSERT_EQ(engine.GetSpellBar().size(), 3u);   // Cleave, Shield Bash (3), Whirlwind (5)
+    EXPECT_EQ(engine.GetSpellBar()[0]->name, "Cleave");
+    EXPECT_EQ(engine.SpellBlocker(0), "");
+    EXPECT_EQ(engine.SpellBlocker(1), "level 3");
+    EXPECT_EQ(engine.SpellBlocker(3), "empty");
 }
 
 TEST(GameEngineMageTests, Wand_ShootsAnArcaneOrb) {
@@ -230,10 +233,12 @@ TEST(GameEngineMageTests, NotEnoughMana_SaysSoAndDoesNotCast) {
     GameEngine engine;
     InitializeMage(engine);
     const auto& bolt = *engine.GetSpellBar()[0];
-    TapKey(engine, Keys::FromChar('1'));
-    engine.Tick(OneSixtieth);
-    RunSteps(engine, static_cast<int>(bolt.castTimeSeconds * 60.0f));
-    ASSERT_LT(PlayerMana(engine), bolt.manaCost);   // one bolt spends most of a new mage's mana
+    for (int cast = 0; cast < 2; ++cast) {           // two bolts spend most of a new mage's mana
+        TapKey(engine, Keys::FromChar('1'));
+        engine.Tick(OneSixtieth);
+        RunSteps(engine, static_cast<int>(bolt.castTimeSeconds * 60.0f));
+    }
+    ASSERT_LT(PlayerMana(engine), bolt.manaCost);
 
     TapKey(engine, Keys::FromChar('1'));
     engine.Tick(OneSixtieth);

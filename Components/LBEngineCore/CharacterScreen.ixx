@@ -17,7 +17,10 @@ export namespace LB::Engine {
         SpendPoint,       // raise `attribute` with an unassigned point
         Equip,            // equip `item` from the bag
         Use,              // use `item` (a consumable) from the bag
-        Unequip           // take off the piece in `slot`
+        Unequip,          // take off the piece in `slot`
+        Buy,              // buy the merchant's stock entry `index`
+        Sell,             // sell one `item` from the bag
+        ChoosePath        // take the class's specialization `index`
     };
 
     /// <summary>
@@ -34,6 +37,7 @@ export namespace LB::Engine {
         ItemRef item{};
         LB::Combat::EquipmentSlot slot{LB::Combat::EquipmentSlot::None};
         std::optional<Systems::Rendering::Color> color;   // a rolled item's rarity color
+        std::size_t index{0};                             // Buy: the stock entry
 
         [[nodiscard]] bool IsSelectable() const noexcept { return action != ScreenAction::None; }
     };

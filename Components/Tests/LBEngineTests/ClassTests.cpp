@@ -20,13 +20,13 @@ namespace {
 // The Rogue
 // ============================================================================
 
-TEST(RogueTests, Kit_DaggerBowAndTwoAbilities) {
+TEST(RogueTests, Kit_DaggerBowAndFourAbilities) {
     GameEngine engine;
     InitializeAs(engine, LB::Character::CharacterClass::Rogue);
 
     EXPECT_EQ(engine.GetPlayerWeapon()->category, LB::Combat::WeaponType::Dagger);
     EXPECT_EQ(engine.CountItem(GameEngine::StartingBow), 1);
-    ASSERT_EQ(engine.GetSpellBar().size(), 2u);
+    ASSERT_EQ(engine.GetSpellBar().size(), 4u);   // and Fan of Knives (3), Smoke Bomb (5)
     EXPECT_TRUE(engine.GetSpellBar()[0]->IsDash());
     EXPECT_TRUE(engine.GetSpellBar()[1]->IsShadowstep());
 }

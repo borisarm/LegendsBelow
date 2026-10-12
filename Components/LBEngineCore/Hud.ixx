@@ -21,7 +21,9 @@ export namespace LB::Engine {
             std::int32_t gold{0};
             std::int32_t potions{0};
             bool pointsToSpend{false};
-            bool usesMana{false};             // a mana bar (Mage, Cleric, Rogue)
+            bool usesMana{false};             // a mana (or stamina) bar
+            std::string resource{"MP"};       // its label: "MP", or "ST" for stamina
+            bool pathToChoose{false};
             std::int32_t mana{0};
             std::int32_t maxMana{0};
             std::vector<std::string> statuses;   // "Slowed", "Burning"
@@ -93,7 +95,7 @@ export namespace LB::Engine {
                 if (player.usesMana) {
                     const float fraction = player.maxMana > 0 ? static_cast<float>(player.mana) / static_cast<float>(player.maxMana) : 0.0f;
                     bar(24, screenHeight - 22, 240, 12, fraction, display(0.25f, 0.45f, 0.95f));
-                    label(std::format("MP {}/{}", player.mana, player.maxMana), 30, screenHeight - 22, 1.3f, display(1.0f, 1.0f, 1.0f));
+                    label(std::format("{} {}/{}", player.resource, player.mana, player.maxMana), 30, screenHeight - 22, 1.3f, display(1.0f, 1.0f, 1.0f));
                     bar(24, screenHeight - 6, 240, 3, player.experienceFraction, display(0.95f, 0.75f, 0.30f));
                 }
                 else {
@@ -108,8 +110,8 @@ export namespace LB::Engine {
                 label(std::format("GOLD {}", player.gold), 280, screenHeight - 42, 2.0f, display(0.95f, 0.80f, 0.35f));
                 label(std::format("POTIONS {}", player.potions), 280, screenHeight - 22, 2.0f, display(0.95f, 0.45f, 0.40f));
                 if (!player.ammo.empty()) label(player.ammo, 280, screenHeight - 62, 2.0f, display(0.85f, 0.80f, 0.65f));
-                if (player.pointsToSpend) {
-                    label("POINTS TO SPEND (I)", 24, screenHeight - 92, 2.0f, display(0.55f, 0.95f, 0.55f));
+                if (player.pointsToSpend || player.pathToChoose) {
+                    label(player.pathToChoose ? "A PATH TO CHOOSE (I)" : "POINTS TO SPEND (I)", 24, screenHeight - 92, 2.0f, display(0.55f, 0.95f, 0.55f));
                 }
             }
 
@@ -132,7 +134,7 @@ export namespace LB::Engine {
                     const std::int32_t x = left + i * (size + gap);
                     renderer.DrawRectangle(Rectangle{ x - 2, top - 2, size + 4, size + 4 }, display(0.05f, 0.04f, 0.04f), 10);
                     renderer.DrawRectangle(Rectangle{ x, top, size, size }, display(0.10f, 0.09f, 0.12f), 11);
-                    renderer.DrawRectangle(Rectangle{ x, top + size - 5, size, 5 }, slot.accent, 12);
+                    renderer.DrawRectangle(Rectangle{ x, top + size - 5, size, 5 }, slot.accent, 11);
                     label(slot.key, x + 4, top + 2, 1.6f, display(0.95f, 0.75f, 0.30f));
                     // The name on up to two lines
                     const auto space = slot.name.find(' ');
@@ -147,16 +149,16 @@ export namespace LB::Engine {
                     centered(std::format("{}", slot.manaCost), top + 44, 1.3f, display(0.55f, 0.70f, 1.0f));
                     if (slot.cooldownFraction > 0.0f) {
                         const auto shaded = static_cast<std::int32_t>(std::lround(static_cast<float>(size) * slot.cooldownFraction));
-                        renderer.DrawRectangle(Rectangle{ x, top, size, shaded }, Color{ 0.0f, 0.0f, 0.0f, 0.65f }, 14);
+                        renderer.DrawRectangle(Rectangle{ x, top, size, shaded }, Color{ 0.0f, 0.0f, 0.0f, 0.65f }, 11);
                     }
                     else if (!slot.blocker.empty()) {
-                        renderer.DrawRectangle(Rectangle{ x, top, size, size }, Color{ 0.0f, 0.0f, 0.0f, 0.55f }, 14);
+                        renderer.DrawRectangle(Rectangle{ x, top, size, size }, Color{ 0.0f, 0.0f, 0.0f, 0.55f }, 11);
                         // Why, in the top right corner: the level it opens at, or too little mana
                         const std::string reason = slot.blocker.starts_with("level") ? std::format("L{}", slot.blocker.substr(6)) : slot.blocker == "mana" ? "MP" : "";
                         if (!reason.empty()) {
                             const auto width = renderer.MeasureText(reason, 1.5f).width;
                             renderer.DrawText(Systems::Rendering::TextRenderData{ reason, LB::Position{ x + size - 4 - static_cast<std::int32_t>(width), top + 2 }, {},
-                                display(0.95f, 0.45f, 0.40f), 1.5f, 15, true });
+                                display(0.95f, 0.45f, 0.40f), 1.5f, 13, true });
                         }
                     }
                 }

@@ -23,13 +23,16 @@ namespace LB::Engine {
         // An open menu takes the input; else the character screen does while open (Esc closes it
         // instead of opening the pause menu)
         const bool menuWasOpen = menu_.IsOpen();
-        const bool screenWasOpen = session_->characterScreen.IsOpen();
+        const bool screenWasOpen = ScreenOpen();
         if (menuWasOpen) {
             UpdateMenu();
         }
         else {
-            UpdateCharacterScreen();
-            if (!screenWasOpen && !session_->characterScreen.IsOpen() && inputSystem_.IsActionTriggered(std::string(PauseAction))) {
+            // The merchant's screen first: the key that closes it must not open the character screen
+            const bool tradeWasOpen = session_->trade.IsOpen();
+            UpdateTradeScreen();
+            if (!tradeWasOpen && !session_->trade.IsOpen()) UpdateCharacterScreen();
+            if (!screenWasOpen && !ScreenOpen() && inputSystem_.IsActionTriggered(std::string(PauseAction))) {
                 OpenMenu(MenuPage::Pause);
                 PlaySound(GameSound::ScreenOpen);
             }
@@ -44,13 +47,13 @@ namespace LB::Engine {
 
         // The camera can be turned and zoomed during the tactical pause; orders are taken during it
         UpdateCameraControls();
-        if (!menuWasOpen && !screenWasOpen && !menu_.IsOpen() && !session_->characterScreen.IsOpen()) UpdateOrders();
+        if (!menuWasOpen && !screenWasOpen && !menu_.IsOpen() && !ScreenOpen()) UpdateOrders();
         if (inputSystem_.IsActionTriggered(std::string(MapAction))) {
             session_->minimap.ToggleExpanded();
         }
 
         session_->combatEvents.clear();
-        const bool running = !session_->paused && !menu_.IsOpen() && !screenWasOpen && !session_->characterScreen.IsOpen();
+        const bool running = !session_->paused && !menu_.IsOpen() && !screenWasOpen && !ScreenOpen();
         if (running) {
             session_->gameTimeSeconds += elapsedSeconds;
             // Attacks first: a swing that starts this step roots the player at once
@@ -321,6 +324,7 @@ namespace LB::Engine {
         const auto& attributes = player->GetAttributes();
         std::int32_t modifier = 0;
         switch (player->GetClass()) {
+        case LB::Character::CharacterClass::Warrior: modifier = attributes.GetStrengthModifier(); break;   // a warrior's might
         case LB::Character::CharacterClass::Mage: modifier = attributes.GetIntelligenceModifier(); break;
         case LB::Character::CharacterClass::Cleric: modifier = attributes.GetWisdomModifier(); break;
         case LB::Character::CharacterClass::Rogue: modifier = attributes.GetIntelligenceModifier() / 2; break;

@@ -4,20 +4,23 @@
     "name": "Minor Healing Potion",
     "healing": "2d4+2",
     "maxStack": 10,
-    "model": "potionSmall_red.glb"
+    "model": "potionSmall_red.glb",
+    "value": 12
   },
   {
     "id": "consumable_ammo_arrow",
     "name": "Arrows",
     "maxStack": 99,
     "model": "arrow_bow_bundle.gltf",
-    "ammoType": "Arrow"
+    "ammoType": "Arrow",
+    "value": 1
   },
   {
     "id": "consumable_ammo_bolt",
     "name": "Bolts",
     "maxStack": 99,
     "model": "arrow_crossbow_bundle.gltf",
-    "ammoType": "Bolt"
+    "ammoType": "Bolt",
+    "value": 1
   }
 ]

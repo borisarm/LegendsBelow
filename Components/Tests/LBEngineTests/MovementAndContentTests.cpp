@@ -252,7 +252,7 @@ TEST(GameEngineContentTests, ShippedContent_Loads) {
 
     ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = *dir })) << engine.GetInitializationError();
 
-    EXPECT_EQ(engine.GetContent()->GetSpells().size(), 47u);   // 45 and the rogue's two abilities
+    EXPECT_EQ(engine.GetContent()->GetSpells().size(), 52u);   // 45, the rogue's four abilities, the warrior's three
     EXPECT_EQ(engine.GetContent()->GetWeapons().size(), 12u);
     EXPECT_EQ(engine.GetContent()->GetArmour().size(), 15u);
     EXPECT_NE(engine.GetContent()->FindWeapon("weapon_sword_rusted_shortsword_t1"), nullptr);

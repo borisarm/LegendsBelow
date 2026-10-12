@@ -107,10 +107,36 @@ namespace LB::Engine {
         return DescribeItem(*content_, item).first;
     }
 
+    // What the equipped items and the chosen path add
     ItemBonuses GameEngine::EquippedBonuses() const {
         auto bonuses = session_->rolls.BonusesOf(session_->playerWeaponItem);
         for (const auto& [slot, item] : session_->wornItems) bonuses += session_->rolls.BonusesOf(item);
+        if (const auto* path = GetPlayerPath()) {
+            bonuses.damage += path->damage;
+            bonuses.attackBonus += path->attackBonus;
+            bonuses.armorClass += path->armorClass;
+            bonuses.armor += path->armor;
+            bonuses.spellPower += path->spellPower;
+            bonuses.manaRegen += path->manaRegen;
+        }
         return bonuses;
+    }
+
+    const Content::SpecializationDefinition* GameEngine::GetPlayerPath() const {
+        const auto* classData = content_->FindClass(session_->playerClass);
+        return classData && !session_->path.empty() ? classData->FindSpecialization(session_->path) : nullptr;
+    }
+
+    bool GameEngine::ChoosePath(std::string_view key) {
+        const auto* classData = content_->FindClass(session_->playerClass);
+        const auto* player = PlayerCharacter();
+        if (!classData || !player || !session_->path.empty() || player->GetLevel() < Content::ClassDefinition::SpecializationLevel) return false;
+        const auto* path = classData->FindSpecialization(key);
+        if (!path) return false;
+        session_->path = path->key;
+        session_->combatText.Add(std::format("PATH: {}", path->name), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 1.0f, 0.82f, 0.25f, 1.0f }, 3.0f);
+        EmitLevelUpEffect();
+        return true;
     }
 
     std::optional<Systems::Rendering::Color> GameEngine::RarityColorOf(ItemRef item) const {
@@ -288,17 +314,29 @@ namespace LB::Engine {
 
     void GameEngine::OnEnemyKilled(const Enemy& enemy) {
         if (!session_->playerId) return;
+        GrantExperience(enemy.experience);
+        if (!enemy.definition->lootTable.empty()) {
+            DropLoot(enemy.definition->lootTable, enemy.position);
+        }
+    }
 
+    // Experience, and a level up's fanfare: the abilities it opens, a path to choose
+    void GameEngine::GrantExperience(std::int32_t experience) {
+        if (!session_->playerId) return;
         const Systems::Rendering::Vector3 overPlayer{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
-        if (enemy.experience > 0) {
-            if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, enemy.experience); progress && progress->levelIncreased) {
+        if (experience > 0) {
+            if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, experience); progress && progress->levelIncreased) {
                 session_->combatText.Add("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
+                const auto level = PlayerCharacter()->GetLevel();
+                for (const auto* spell : GetSpellBar()) {
+                    if (spell->requiredLevel == level) session_->combatText.Add(std::format("NEW: {}", spell->name), { overPlayer.x, overPlayer.y + 0.4f, overPlayer.z }, { 0.6f, 0.85f, 1.0f, 1.0f }, 2.6f);
+                }
+                if (level == Content::ClassDefinition::SpecializationLevel && session_->path.empty()) {
+                    session_->combatText.Add("CHOOSE A PATH (I)", { overPlayer.x, overPlayer.y + 0.8f, overPlayer.z }, { 0.55f, 0.95f, 0.55f, 1.0f }, 2.6f);
+                }
                 EmitLevelUpEffect();
                 PlaySound(GameSound::LevelUp, session_->playerPosition);
             }
-        }
-        if (!enemy.definition->lootTable.empty()) {
-            DropLoot(enemy.definition->lootTable, enemy.position);
         }
     }
 
@@ -379,6 +417,23 @@ namespace LB::Engine {
                 row.attribute = attribute;
             }
             rows.push_back(std::move(row));
+        }
+
+        // The path: chosen, or to choose from SpecializationLevel
+        if (classDefinition && !classDefinition->specializations.empty()) {
+            if (const auto* path = GetPlayerPath()) {
+                heading(std::format("Path - {}", path->name));
+                info(path->description);
+            }
+            else if (status.level >= Content::ClassDefinition::SpecializationLevel) {
+                heading("Choose a path");
+                for (std::size_t i = 0; i < classDefinition->specializations.size(); ++i) {
+                    const auto& option = classDefinition->specializations[i];
+                    ScreenRow row{ option.name, option.description, ScreenAction::ChoosePath };
+                    row.index = i;
+                    rows.push_back(std::move(row));
+                }
+            }
         }
 
         // Spells on the bar: their keys and costs, or the level they open at
@@ -483,6 +538,7 @@ namespace LB::Engine {
         const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
         if (!session_->playerId) return;
 
+        if (session_->trade.IsOpen()) return;
         if (!session_->characterScreen.IsOpen()) {
             if (triggered(CharacterScreenAction)) {
                 session_->characterScreen.Open();
@@ -519,13 +575,29 @@ namespace LB::Engine {
         case ScreenAction::Equip: EquipItemRef(row->item); break;
         case ScreenAction::Use: UseItem(key); break;
         case ScreenAction::Unequip: UnequipArmorSlot(row->slot); break;
+        case ScreenAction::ChoosePath:
+            if (const auto* classData = content_->FindClass(session_->playerClass); classData && row->index < classData->specializations.size()) {
+                ChoosePath(classData->specializations[row->index].key);
+            }
+            break;
+        case ScreenAction::Buy:
+        case ScreenAction::Sell: break;
         case ScreenAction::None: break;
         }
         session_->characterScreen.SetRows(BuildScreenRows());
     }
 
     void GameEngine::DrawCharacterScreen() {
+        if (session_->trade.IsOpen()) {
+            DrawRowScreen(session_->trade, "MERCHANT");
+            return;
+        }
         if (!session_->characterScreen.IsOpen()) return;
+        DrawRowScreen(session_->characterScreen, "CHARACTER");
+    }
+
+    // A screen of rows with a cursor (the character screen, the merchant's): a framed panel
+    void GameEngine::DrawRowScreen(const CharacterScreen& screen, std::string_view title) {
 
         std::int32_t width = 0;
         std::int32_t height = 0;
@@ -533,7 +605,7 @@ namespace LB::Engine {
         const std::int32_t panelWidth = std::min(width - 40, 620);
         const std::int32_t left = (width - panelWidth) / 2;
         const std::int32_t top = 30;
-        const auto& rows = session_->characterScreen.GetRows();
+        const auto& rows = screen.GetRows();
         constexpr std::int32_t lineHeight = 22;
         const std::int32_t panelHeight = std::min(height - 60, static_cast<std::int32_t>(rows.size()) * lineHeight + 60);
         MenuView::Panel(renderingSystem_, assets_.menuArt, { left, top, panelWidth, panelHeight }, 30);
@@ -541,16 +613,16 @@ namespace LB::Engine {
         const auto text = [&](std::string line, std::int32_t x, std::int32_t y, float scale, Color color) {
             renderingSystem_.DrawText(Systems::Rendering::TextRenderData{ std::move(line), LB::Position{ x, y }, {}, color, scale, 32, false });
         };
-        text("CHARACTER", left + 16, top + 12, 2.6f, Display(0.95f, 0.75f, 0.30f));
+        text(std::string(title), left + 16, top + 12, 2.6f, Display(0.95f, 0.75f, 0.30f));
         text("Enter/A: choose   Esc/B: close", left + panelWidth - 250, top + 16, 1.6f, Display(0.6f, 0.6f, 0.6f));
 
         // Keep the cursor's row in view when the list is taller than the panel
         const auto visible = static_cast<std::size_t>(std::max(1, (panelHeight - 60) / lineHeight));
-        const auto first = session_->characterScreen.GetCursor() >= visible ? session_->characterScreen.GetCursor() - visible + 1 : 0;
+        const auto first = screen.GetCursor() >= visible ? screen.GetCursor() - visible + 1 : 0;
         for (std::size_t i = first; i < rows.size() && i < first + visible; ++i) {
             const auto& row = rows[i];
             const std::int32_t y = top + 50 + static_cast<std::int32_t>(i - first) * lineHeight;
-            const bool selected = i == session_->characterScreen.GetCursor() && row.IsSelectable();
+            const bool selected = i == screen.GetCursor() && row.IsSelectable();
             if (selected) {
                 MenuView::Selection(renderingSystem_, assets_.menuArt, { left + 8, y - 4, panelWidth - 16, lineHeight }, 31);
             }
@@ -659,6 +731,7 @@ namespace LB::Engine {
         data["player.attributes"] = std::format("{};{};{};{};{};{}", a.strength, a.dexterity, a.constitution, a.intelligence, a.wisdom, a.charisma);
         data["player.points"] = std::format("{}", character.GetUnspentAttributePoints());
         data["player.gold"] = std::format("{}", session_->gold);
+        data["player.path"] = session_->path;
         data["player.weapon"] = session_->playerWeaponItem.IsValid() ? ItemSaveKey(session_->playerWeaponItem) : std::string{};
 
         std::string armour;
@@ -727,6 +800,9 @@ namespace LB::Engine {
         }
 
         if (const auto* text = field("player.gold"); text && ParseInt(*text, gold)) session_->gold = std::max(0, gold);
+        if (const auto* text = field("player.path"); text && content_->FindClass(session_->playerClass) && content_->FindClass(session_->playerClass)->FindSpecialization(*text)) {
+            session_->path = *text;
+        }
         if (const auto* text = field("player.weapon")) {
             const auto item = ItemFromSaveKey(*text);
             if (const auto* weapon = content_->FindWeapon(session_->rolls.BaseOf(item).id); weapon && session_->rolls.BaseOf(item).kind == ItemKind::Weapon) {

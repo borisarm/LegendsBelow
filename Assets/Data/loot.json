@@ -189,5 +189,38 @@
       { "item": "armor_chest_chain_shirt_t1", "weight": 2 },
       { "item": "consumable_potion_healing_minor", "weight": 1 }
     ]
+  },
+  {
+    "id": "stock_merchant",
+    "itemChance": 1.0,
+    "items": [
+      { "item": "weapon_sword_iron_longsword_t1", "weight": 3 },
+      { "item": "weapon_mace_iron_mace_t1", "weight": 3 },
+      { "item": "weapon_axe_splintered_hatchet_t1", "weight": 2 },
+      { "item": "weapon_dagger_rusted_dagger_t1", "weight": 2 },
+      { "item": "weapon_bow_worn_shortbow_t1", "weight": 2 },
+      { "item": "weapon_crossbow_light_crossbow_t1", "weight": 2 },
+      { "item": "weapon_staff_apprentices_staff_t1", "weight": 2 },
+      { "item": "weapon_wand_apprentices_wand_t1", "weight": 2 },
+      { "item": "weapon_polearm_guardian_halberd_t2", "weight": 1 },
+      { "item": "armor_head_chain_coif_t1", "weight": 2 },
+      { "item": "armor_chest_chain_shirt_t1", "weight": 2 },
+      { "item": "armor_chest_leather_jerkin_t1", "weight": 2 },
+      { "item": "armor_hands_leather_gloves_t1", "weight": 2 },
+      { "item": "armor_feet_leather_boots_t1", "weight": 2 },
+      { "item": "armor_shield_wooden_shield_t1", "weight": 2 }
+    ]
+  },
+  {
+    "id": "loot_golem_warlord",
+    "goldChance": 1.0,
+    "gold": "6d10",
+    "itemChance": 1.0,
+    "items": [
+      { "item": "weapon_sword_iron_longsword_t1", "weight": 2 },
+      { "item": "weapon_crossbow_light_crossbow_t1", "weight": 1 },
+      { "item": "armor_chest_chain_shirt_t1", "weight": 2 },
+      { "item": "consumable_potion_healing_minor", "weight": 2 }
+    ]
   }
 ]

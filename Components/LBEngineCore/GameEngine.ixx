@@ -27,6 +27,7 @@ import :World;
 import :Encounter;
 import :Projectiles;
 import :Statuses;
+import :Decor;
 import :Loot;
 import :Particles;
 import :Effects;
@@ -112,6 +113,8 @@ export namespace LB::Engine {
         static constexpr std::string_view MapAction = "Map";
         static constexpr std::string_view MenuLeftAction = "MenuLeft";
         static constexpr std::string_view MenuRightAction = "MenuRight";
+        // Talk to the merchant: F, gamepad d-pad up
+        static constexpr std::string_view InteractAction = "Interact";
         // The tactical pause (design-combat-system.md 2.1): Tab, gamepad left stick click
         static constexpr std::string_view TacticalPauseAction = "TacticalPause";
         // Orders: right click (the secondary action, design-ui-ux-and-audio.md 4.1); the target
@@ -194,8 +197,27 @@ export namespace LB::Engine {
         static constexpr std::string_view CasterEnemy = "enemy_skeleton_mage";
         static constexpr std::string_view BruteEnemy = "enemy_skeleton_golem";
         static constexpr std::string_view BossEnemy = "enemy_necromancer";
+        // The bosses of the tiers, in turn (design-dungeon-and-world.md 7.1)
+        static constexpr std::array<std::string_view, 2> BossEnemies = { "enemy_necromancer", "enemy_golem_warlord" };
+
+        /// <summary>
+        /// The boss at the end of a depth's tier
+        /// </summary>
+        [[nodiscard]] static constexpr std::string_view BossForDepth(std::int32_t depth) noexcept {
+            return BossEnemies[static_cast<std::size_t>(std::max(0, depth - 1) / BossFloorInterval) % BossEnemies.size()];
+        }
         // A boss guards the exit at the end of each tier of floors (design-dungeon-and-world.md 7.1-7.2)
         static constexpr std::int32_t BossFloorInterval = 3;
+        // The floor after a boss is a resting place (design-dungeon-and-world.md 7.3): no enemies, a
+        // shrine that restores the hero once, and a merchant
+        static constexpr std::string_view MerchantModel = "Engineer.glb";
+        static constexpr std::string_view ShrineModel = "pillar_decorated.gltf";
+        static constexpr std::string_view CandlesModel = "candle_triple.gltf";
+        static constexpr std::string_view MerchantStockTable = "stock_merchant";
+        static constexpr std::int32_t MerchantGearCount = 6;
+        static constexpr std::int32_t MerchantArrowBundle = 20;
+        static constexpr float SellFraction = 0.25f;          // of an item's value, what the merchant pays
+        static constexpr float MerchantRadius = 1.6f;         // close enough to trade
         static constexpr float PlayerReach = 1.4f;              // tiles between centers
         // A bow or crossbow shot leaves this far through the attack time (drawn, or aimed); the
         // player stands still until then
@@ -208,7 +230,7 @@ export namespace LB::Engine {
         // Loot: the potion the quick-use button drinks, the bag size, and how close the player
         // walks to pick things up
         static constexpr std::string_view HealingPotion = "consumable_potion_healing_minor";
-        static constexpr std::int32_t StartingPotions = 1;
+        static constexpr std::int32_t StartingPotions = 2;
         static constexpr std::int32_t BagCapacity = 20;
         static constexpr float PickupRadius = 0.7f;
 
@@ -614,6 +636,63 @@ export namespace LB::Engine {
         [[nodiscard]] const PlayerOrder& GetPlayerOrder() const noexcept { return session_->order; }
 
         /// <summary>
+        /// A merchant's ware: an item (rolled or not), how many come with it, and its price
+        /// </summary>
+        struct StockEntry {
+            ItemRef item;
+            std::int32_t quantity{1};                 // per purchase (arrows come in bundles)
+            std::int32_t price{0};
+            bool unlimited{false};                    // potions and ammunition never run out
+        };
+
+        /// <summary>
+        /// This floor is a resting place (a merchant and a shrine, no enemies)
+        /// </summary>
+        [[nodiscard]] bool IsRestFloor() const noexcept { return session_->restFloor; }
+        [[nodiscard]] static bool IsRestDepth(std::int32_t depth) noexcept { return depth > 1 && depth % BossFloorInterval == 1; }
+
+        /// <summary>
+        /// Go straight to a floor of the dungeon (tools and tests; the game descends by the trapdoor)
+        /// </summary>
+        void EnterFloor(std::int32_t depth) {
+            if (session_->dungeonMode && session_->playerId && depth >= 1) StartFloor(depth);
+        }
+
+        /// <summary>
+        /// Put the player at a point of the floor (tools and tests)
+        /// </summary>
+        void EnterFloorPosition(WorldPoint at) {
+            if (!session_->playerId || !session_->world.CircleFits(at, PlayerRadius)) return;
+            session_->playerPosition = at;
+            session_->characterService.PlaceCharacter(*session_->playerId, ToTile(at));
+        }
+        [[nodiscard]] std::optional<WorldPoint> GetMerchantPosition() const noexcept { return session_->merchant; }
+        [[nodiscard]] std::optional<WorldPoint> GetShrinePosition() const noexcept { return session_->shrine; }
+        [[nodiscard]] bool IsShrineUsed() const noexcept { return session_->shrineUsed; }
+        [[nodiscard]] const std::vector<StockEntry>& GetMerchantStock() const noexcept { return session_->stock; }
+
+        /// <summary>
+        /// The floor's props and spike traps, and the look of its tier
+        /// </summary>
+        [[nodiscard]] const FloorDecor& GetDecor() const noexcept { return session_->decor; }
+        [[nodiscard]] const FloorTheme& GetTheme() const noexcept { return session_->dungeonMode ? ThemeForDepth(session_->depth) : FloorThemes[0]; }
+        [[nodiscard]] const CharacterScreen& GetTradeScreen() const noexcept { return session_->trade; }
+
+        /// <summary>
+        /// What a merchant asks for an item (its value times its rarity's multiplier), and pays for it
+        /// </summary>
+        [[nodiscard]] std::int32_t PriceOf(ItemRef item) const;
+        [[nodiscard]] std::int32_t SellPriceOf(ItemRef item) const {
+            return std::max(1, static_cast<std::int32_t>(std::floor(static_cast<float>(PriceOf(item)) * SellFraction)));
+        }
+
+        /// <summary>
+        /// Buy a stock entry / sell one item from the bag (at the merchant); false when it cannot be done
+        /// </summary>
+        bool BuyFromMerchant(std::size_t index);
+        bool SellToMerchant(ItemRef item);
+
+        /// <summary>
         /// The enemy the orders would be about: under the mouse, or picked with the d-pad while paused
         /// </summary>
         [[nodiscard]] std::optional<std::uint32_t> GetPickedEnemy() const noexcept { return session_->picked; }
@@ -662,6 +741,21 @@ export namespace LB::Engine {
         /// level (INT for the Mage, WIS for the Cleric, half INT for the Rogue)
         /// </summary>
         [[nodiscard]] std::int32_t GetPlayerSpellPower() const;
+
+        /// <summary>
+        /// The path the hero chose at SpecializationLevel (null before)
+        /// </summary>
+        [[nodiscard]] const Content::SpecializationDefinition* GetPlayerPath() const;
+
+        /// <summary>
+        /// Take a path (its key from classes.json); false before the level, with one already, or for another class's
+        /// </summary>
+        bool ChoosePath(std::string_view key);
+
+        /// <summary>
+        /// Award the player experience as a kill would (levels and their fanfare; tools and tests)
+        /// </summary>
+        void GrantExperience(std::int32_t experience);
 
         /// <summary>
         /// The weapon the player attacks with
@@ -887,6 +981,18 @@ export namespace LB::Engine {
         void UpdateGroundItems(float elapsedSeconds);
         void UpdateQuickUse();
         void UpdateCharacterScreen();
+        void UpdateTradeScreen();
+        std::vector<ScreenRow> BuildTradeRows() const;
+        void DrawRowScreen(const CharacterScreen& screen, std::string_view title);
+        void StockMerchant();
+        void DrawRestPlace(const Systems::Rendering::Color& tint);
+        void DrawDecor(const Systems::Rendering::Color& tint);
+        void DrawTelegraphs();
+        void UpdateTraps();
+        [[nodiscard]] bool ScreenOpen() const noexcept { return session_->characterScreen.IsOpen() || session_->trade.IsOpen(); }
+        [[nodiscard]] bool NearMerchant() const noexcept {
+            return session_->merchant && IsPlayerAlive() && Distance(*session_->merchant, session_->playerPosition) <= MerchantRadius;
+        }
         std::vector<ScreenRow> BuildScreenRows() const;
         void DrawGroundItems(const Systems::Rendering::Color& tint);
         void DrawCharacterScreen();
@@ -1020,6 +1126,7 @@ export namespace LB::Engine {
             float manaCarry{0.0f};                   // regenerated mana not yet a whole point
             float evadeSeconds{0.0f};                // no attack touches the player (an evasion)
             float sneakWindowSeconds{0.0f};          // blows are sneak attacks (after a shadowstep)
+            std::string path;                        // the specialization's key (empty: none yet)
             StatusSet playerStatuses;
             const Content::WeaponDefinition* playerWeapon{nullptr};   // into content_, which outlives the session
             ItemRef playerWeaponItem{};              // the equipped weapon as an item (rolled or not)
@@ -1031,6 +1138,13 @@ export namespace LB::Engine {
             std::uint32_t nextGroundItemId{1};
             LootRoller lootRoller;
             CharacterScreen characterScreen;
+            CharacterScreen trade;                   // the merchant's wares and the bag
+            bool restFloor{false};
+            std::optional<WorldPoint> merchant;
+            std::optional<WorldPoint> shrine;
+            bool shrineUsed{false};
+            std::vector<StockEntry> stock;
+            FloorDecor decor;                        // props and traps of the floor
 
             Encounter encounter;
             bool spawnEnemies{true};

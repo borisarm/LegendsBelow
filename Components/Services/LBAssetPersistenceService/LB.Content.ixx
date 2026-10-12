@@ -122,6 +122,7 @@ export namespace LB::Content {
         std::vector<String> specialProperties;
         std::int32_t affixSlots{0};
         String ammoType;                              // ranged weapons only
+        std::int32_t value{0};                        // gold a merchant asks for it (it buys at a fraction)
         float range{0.0f};                            // tiles a shot flies (bows, crossbows, wands); 0: melee
         float projectileSpeed{0.0f};                  // tiles per second of the arrow or bolt
 
@@ -153,10 +154,27 @@ export namespace LB::Content {
         float movementPenalty{0.0f};                  // fraction of speed, e.g. 0.10
         float castPenalty{0.0f};
         std::int32_t affixSlots{0};
+        std::int32_t value{0};                        // gold a merchant asks for it (it buys at a fraction)
 
         [[nodiscard]] bool IsUsableBy(CharacterClass characterClass) const {
             return std::ranges::find(allowedClasses, characterClass) != allowedClasses.end();
         }
+    };
+
+    /// <summary>
+    /// A path a class chooses at SpecializationLevel (design-character-system.md 3, specialization
+    /// paths): a name, what it means, and what it adds for good
+    /// </summary>
+    struct SpecializationDefinition {
+        String key;                                   // e.g. "path_warrior_berserker"
+        String name;
+        String description;
+        std::int32_t damage{0};
+        std::int32_t attackBonus{0};
+        std::int32_t armorClass{0};
+        std::int32_t armor{0};
+        std::int32_t spellPower{0};
+        float manaRegen{0.0f};
     };
 
     /// <summary>
@@ -186,6 +204,14 @@ export namespace LB::Content {
         std::int32_t spellPowerBase{0};               // SP_Base (design-character-system.md 4.2)
         String startingWeapon;                        // weapon key, equipped at the start (empty: none)
         LB::Dice sneakAttackDice{0, 6, 0};            // extra on blows against the unaware or helpless (count 0: none)
+        std::vector<SpecializationDefinition> specializations;   // the paths to choose from at SpecializationLevel
+
+        static constexpr std::int32_t SpecializationLevel = 5;
+
+        [[nodiscard]] const SpecializationDefinition* FindSpecialization(std::string_view pathKey) const {
+            const auto it = std::ranges::find(specializations, pathKey, &SpecializationDefinition::key);
+            return it != specializations.end() ? &*it : nullptr;
+        }
         std::vector<String> startingItems;            // item keys put in the bag at the start
         ClassProgression progression;                 // levels 1..ClassProgression::MaxLevel
 
@@ -265,6 +291,20 @@ export namespace LB::Content {
         float summonCooldownSeconds{8.0f};
         float phaseTwoHealthFraction{0.0f};           // below this share of its health: raises and attacks twice as often (0: one phase)
 
+        // A telegraphed attack (design-combat-system.md 9.2, boss patterns): a ring on the ground
+        // for slamWindupSeconds, around itself or at the player's spot, then everyone inside is struck
+        float slamRadius{0.0f};                       // tiles; 0: none
+        float slamWindupSeconds{1.0f};
+        float slamCooldownSeconds{8.0f};
+        float slamTriggerRange{3.0f};                 // starts one at a player this close (and in sight)
+        bool slamAtTarget{false};                     // at the player's spot (else around itself)
+        LB::Dice slamDamage{};
+        DamageType slamDamageType{DamageType::Bludgeoning};
+
+        // Group tactics (design-combat-system.md 9.1): its group's other fighters do not pass a
+        // tank until it closes in, and its shooters keep behind the front line
+        bool tank{false};
+
         // Movement and awareness
         float movementSpeed{3.0f};                    // tiles per second
         float aggroRange{8.0f};                       // tiles; notices the player within this distance
@@ -279,6 +319,7 @@ export namespace LB::Content {
 
         [[nodiscard]] bool IsRanged() const noexcept { return projectileSpeed > 0.0f || !spell.empty(); }
         [[nodiscard]] bool IsCaster() const noexcept { return !spell.empty(); }
+        [[nodiscard]] bool HasSlam() const noexcept { return slamRadius > 0.0f; }
 
         [[nodiscard]] float GetResistance(DamageType type) const {
             auto it = resistances.find(type);
@@ -298,6 +339,7 @@ export namespace LB::Content {
         std::int32_t maxStack{10};
         String model;                                 // how it lies on the floor
         String ammoType;                              // ammunition for weapons of this ammoType ("Arrow", "Bolt"); empty: not ammunition
+        std::int32_t value{0};                        // gold a merchant asks for one
 
         [[nodiscard]] bool IsAmmunition() const noexcept { return !ammoType.empty(); }
     };
@@ -314,6 +356,7 @@ export namespace LB::Content {
         std::array<float, 3> color{1.0f, 1.0f, 1.0f}; // display (sRGB) color of its names
         float weight{0.0f};                           // at depth 1
         float weightPerDepth{0.0f};                   // added for each floor deeper (never below 0)
+        float priceMultiplier{1.0f};                  // on the item's value
 
         [[nodiscard]] float WeightAt(std::int32_t depth) const noexcept {
             return std::max(0.0f, weight + weightPerDepth * static_cast<float>(std::max(0, depth - 1)));

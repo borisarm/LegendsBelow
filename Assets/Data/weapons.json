@@ -16,7 +16,8 @@
     "scaleFactor": 1.0,
     "isTwoHanded": false,
     "specialProperties": [],
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 22
   },
   {
     "id": "weapon_sword_iron_longsword_t1",
@@ -35,7 +36,8 @@
     "scaleFactor": 1.0,
     "isTwoHanded": false,
     "specialProperties": [],
-    "affixSlots": 2
+    "affixSlots": 2,
+    "value": 42
   },
   {
     "id": "weapon_sword_templar_greatblade_t3",
@@ -54,7 +56,8 @@
     "scaleFactor": 1.2,
     "isTwoHanded": true,
     "specialProperties": ["HighDamage"],
-    "affixSlots": 3
+    "affixSlots": 3,
+    "value": 110
   },
   {
     "id": "weapon_axe_splintered_hatchet_t1",
@@ -73,7 +76,8 @@
     "scaleFactor": 1.1,
     "isTwoHanded": false,
     "specialProperties": [],
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 24
   },
   {
     "id": "weapon_axe_berserkers_cleaver_t3",
@@ -92,7 +96,8 @@
     "scaleFactor": 1.25,
     "isTwoHanded": true,
     "specialProperties": ["Cleave"],
-    "affixSlots": 3
+    "affixSlots": 3,
+    "value": 112
   },
   {
     "id": "weapon_mace_iron_mace_t1",
@@ -111,7 +116,8 @@
     "scaleFactor": 1.0,
     "isTwoHanded": false,
     "specialProperties": ["BonusVsArmored"],
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 22
   },
   {
     "id": "weapon_dagger_rusted_dagger_t1",
@@ -121,7 +127,7 @@
     "requiredLevel": 1,
     "allowedClasses": ["Rogue","Warrior"],
     "damageDice": "1d4",
-    "damageBonus": 0,
+    "damageBonus": 1,
     "damageType": ["Piercing"],
     "attackTimeSeconds": 0.7,
     "critRange": "19-20",
@@ -130,7 +136,8 @@
     "scaleFactor": 1.0,
     "isTwoHanded": false,
     "specialProperties": ["SneakBonus"],
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 21
   },
   {
     "id": "weapon_polearm_guardian_halberd_t2",
@@ -149,7 +156,8 @@
     "scaleFactor": 1.1,
     "isTwoHanded": true,
     "specialProperties": ["Reach"],
-    "affixSlots": 2
+    "affixSlots": 2,
+    "value": 68
   },
   {
     "id": "weapon_bow_worn_shortbow_t1",
@@ -171,7 +179,8 @@
     "affixSlots": 1,
     "ammoType": "Arrow",
     "range": 8.0,
-    "projectileSpeed": 12.0
+    "projectileSpeed": 12.0,
+    "value": 22
   },
   {
     "id": "weapon_crossbow_light_crossbow_t1",
@@ -193,7 +202,8 @@
     "affixSlots": 1,
     "ammoType": "Bolt",
     "range": 9.0,
-    "projectileSpeed": 15.0
+    "projectileSpeed": 15.0,
+    "value": 38
   },
   {
     "id": "weapon_staff_apprentices_staff_t1",
@@ -212,7 +222,8 @@
     "scaleFactor": 0.8,
     "isTwoHanded": false,
     "specialProperties": ["SpellFocus"],
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 18
   },
   {
     "id": "weapon_wand_apprentices_wand_t1",
@@ -233,6 +244,7 @@
     "specialProperties": ["SpellFocus"],
     "affixSlots": 1,
     "range": 9.0,
-    "projectileSpeed": 14.0
+    "projectileSpeed": 14.0,
+    "value": 17
   }
 ]

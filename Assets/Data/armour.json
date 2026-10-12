@@ -12,7 +12,8 @@
     "weight": 1,
     "movementPenalty": 0.0,
     "castPenalty": 0.0,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 9
   },
   {
     "id": "armor_head_leather_cap_t1",
@@ -27,7 +28,8 @@
     "weight": 2,
     "movementPenalty": 0.02,
     "castPenalty": 0.0,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 15
   },
   {
     "id": "armor_head_chain_coif_t1",
@@ -42,7 +44,8 @@
     "weight": 4,
     "movementPenalty": 0.05,
     "castPenalty": 0.01,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 21
   },
   {
     "id": "armor_head_rusted_sallet_t1",
@@ -57,7 +60,8 @@
     "weight": 6,
     "movementPenalty": 0.08,
     "castPenalty": 0.03,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 27
   },
   {
     "id": "armor_chest_threadbare_robe_t1",
@@ -72,7 +76,8 @@
     "weight": 2,
     "movementPenalty": 0.0,
     "castPenalty": 0.0,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 9
   },
   {
     "id": "armor_chest_leather_jerkin_t1",
@@ -87,7 +92,8 @@
     "weight": 5,
     "movementPenalty": 0.05,
     "castPenalty": 0.01,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 27
   },
   {
     "id": "armor_chest_chain_shirt_t1",
@@ -102,7 +108,8 @@
     "weight": 8,
     "movementPenalty": 0.1,
     "castPenalty": 0.03,
-    "affixSlots": 2
+    "affixSlots": 2,
+    "value": 39
   },
   {
     "id": "armor_chest_rusted_breastplate_t1",
@@ -117,7 +124,8 @@
     "weight": 12,
     "movementPenalty": 0.15,
     "castPenalty": 0.05,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 67
   },
   {
     "id": "armor_hands_threadbare_gloves_t1",
@@ -132,7 +140,8 @@
     "weight": 1,
     "movementPenalty": 0.0,
     "castPenalty": 0.0,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 9
   },
   {
     "id": "armor_hands_leather_gloves_t1",
@@ -147,7 +156,8 @@
     "weight": 2,
     "movementPenalty": 0.02,
     "castPenalty": 0.0,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 15
   },
   {
     "id": "armor_hands_reinforced_gauntlets_t2",
@@ -162,7 +172,8 @@
     "weight": 6,
     "movementPenalty": 0.06,
     "castPenalty": 0.02,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 47
   },
   {
     "id": "armor_feet_worn_sandals_t1",
@@ -177,7 +188,8 @@
     "weight": 1,
     "movementPenalty": 0.0,
     "castPenalty": 0.0,
-    "affixSlots": 0
+    "affixSlots": 0,
+    "value": 9
   },
   {
     "id": "armor_feet_leather_boots_t1",
@@ -192,7 +204,8 @@
     "weight": 3,
     "movementPenalty": 0.03,
     "castPenalty": 0.0,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 15
   },
   {
     "id": "armor_shield_wooden_shield_t1",
@@ -206,7 +219,8 @@
     "blockValue": 5,
     "weight": 5,
     "movementPenalty": 0.03,
-    "affixSlots": 1
+    "affixSlots": 1,
+    "value": 15
   },
   {
     "id": "armor_shield_iron_shield_t2",
@@ -220,6 +234,7 @@
     "blockValue": 10,
     "weight": 8,
     "movementPenalty": 0.05,
-    "affixSlots": 2
+    "affixSlots": 2,
+    "value": 47
   }
 ]

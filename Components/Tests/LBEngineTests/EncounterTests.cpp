@@ -212,8 +212,10 @@ TEST(EncounterTests, StrikeEnemy_DefensesApply) {
     for (int i = 0; i < 20 && !(hit && hit->result.hit); ++i) hit = encounter.StrikeEnemy(id, piercing, { 0.0f, 0.0f }, 1.5f);
 
     ASSERT_TRUE(hit && hit->result.hit);
-    // Skeleton warrior: physical armour first, then half of piercing resisted
-    const auto expected = static_cast<std::int32_t>(std::lround((9 - content.warrior->physicalArmor) * 0.5f));
+    // Skeleton warrior: physical armour first, then its piercing resistance
+    const auto resisted = 1.0f - content.warrior->GetResistance(LB::Combat::DamageType::Piercing);
+    ASSERT_LT(resisted, 1.0f);
+    const auto expected = static_cast<std::int32_t>(std::lround(static_cast<float>(9 - content.warrior->physicalArmor) * resisted));
     EXPECT_EQ(hit->result.finalDamage, expected);
 }
 

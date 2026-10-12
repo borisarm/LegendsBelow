@@ -7,7 +7,7 @@
     "categories": ["Damage"],
     "requiredClass": "Mage",
     "requiredLevel": 1,
-    "manaCost": 10,
+    "manaCost": 6,
     "castTimeSeconds": 0.5,
     "cooldownSeconds": 0.0,
     "range": 12.0,
@@ -164,7 +164,7 @@
     "categories": ["Damage"],
     "requiredClass": "Mage",
     "requiredLevel": 1,
-    "manaCost": 8,
+    "manaCost": 6,
     "castTimeSeconds": 0.6,
     "cooldownSeconds": 0.0,
     "range": 10.0,
@@ -749,5 +749,103 @@
     "range": 8.0,
     "teleportBehindTarget": true,
     "notes": "Out of the shadows behind an enemy: the next blow is a sneak attack"
+  },
+  {
+    "id": "spell_utility_cleave_l1",
+    "name": "Cleave",
+    "school": "Utility",
+    "level": 1,
+    "categories": [
+      "Damage"
+    ],
+    "requiredClass": "Warrior",
+    "requiredLevel": 1,
+    "manaCost": 3,
+    "castTimeSeconds": 0.25,
+    "cooldownSeconds": 4.0,
+    "radius": 1.8,
+    "baseDamage": 6,
+    "powerCoefficient": 1.0,
+    "damageType": "Slashing",
+    "notes": "A sweeping blow at everyone around the warrior"
+  },
+  {
+    "id": "spell_utility_shield_bash_l1",
+    "name": "Shield Bash",
+    "school": "Utility",
+    "level": 1,
+    "categories": [
+      "Damage"
+    ],
+    "requiredClass": "Warrior",
+    "requiredLevel": 3,
+    "manaCost": 3,
+    "castTimeSeconds": 0.2,
+    "cooldownSeconds": 8.0,
+    "range": 1.8,
+    "baseDamage": 4,
+    "powerCoefficient": 0.5,
+    "damageType": "Bludgeoning",
+    "appliedStatusIds": [
+      "status_stun_basic"
+    ],
+    "notes": "Stuns the target"
+  },
+  {
+    "id": "spell_utility_whirlwind_l2",
+    "name": "Whirlwind",
+    "school": "Utility",
+    "level": 1,
+    "categories": [
+      "Damage"
+    ],
+    "requiredClass": "Warrior",
+    "requiredLevel": 5,
+    "manaCost": 6,
+    "castTimeSeconds": 0.4,
+    "cooldownSeconds": 10.0,
+    "radius": 2.6,
+    "baseDamage": 10,
+    "powerCoefficient": 1.2,
+    "damageType": "Slashing",
+    "notes": "A spinning storm of steel"
+  },
+  {
+    "id": "spell_utility_fan_of_knives_l1",
+    "name": "Fan of Knives",
+    "school": "Utility",
+    "level": 1,
+    "categories": [
+      "Damage"
+    ],
+    "requiredClass": "Rogue",
+    "requiredLevel": 3,
+    "manaCost": 4,
+    "castTimeSeconds": 0.2,
+    "cooldownSeconds": 6.0,
+    "radius": 2.2,
+    "baseDamage": 5,
+    "powerCoefficient": 0.8,
+    "damageType": "Piercing",
+    "notes": "Knives at everyone around the rogue"
+  },
+  {
+    "id": "spell_utility_smoke_bomb_l2",
+    "name": "Smoke Bomb",
+    "school": "Utility",
+    "level": 1,
+    "categories": [
+      "Control"
+    ],
+    "requiredClass": "Rogue",
+    "requiredLevel": 5,
+    "manaCost": 6,
+    "castTimeSeconds": 0.2,
+    "cooldownSeconds": 15.0,
+    "radius": 3.0,
+    "appliedStatusIds": [
+      "status_blinded_basic"
+    ],
+    "notes": "Enemies around stagger blind: every blow on them is a sneak attack"
   }
 ]

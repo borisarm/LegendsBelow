@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
-    EXPECT_EQ(content_.GetSpells().size(), 47u);   // 45 and the rogue's two abilities
+    EXPECT_EQ(content_.GetSpells().size(), 52u);   // 45, the rogue's four abilities, the warrior's three
     EXPECT_EQ(content_.GetWeapons().size(), 12u);
     EXPECT_EQ(content_.GetArmour().size(), 15u);
 }
@@ -80,7 +80,7 @@ TEST_F(ShippedContentTests, ArcaneBolt_FieldsMapped) {
     EXPECT_TRUE(spell->HasCategory(SpellCategory::Damage));
     ASSERT_TRUE(spell->requiredClass.has_value());
     EXPECT_EQ(*spell->requiredClass, CharacterClass::Mage);
-    EXPECT_EQ(spell->manaCost, 10);
+    EXPECT_EQ(spell->manaCost, 6);
     EXPECT_FLOAT_EQ(spell->castTimeSeconds, 0.5f);
     EXPECT_FLOAT_EQ(spell->range, 12.0f);
     EXPECT_EQ(spell->baseDamage, 8);
@@ -158,21 +158,22 @@ TEST_F(ShippedContentTests, SpellRepository_OverShippedContent) {
     auto shared = std::make_shared<const ContentDatabase>(content_);
     LB::Repositories::SpellRepository repo = MakeContentSpellRepository(shared);
 
-    EXPECT_EQ(repo->GetAllSpellIds().size(), 47u);
+    EXPECT_EQ(repo->GetAllSpellIds().size(), 52u);
 
     const auto* bolt = content_.FindSpell("spell_evocation_arcane_bolt_l1");
     auto spell = repo->GetSpell(bolt->id);
     ASSERT_TRUE(spell.has_value());
     EXPECT_EQ(spell->name, "Arcane Bolt");
-    EXPECT_EQ(spell->manaCost, 10);
+    EXPECT_EQ(spell->manaCost, 6);
     EXPECT_EQ(spell->baseDamage, 8);
 
-    // Warriors have no class spells: only spells without a class restriction
+    // Warriors get their own martial abilities and the spells without a class restriction
     // (Generic, and currently Shadow, which the data leaves unassigned)
     const auto warriorSpells = repo->GetSpellsByClass(CharacterClass::Warrior);
     EXPECT_FALSE(warriorSpells.empty());
     for (auto id : warriorSpells) {
-        EXPECT_FALSE(content_.FindSpell(id)->requiredClass.has_value());
+        const auto& required = content_.FindSpell(id)->requiredClass;
+        EXPECT_TRUE(!required.has_value() || *required == CharacterClass::Warrior);
     }
     for (auto id : repo->GetSpellsByClass(CharacterClass::Mage)) {
         const auto& required = content_.FindSpell(id)->requiredClass;
@@ -351,7 +352,7 @@ TEST_F(ShippedContentTests, Warrior_MatchesDesign) {
     EXPECT_TRUE(warrior->IsPrimaryAttribute(LB::AttributeType::Strength));
     EXPECT_TRUE(warrior->IsPrimaryAttribute(LB::AttributeType::Constitution));
     EXPECT_FALSE(warrior->IsPrimaryAttribute(LB::AttributeType::Intelligence));
-    EXPECT_TRUE(warrior->spellSchools.empty());
+    EXPECT_EQ(warrior->spellSchools, std::vector<SpellSchool>{ SpellSchool::Utility });   // its martial abilities
 }
 
 TEST_F(ShippedContentTests, WeaponAdjustments_SwordColumn) {
@@ -373,7 +374,7 @@ TEST_F(ShippedContentTests, ProgressionTotals_MatchDesignTables) {
     // design-character-system.md section 3: level 1 base + per-level gains
     EXPECT_EQ(content_.FindClass(CharacterClass::Warrior)->TotalsAt(1).maxHitPoints, 12);
     EXPECT_EQ(content_.FindClass(CharacterClass::Warrior)->TotalsAt(20).maxHitPoints, 12 + 9 * 8 + 10 * 10);
-    EXPECT_EQ(content_.FindClass(CharacterClass::Rogue)->TotalsAt(20).maxHitPoints, 8 + 9 * 6 + 10 * 7);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Rogue)->TotalsAt(20).maxHitPoints, 11 + 9 * 6 + 10 * 7);
     EXPECT_EQ(content_.FindClass(CharacterClass::Mage)->TotalsAt(20).maxManaPoints, 10 + 9 * 8 + 10 * 9);
     EXPECT_EQ(content_.FindClass(CharacterClass::Cleric)->TotalsAt(10).maxHitPoints, 10 + 9 * 7);
 
@@ -625,18 +626,28 @@ namespace {
 }
 
 TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
-    ASSERT_EQ(content_.GetEnemies().size(), 6u);   // and the crossbowman, the mage, the golem, and the boss (below)
+    ASSERT_EQ(content_.GetEnemies().size(), 7u);   // and the crossbowman, the mage, the golem, and the two bosses (below)
 
     const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
     ASSERT_NE(minion, nullptr);
     EXPECT_EQ(minion->model, "Skeleton_Minion.glb");
     EXPECT_EQ(minion->mainHandModel, "Skeleton_Blade.gltf");
     EXPECT_EQ(minion->damageDice.sides, 4);
-    EXPECT_FLOAT_EQ(minion->GetResistance(DamageType::Piercing), 0.5f);
+    EXPECT_FLOAT_EQ(minion->GetResistance(DamageType::Piercing), 0.25f);
     EXPECT_LT(minion->GetResistance(DamageType::Bludgeoning), 0.0f);   // bones break
 
     const auto* warrior = content_.FindEnemy("enemy_skeleton_warrior");
     ASSERT_NE(warrior, nullptr);
+    EXPECT_TRUE(warrior->tank);                            // leads its group
+    EXPECT_FALSE(minion->tank);
+
+    const auto* warlord = content_.FindEnemy("enemy_golem_warlord");
+    ASSERT_NE(warlord, nullptr);
+    EXPECT_TRUE(warlord->boss);
+    ASSERT_TRUE(warlord->HasSlam());                       // a telegraphed slam around itself
+    EXPECT_FALSE(warlord->slamAtTarget);
+    EXPECT_EQ(warlord->slamDamage.count, 3);
+    EXPECT_TRUE(content_.FindEnemy("enemy_necromancer")->slamAtTarget);   // an eruption under the player
     EXPECT_GT(warrior->hitPoints, minion->hitPoints);
     EXPECT_GT(warrior->armorClass, minion->armorClass);
     EXPECT_EQ(warrior->offHandModel, "Skeleton_Shield_Large_A.gltf");
@@ -966,9 +977,10 @@ TEST_F(ShippedContentTests, Mage_HasASpellBarManaRegenAndAKit) {
     EXPECT_TRUE(content_.FindWeapon(mage->startingWeapon)->IsRanged());
 
     const auto* warrior = content_.FindClass(CharacterClass::Warrior);
-    EXPECT_TRUE(warrior->spellBar.empty());
+    EXPECT_EQ(warrior->spellBar.size(), 3u);
+    EXPECT_EQ(warrior->specializations.size(), 2u);
     EXPECT_EQ(warrior->startingWeapon, "weapon_sword_rusted_shortsword_t1");
-    EXPECT_EQ(content_.GetStatuses().size(), 8u);
+    EXPECT_EQ(content_.GetStatuses().size(), 10u);
 }
 
 TEST_F(ShippedContentTests, GolemAndNecromancer) {

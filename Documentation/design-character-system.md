@@ -82,7 +82,7 @@ Example data shape (JSON or equivalent):
 
 Each class has:
 - Base stat template
-- Growth tables for HP/MP, attack, and saves
+- Growth tables for HP/MP, attack, and saves (level 1 tuned in balance passes: the Warrior starts with 6 stamina for its abilities, the Rogue with 11 HP and the Mage with 10)
 - Proficiencies
 - Signature abilities
 - Skill trees with passive/active nodes
@@ -98,7 +98,7 @@ All numbers here are first-pass targets and will be tuned later. Tables below ar
 
 | Lvl | Max HP Gain | Max MP/Stam Gain | Melee Atk Bonus | Ranged Atk Bonus | Phys Save Bonus | Mental Save Bonus |
 |-----|-------------|-------------------|-----------------|------------------|-----------------|-------------------|
-| 1   | 12          | 3                 | +2              | +0               | +2              | +0                |
+| 1   | 12          | 6                 | +2              | +0               | +2              | +0                |
 | 2   | +8          | +2                | +0              | +0               | +0              | +0                |
 | 3   | +8          | +2                | +1              | +0               | +0              | +0                |
 | 4   | +8          | +2                | +0              | +1               | +1              | +0                |
@@ -195,7 +195,7 @@ Two trees; each node costs 1 skill point.
 
 | Lvl | Max HP Gain | Max MP Gain | Melee Atk Bonus | Ranged Atk Bonus | Phys Save Bonus | Mental Save Bonus |
 |-----|-------------|-------------|-----------------|------------------|-----------------|-------------------|
-| 1   | 8           | 6           | +1              | +2               | +1              | +1                |
+| 1   | 11          | 6           | +1              | +2               | +1              | +1                |
 | 2   | +6          | +4          | +0              | +0               | +0              | +0                |
 | 3   | +6          | +4          | +1              | +0               | +0              | +0                |
 | 4   | +6          | +4          | +0              | +1               | +1              | +0                |
@@ -238,7 +238,7 @@ Rogue trees:
 
 | Lvl | Max HP Gain | Max MP Gain | Melee Atk Bonus | Ranged/Spell Atk Bonus | Phys Save Bonus | Mental Save Bonus |
 |-----|-------------|-------------|-----------------|------------------------|-----------------|-------------------|
-| 1   | 6           | 10          | +0              | +2                     | +0              | +2                |
+| 1   | 10          | 10          | +0              | +2                     | +0              | +2                |
 | 2   | +4          | +8          | +0              | +0                     | +0              | +0                |
 | 3   | +4          | +8          | +0              | +1                     | +0              | +0                |
 | 4   | +4          | +8          | +0              | +0                     | +0              | +1                |

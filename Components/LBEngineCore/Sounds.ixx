@@ -39,6 +39,7 @@ export namespace LB::Engine {
         FireBurst,      // a fireball going off
         FrostBurst,     // any other spell burst (a frost nova)
         NoMana,         // a spell that cannot be cast
+        Spikes,         // a trap's spikes coming up
         Count
     };
 
@@ -145,6 +146,7 @@ export namespace LB::Engine {
         inline constexpr std::string_view FireBurst[] = { "impactSoft_heavy_000", "impactSoft_heavy_001", "impactSoft_heavy_002", "impactSoft_heavy_003", "impactSoft_heavy_004" };
         inline constexpr std::string_view FrostBurst[] = { "impactGlass_heavy_000", "impactGlass_heavy_001", "impactGlass_heavy_002", "impactGlass_heavy_003", "impactGlass_heavy_004" };
         inline constexpr std::string_view NoMana[] = { "metalClick" };
+        inline constexpr std::string_view Spikes[] = { "metalLatch" };
         inline constexpr std::string_view ArrowHitsWall[] = { "impactWood_light_000", "impactWood_light_001", "impactWood_light_002", "impactWood_light_003", "impactWood_light_004" };
     }
 
@@ -178,6 +180,7 @@ export namespace LB::Engine {
         case GameSound::FireBurst: return { FireBurst, 0.9f };
         case GameSound::FrostBurst: return { FrostBurst, 0.8f };
         case GameSound::NoMana: return { NoMana, 0.6f, true };
+        case GameSound::Spikes: return { Spikes, 0.6f };
         default: return {};
         }
     }

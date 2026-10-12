@@ -20,6 +20,7 @@ export import :Loot;
 export import :Particles;
 export import :Effects;
 export import :Walls;
+export import :Decor;
 export import :Torches;
 export import :Minimap;
 export import :CombatText;

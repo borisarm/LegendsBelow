@@ -208,7 +208,7 @@ namespace LB::Engine {
         assets_.characterModels.clear();
 
         // Loot on the floor, weapons in the knight's hand, and dungeon props (KayKit Dungeon Pack)
-        for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel, TorchModel }) {
+        for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel, TorchModel, MerchantModel, ShrineModel, CandlesModel }) {
             assets_.characterModels[std::string(file)] = load(file);
         }
         for (const auto file : PropModels) {
@@ -216,6 +216,13 @@ namespace LB::Engine {
         }
         for (const auto file : HeldModels) {
             assets_.characterModels[std::string(file)] = load(file);
+        }
+        // The tiers' floors and walls, props, and traps (KayKit Dungeon Pack 1.1)
+        for (const auto file : FloorDecor::Models) {
+            if (!assets_.characterModels.contains(file)) assets_.characterModels[std::string(file)] = load(file);
+        }
+        for (const auto file : FloorDecor::MoreModels) {
+            if (!assets_.characterModels.contains(file)) assets_.characterModels[std::string(file)] = load(file);
         }
         for (const auto& consumable : content_->GetConsumables()) {
             if (!assets_.characterModels.contains(consumable.model)) assets_.characterModels[consumable.model] = load(consumable.model);
@@ -500,6 +507,8 @@ namespace LB::Engine {
         attackMouse.deviceType = Systems::Input::InputDevice::Mouse;
         attackMouse.mouseButton = Systems::Input::MouseButton::Left;
         inputSystem_.RegisterAction(attackMouse);
+        RegisterKeyBinding(InteractAction, Systems::Input::Keys::FromChar('F'));
+        RegisterGamepadBinding(InteractAction, Systems::Input::GamepadButton::DPadUp);
         RegisterKeyBinding(TacticalPauseAction, Systems::Input::Keys::Tab);
         RegisterGamepadBinding(TacticalPauseAction, Systems::Input::GamepadButton::LeftThumb);
         Systems::Input::InputAction order{};
