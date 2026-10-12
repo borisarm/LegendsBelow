@@ -30,6 +30,7 @@ import :Statuses;
 import :Decor;
 import :GameEvents;
 import :Allies;
+import :Ceremony;
 import :Loot;
 import :Particles;
 import :Effects;
@@ -121,6 +122,7 @@ export namespace LB::Engine {
         static constexpr std::string_view MenuRightAction = "MenuRight";
         // Talk to the merchant: F, gamepad d-pad up
         static constexpr std::string_view InteractAction = "Interact";
+        static constexpr std::string_view DropAction = "Drop";        // the character screen: drop the bag item under the cursor
         // The tactical pause (design-combat-system.md 2.1): Tab, gamepad left stick click
         static constexpr std::string_view TacticalPauseAction = "TacticalPause";
         // Orders: right click (the secondary action, design-ui-ux-and-audio.md 4.1); the target
@@ -823,6 +825,19 @@ export namespace LB::Engine {
         };
         [[nodiscard]] const RunStats& GetRunStats() const noexcept { return session_->stats; }
 
+        /// <summary>
+        /// Put a bag item on the floor at the hero's feet (the whole stack); it stays there until
+        /// they walk away from it and back. False when it is not in the bag.
+        /// </summary>
+        bool DropItem(ItemRef item);
+
+        /// <summary>
+        /// The banner across the screen (a level reached, a path taken), and the path cards
+        /// </summary>
+        [[nodiscard]] const Fanfare& GetFanfare() const noexcept { return session_->fanfare; }
+        [[nodiscard]] const PathChoice& GetPathChoice() const noexcept { return session_->pathChoice; }
+        [[nodiscard]] std::vector<PathCard> PathCards() const;
+
         // Feel: heavy blows freeze the action a moment (EngineOptions::hitStop) and shake the camera
         static constexpr float CritHitStopSeconds = 0.05f;
         static constexpr float HeavyHitStopSeconds = 0.08f;
@@ -1007,6 +1022,9 @@ export namespace LB::Engine {
         // Equipment: record an item in a slot (or clear it), then bring the weapon and
         // CharacterService's armour pieces in line with the inventory's slots
         void SubscribeToEvents();
+        void UpdatePathChoice();
+        void DrawFanfare();
+        [[nodiscard]] std::vector<std::string> PathBonuses(const Content::SpecializationDefinition& path) const;
         void UpdateAmbience();
         void FeelCombat();
         void Jolt(float hitStopSeconds, float shakeSeconds, float shakeStrength);
@@ -1269,6 +1287,8 @@ export namespace LB::Engine {
             float shakeDuration{0.0f};
             float shakeStrength{0.0f};               // tiles at its start
             RunStats stats;
+            Fanfare fanfare;                         // a level or a path, across the screen
+            PathChoice pathChoice;                   // the path cards (over the character screen)
 
             Encounter encounter;
             bool spawnEnemies{true};

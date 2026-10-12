@@ -55,12 +55,25 @@ TEST(GrowthTests, Warrior_ShieldBashOpensAtLevelThreeAndStuns) {
     EXPECT_TRUE(enemy->statuses.Has("status_stun_basic"));
 }
 
-TEST(GrowthTests, LevelUp_AnnouncesTheNewAbility) {
+TEST(GrowthTests, LevelUp_ABannerWithWhatWasGained) {
     GameEngine engine;
     InitializeAs(engine, LB::Character::CharacterClass::Rogue);
-    ReachLevel(engine, 3);
+    engine.GrantExperience(300);   // two levels in one award: one banner
+    engine.Tick(OneSixtieth);
+    ASSERT_EQ(PlayerLevel(engine), 3);
 
-    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "NEW: Fan of Knives"; }));
+    const auto* card = engine.GetFanfare().Current();
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->title, "LEVEL 3");
+    EXPECT_EQ(card->subtitle, "Rogue");
+    EXPECT_TRUE(std::ranges::any_of(card->lines, [](const std::string& line) { return line.find("hit points") != std::string::npos; }));
+    EXPECT_NE(std::ranges::find(card->lines, "New: Fan of Knives"), card->lines.end());
+    RunSteps(engine, 120);   // drawn across the screen, its lines appearing one after another
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "LEVEL 3"; }));
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "New: Fan of Knives"; }));
+
+    RunSteps(engine, static_cast<int>((Fanfare::InSeconds + Fanfare::HoldSeconds + Fanfare::OutSeconds) * 60.0f));
+    EXPECT_EQ(engine.GetFanfare().Current(), nullptr);   // gone again
 }
 
 TEST(GrowthTests, Path_ChosenAtLevelFiveAddsItsBonuses) {
@@ -96,11 +109,61 @@ TEST(GrowthTests, Path_ChosenOnTheCharacterScreen) {
         TapKey(engine, Keys::Down);
         engine.Tick(OneSixtieth);
     }
-    TapKey(engine, Keys::Enter);
+    TapKey(engine, Keys::Enter);   // the cards
+    engine.Tick(OneSixtieth);
+    ASSERT_TRUE(engine.GetPathChoice().IsOpen());
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "CHOOSE YOUR PATH"; }));
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "+3 spell power"; }));
+    TapKey(engine, Keys::Right);   // the second card
+    engine.Tick(OneSixtieth);
+    EXPECT_EQ(engine.GetPathChoice().Cursor(), 1u);
+    TapKey(engine, Keys::Left);
+    engine.Tick(OneSixtieth);
+    TapKey(engine, Keys::Enter);   // take it
     engine.Tick(OneSixtieth);
 
     ASSERT_NE(engine.GetPlayerPath(), nullptr);
     EXPECT_EQ(engine.GetPlayerPath()->name, "Pyromancer");
+    EXPECT_FALSE(engine.GetPathChoice().IsOpen());
+    EXPECT_FALSE(engine.GetCharacterScreen().IsOpen());   // back to the game for the banner
+    // The levels' banners first (one each), then the path's
+    const auto* card = engine.GetFanfare().Current();
+    for (int i = 0; i < 60 * 30 && card && card->title != "PATH OF THE PYROMANCER"; ++i) {
+        engine.Tick(OneSixtieth);
+        card = engine.GetFanfare().Current();
+    }
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->title, "PATH OF THE PYROMANCER");
+    EXPECT_NE(std::ranges::find(card->lines, "+3 spell power"), card->lines.end());
+}
+
+TEST(GrowthTests, PathCards_BackOutWithoutChoosing) {
+    GameEngine engine;
+    InitializeAs(engine, LB::Character::CharacterClass::Warrior);
+    ReachLevel(engine, 5);
+    TapKey(engine, Keys::FromChar('I'));
+    engine.Tick(OneSixtieth);
+    const auto& rows = engine.GetCharacterScreen().GetRows();
+    const auto index = static_cast<std::size_t>(std::ranges::find_if(rows, [](const auto& row) { return row.action == ScreenAction::ChoosePath; }) - rows.begin());
+    for (int i = 0; i < 100 && engine.GetCharacterScreen().GetCursor() != index; ++i) {
+        TapKey(engine, Keys::Down);
+        engine.Tick(OneSixtieth);
+    }
+    TapKey(engine, Keys::Enter);
+    engine.Tick(OneSixtieth);
+    ASSERT_TRUE(engine.GetPathChoice().IsOpen());
+
+    TapKey(engine, Keys::Escape);
+    engine.Tick(OneSixtieth);
+
+    EXPECT_FALSE(engine.GetPathChoice().IsOpen());
+    EXPECT_TRUE(engine.GetCharacterScreen().IsOpen());   // back where the cards were opened
+    EXPECT_EQ(engine.GetPlayerPath(), nullptr);
+    const auto cards = engine.PathCards();
+    ASSERT_EQ(cards.size(), 2u);
+    EXPECT_EQ(cards[0].name, "Berserker");
+    EXPECT_FALSE(cards[0].flavor.empty());
+    EXPECT_NE(cards[0].color, cards[1].color);   // each in its own color
 }
 
 TEST(GrowthTests, Path_KeptBySaves) {

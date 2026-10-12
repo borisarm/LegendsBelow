@@ -61,6 +61,7 @@ export namespace LB::Systems::Input {
         inline constexpr std::int32_t Up = 0x26;
         inline constexpr std::int32_t Right = 0x27;
         inline constexpr std::int32_t Down = 0x28;
+        inline constexpr std::int32_t Delete = 0x2E;
         inline constexpr std::int32_t F1 = 0x70;
         inline constexpr std::int32_t F2 = 0x71;
         inline constexpr std::int32_t F3 = 0x72;
@@ -102,6 +103,7 @@ export namespace LB::Systems::Input {
             case Up: return "Up";
             case Right: return "Right";
             case Down: return "Down";
+            case Delete: return "Delete";
             default: return std::format("Key {}", keyCode);
             }
         }

@@ -332,6 +332,7 @@ namespace LB::Engine {
 
         section("SCREENS AND MENUS");
         action("Character", CharacterScreenAction);
+        action("Drop an item (character)", DropAction);
         action("Pause menu", PauseAction);
         action("Quick save", QuickSaveAction);
         action("Quick load", QuickLoadAction);

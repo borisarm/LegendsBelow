@@ -23,6 +23,9 @@ export namespace LB::Engine {
     struct LevelGainedEvent {
         std::int32_t previous{1};   // the level before (several may be gained at once)
         std::int32_t level{1};
+        std::int32_t hitPoints{0};          // gained, over all the levels
+        std::int32_t mana{0};
+        std::int32_t attributePoints{0};
     };
 
     /// <summary>

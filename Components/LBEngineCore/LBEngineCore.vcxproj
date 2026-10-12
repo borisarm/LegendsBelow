@@ -150,6 +150,7 @@
     <ClCompile Include="Decor.ixx" />
     <ClCompile Include="GameEvents.ixx" />
     <ClCompile Include="Allies.ixx" />
+    <ClCompile Include="Ceremony.ixx" />
     <ClCompile Include="World.ixx" />
     <ClCompile Include="DungeonFloor.cpp" />
     <ClCompile Include="Effects.cpp" />

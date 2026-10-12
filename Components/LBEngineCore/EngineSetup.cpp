@@ -519,6 +519,9 @@ namespace LB::Engine {
         attackMouse.mouseButton = Systems::Input::MouseButton::Left;
         inputSystem_.RegisterAction(attackMouse);
         RegisterKeyBinding(InteractAction, Systems::Input::Keys::FromChar('F'));
+        RegisterKeyBinding(DropAction, Systems::Input::Keys::FromChar('X'));
+        RegisterKeyBinding(DropAction, Systems::Input::Keys::Delete);
+        RegisterGamepadBinding(DropAction, Systems::Input::GamepadButton::X);
         RegisterGamepadBinding(InteractAction, Systems::Input::GamepadButton::DPadUp);
         RegisterKeyBinding(TacticalPauseAction, Systems::Input::Keys::Tab);
         RegisterGamepadBinding(TacticalPauseAction, Systems::Input::GamepadButton::LeftThumb);

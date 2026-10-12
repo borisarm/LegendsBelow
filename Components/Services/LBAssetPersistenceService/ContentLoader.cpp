@@ -430,6 +430,16 @@ namespace LB::Content {
                     pathReader.ReadString("id", specialization.key, true);
                     pathReader.ReadString("name", specialization.name, true);
                     pathReader.ReadString("description", specialization.description, false);
+                    pathReader.ReadString("flavor", specialization.flavor, false);
+                    if (const Json* color = pathReader.Nested("color", false, true)) {
+                        if (color->size() != 3) pathReader.Error("'color' must be three numbers (display RGB, 0..1)");
+                        else {
+                            for (std::size_t i = 0; i < 3; ++i) {
+                                if (!(*color)[i].is_number()) pathReader.Error("'color' must be three numbers (display RGB, 0..1)");
+                                else specialization.color[i] = (*color)[i].get<float>();
+                            }
+                        }
+                    }
                     pathReader.ReadInt("damage", specialization.damage, false);
                     pathReader.ReadInt("attackBonus", specialization.attackBonus, false);
                     pathReader.ReadInt("armorClass", specialization.armorClass, false);

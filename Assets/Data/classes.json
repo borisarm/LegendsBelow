@@ -90,8 +90,8 @@
     "spellBar": ["spell_utility_cleave_l1", "spell_utility_shield_bash_l1", "spell_utility_whirlwind_l2"],
     "manaRegenPerSecond": 1.0,
     "specializations": [
-      {"id": "path_warrior_berserker", "name": "Berserker", "description": "+2 damage, +1 to hit", "damage": 2, "attackBonus": 1},
-      {"id": "path_warrior_guardian", "name": "Guardian", "description": "+2 armour, +1 armour class", "armor": 2, "armorClass": 1}
+      {"id": "path_warrior_berserker", "name": "Berserker", "description": "+2 damage, +1 to hit", "damage": 2, "attackBonus": 1, "flavor": "Fury over caution: every swing lands harder and truer.", "color": [0.92, 0.32, 0.25]},
+      {"id": "path_warrior_guardian", "name": "Guardian", "description": "+2 armour, +1 armour class", "armor": 2, "armorClass": 1, "flavor": "A wall of steel the dead break against.", "color": [0.4, 0.62, 0.95]}
     ]
   },
   {
@@ -186,8 +186,8 @@
     "startingItems": ["weapon_bow_worn_shortbow_t1", "consumable_ammo_arrow:40"],
     "sneakAttackDice": "2d6",
     "specializations": [
-      {"id": "path_rogue_assassin", "name": "Assassin", "description": "+2 damage, +1 to hit", "damage": 2, "attackBonus": 1},
-      {"id": "path_rogue_shadow", "name": "Shadow", "description": "+2 armour class, +1 mana a second", "armorClass": 2, "manaRegen": 1.0}
+      {"id": "path_rogue_assassin", "name": "Assassin", "description": "+2 damage, +1 to hit", "damage": 2, "attackBonus": 1, "flavor": "One step from the shadows, one cut that ends it.", "color": [0.88, 0.25, 0.38]},
+      {"id": "path_rogue_shadow", "name": "Shadow", "description": "+2 armour class, +1 mana a second", "armorClass": 2, "manaRegen": 1.0, "flavor": "Unseen, untouched, always just out of reach.", "color": [0.45, 0.58, 0.78]}
     ]
   },
   {
@@ -287,8 +287,8 @@
     "startingWeapon": "weapon_wand_apprentices_wand_t1",
     "startingItems": ["weapon_staff_apprentices_staff_t1"],
     "specializations": [
-      {"id": "path_mage_pyromancer", "name": "Pyromancer", "description": "+3 spell power", "spellPower": 3},
-      {"id": "path_mage_archmage", "name": "Archmage", "description": "+1 spell power, +1.5 mana a second", "spellPower": 1, "manaRegen": 1.5}
+      {"id": "path_mage_pyromancer", "name": "Pyromancer", "description": "+3 spell power", "spellPower": 3, "flavor": "Fire answers faster than thought, and burns hotter.", "color": [0.98, 0.52, 0.2]},
+      {"id": "path_mage_archmage", "name": "Archmage", "description": "+1 spell power, +1.5 mana a second", "spellPower": 1, "manaRegen": 1.5, "flavor": "Deep wells of power that never run dry.", "color": [0.62, 0.5, 0.98]}
     ]
   },
   {
@@ -386,8 +386,8 @@
     "startingWeapon": "weapon_mace_iron_mace_t1",
     "startingItems": ["armor_shield_wooden_shield_t1"],
     "specializations": [
-      {"id": "path_cleric_inquisitor", "name": "Inquisitor", "description": "+3 spell power", "spellPower": 3},
-      {"id": "path_cleric_guardian", "name": "Guardian", "description": "+2 armour, +1 armour class", "armor": 2, "armorClass": 1}
+      {"id": "path_cleric_inquisitor", "name": "Inquisitor", "description": "+3 spell power", "spellPower": 3, "flavor": "The light as a weapon, brought down on the unholy.", "color": [0.98, 0.86, 0.4]},
+      {"id": "path_cleric_guardian", "name": "Guardian", "description": "+2 armour, +1 armour class", "armor": 2, "armorClass": 1, "flavor": "A shield of faith over the faithful.", "color": [0.55, 0.82, 0.98]}
     ]
   }
 ]

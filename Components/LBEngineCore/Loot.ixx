@@ -179,6 +179,7 @@ export namespace LB::Engine {
         WorldPoint position{};
         float ageSeconds{0.0f};
         bool fullWarningShown{false};   // "inventory full" once per item, not every step
+        bool dropped{false};            // put down by the hero: not picked up until they have walked away
 
         [[nodiscard]] bool IsGold() const noexcept { return !item.IsValid(); }
     };

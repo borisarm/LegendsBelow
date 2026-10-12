@@ -354,7 +354,8 @@ namespace LB::Engine {
         if (!session_->playerId || experience <= 0) return;
         const auto previous = PlayerCharacter()->GetLevel();
         if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, experience); progress && progress->levelIncreased) {
-            session_->events.Publish(LevelGainedEvent{ previous, progress->newLevel });
+            session_->events.Publish(LevelGainedEvent{ previous, progress->newLevel, progress->hitPointIncrease, progress->manaPointIncrease,
+                                                       progress->attributePointsGained });
         }
     }
 
@@ -368,24 +369,37 @@ namespace LB::Engine {
             if (!kill.lootTable.empty()) DropLoot(kill.lootTable, kill.at);
         });
         events.Subscribe<LevelGainedEvent>([this](const LevelGainedEvent& gained) { session_->allies.SetLevel(gained.level); });
+        // A level: a banner with what was gained (health, mana or stamina, points, abilities, a path)
         events.Subscribe<LevelGainedEvent>([this](const LevelGainedEvent& gained) {
-            const Systems::Rendering::Vector3 overPlayer{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
-            session_->combatText.Add("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
+            const auto* classData = PlayerClassDefinition();
+            const bool stamina = classData && classData->resource == "Stamina";
+            FanfareCard card{ std::format("LEVEL {}", gained.level), classData ? classData->name : std::string{}, {}, { 0.98f, 0.78f, 0.30f } };
+            if (gained.hitPoints > 0) card.lines.push_back(std::format("+{} hit points", gained.hitPoints));
+            if (gained.mana > 0) card.lines.push_back(std::format("+{} {}", gained.mana, stamina ? "stamina" : "mana"));
+            if (gained.attributePoints > 0) card.lines.push_back(std::format("+{} attribute point{} to spend (I)", gained.attributePoints, gained.attributePoints == 1 ? "" : "s"));
             for (const auto* spell : GetSpellBar()) {
-                if (spell->requiredLevel > gained.previous && spell->requiredLevel <= gained.level) {
-                    session_->combatText.Add(std::format("NEW: {}", spell->name), { overPlayer.x, overPlayer.y + 0.4f, overPlayer.z }, { 0.6f, 0.85f, 1.0f, 1.0f }, 2.6f);
-                }
+                if (spell->requiredLevel > gained.previous && spell->requiredLevel <= gained.level) card.lines.push_back(std::format("New: {}", spell->name));
             }
             const auto paths = Content::ClassDefinition::SpecializationLevel;
-            if (gained.previous < paths && gained.level >= paths && session_->path.empty()) {
-                session_->combatText.Add("CHOOSE A PATH (I)", { overPlayer.x, overPlayer.y + 0.8f, overPlayer.z }, { 0.55f, 0.95f, 0.55f, 1.0f }, 2.6f);
-            }
+            if (gained.previous < paths && gained.level >= paths && session_->path.empty()) card.lines.push_back("A path to choose (I)");
+            session_->fanfare.Show(std::move(card));
             EmitLevelUpEffect();
             PlaySound(GameSound::LevelUp, session_->playerPosition);
         });
-        events.Subscribe<PathChosenEvent>([this](const PathChosenEvent& path) {
-            session_->combatText.Add(std::format("PATH: {}", path.name), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 1.0f, 0.82f, 0.25f, 1.0f }, 3.0f);
+        // A path: its banner in its color, and a second burst of light
+        events.Subscribe<PathChosenEvent>([this](const PathChosenEvent& chosen) {
+            const auto* classData = PlayerClassDefinition();
+            const auto* path = classData ? classData->FindSpecialization(chosen.key) : nullptr;
+            FanfareCard card{ std::format("PATH OF THE {}", [&] { auto upper = chosen.name; std::ranges::transform(upper, upper.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); }); return upper; }()), classData ? classData->name : std::string{}, {}, { 0.98f, 0.78f, 0.30f } };
+            if (path) {
+                card.lines = PathBonuses(*path);
+                card.color = path->color;
+                if (!path->flavor.empty()) card.lines.insert(card.lines.begin(), path->flavor);
+            }
+            session_->fanfare.Show(std::move(card));
             EmitLevelUpEffect();
+            EmitLevelUpEffect();
+            PlaySound(GameSound::LevelUp, session_->playerPosition);
         });
     }
 
@@ -408,7 +422,12 @@ namespace LB::Engine {
         const bool alive = IsPlayerAlive();
         std::erase_if(session_->groundItems, [&](GroundItem& ground) {
             ground.ageSeconds += elapsedSeconds;
-            if (!alive || Encounter::Distance(ground.position, session_->playerPosition) > PickupRadius) return false;
+            const bool near = Encounter::Distance(ground.position, session_->playerPosition) <= PickupRadius;
+            if (ground.dropped) {
+                if (!near) ground.dropped = false;   // walked away: it can be picked up again
+                return false;
+            }
+            if (!alive || !near) return false;
 
             const Systems::Rendering::Vector3 at{ ground.position.x, 0.6f, ground.position.y };
             if (ground.IsGold()) {
@@ -476,13 +495,12 @@ namespace LB::Engine {
                 info(path->description);
             }
             else if (status.level >= Content::ClassDefinition::SpecializationLevel) {
-                heading("Choose a path");
-                for (std::size_t i = 0; i < classDefinition->specializations.size(); ++i) {
-                    const auto& option = classDefinition->specializations[i];
-                    ScreenRow row{ option.name, option.description, ScreenAction::ChoosePath };
-                    row.index = i;
-                    rows.push_back(std::move(row));
-                }
+                heading("Path");
+                std::string names;
+                for (const auto& option : classDefinition->specializations) names += (names.empty() ? "" : " or ") + option.name;
+                ScreenRow row{ "Choose your path...", names, ScreenAction::ChoosePath };
+                row.color = Systems::Rendering::Color{ 0.55f, 0.95f, 0.55f, 1.0f };
+                rows.push_back(std::move(row));
             }
         }
 
@@ -581,6 +599,10 @@ namespace LB::Engine {
         if (!session_->playerId) return;
 
         if (session_->trade.IsOpen()) return;
+        if (session_->pathChoice.IsOpen()) {
+            UpdatePathChoice();
+            return;
+        }
         if (!session_->characterScreen.IsOpen()) {
             if (triggered(CharacterScreenAction)) {
                 session_->characterScreen.Open();
@@ -597,6 +619,14 @@ namespace LB::Engine {
         }
 
         session_->characterScreen.SetRows(BuildScreenRows());
+        // Drop: the bag item under the cursor goes to the floor
+        if (triggered(DropAction)) {
+            const auto* row = session_->characterScreen.Selected();
+            if (row && row->item.IsValid() && row->action != ScreenAction::Unequip && DropItem(row->item)) {
+                session_->characterScreen.SetRows(BuildScreenRows());
+            }
+            return;
+        }
         if (triggered(MenuUpAction)) {
             session_->characterScreen.Step(-1);
             PlaySound(GameSound::MenuMove);
@@ -618,9 +648,7 @@ namespace LB::Engine {
         case ScreenAction::Use: UseItem(key); break;
         case ScreenAction::Unequip: UnequipArmorSlot(row->slot); break;
         case ScreenAction::ChoosePath:
-            if (const auto* classData = content_->FindClass(session_->playerClass); classData && row->index < classData->specializations.size()) {
-                ChoosePath(classData->specializations[row->index].key);
-            }
+            session_->pathChoice.Open();
             break;
         case ScreenAction::Buy:
         case ScreenAction::Sell: break;
@@ -630,6 +658,11 @@ namespace LB::Engine {
     }
 
     void GameEngine::DrawCharacterScreen() {
+        if (session_->pathChoice.IsOpen()) {
+            const auto cards = PathCards();
+            PathChoice::Draw(renderingSystem_, assets_.menuArt, cards, session_->pathChoice.Cursor(), "CHOOSE YOUR PATH", static_cast<float>(timer_.GetTotalSeconds()));
+            return;   // the cards take the screen
+        }
         if (session_->trade.IsOpen()) {
             DrawRowScreen(session_->trade, "MERCHANT");
             return;
@@ -656,7 +689,8 @@ namespace LB::Engine {
             renderingSystem_.DrawText(Systems::Rendering::TextRenderData{ std::move(line), LB::Position{ x, y }, {}, color, scale, 32, false });
         };
         text(std::string(title), left + 16, top + 12, 2.6f, Display(0.95f, 0.75f, 0.30f));
-        text("Enter/A: choose   Esc/B: close", left + panelWidth - 250, top + 16, 1.6f, Display(0.6f, 0.6f, 0.6f));
+        const std::string help = &screen == &session_->characterScreen ? "Enter/A: choose   X/Del: drop   Esc/B: close" : "Enter/A: choose   Esc/B: close";
+        text(help, left + panelWidth - static_cast<std::int32_t>(renderingSystem_.MeasureText(help, 1.6f).width) - 16, top + 16, 1.6f, Display(0.6f, 0.6f, 0.6f));
 
         // Keep the cursor's row in view when the list is taller than the panel
         const auto visible = static_cast<std::size_t>(std::max(1, (panelHeight - 60) / lineHeight));
@@ -885,6 +919,79 @@ namespace LB::Engine {
                 GiveItemRef(ItemFromSaveKey(entry.substr(0, colon)), quantity);
             }
         }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Dropping items; the path cards; the banner
+    // ------------------------------------------------------------------------------------------
+
+    bool GameEngine::DropItem(ItemRef item) {
+        if (!session_->playerId || !item.IsValid()) return false;
+        const auto bag = GetInventory();
+        const auto stack = std::ranges::find(bag, item.Pack(), &Inventory::InventoryItem::itemId);
+        if (stack == bag.end() || !session_->inventoryService.RemoveItem(*session_->playerId, item.Pack(), stack->quantity).success) return false;
+        const auto offset = session_->lootRoller.Scatter(0.3f);
+        GroundItem ground{};
+        ground.id = session_->nextGroundItemId++;
+        ground.item = item;
+        ground.quantity = stack->quantity;
+        ground.position = { session_->playerPosition.x + offset.x, session_->playerPosition.y + offset.y };
+        ground.dropped = true;
+        session_->groundItems.push_back(ground);
+        session_->combatText.Add(std::format("DROPPED {}", stack->name), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+        PlaySound(GameSound::ItemPickup, session_->playerPosition);
+        return true;
+    }
+
+    // What a path adds, one line each ("+2 damage")
+    std::vector<std::string> GameEngine::PathBonuses(const Content::SpecializationDefinition& path) const {
+        const auto* classData = PlayerClassDefinition();
+        const bool stamina = classData && classData->resource == "Stamina";
+        std::vector<std::string> lines;
+        if (path.damage) lines.push_back(std::format("+{} damage", path.damage));
+        if (path.attackBonus) lines.push_back(std::format("+{} to hit", path.attackBonus));
+        if (path.armorClass) lines.push_back(std::format("+{} armour class", path.armorClass));
+        if (path.armor) lines.push_back(std::format("+{} armour", path.armor));
+        if (path.spellPower) lines.push_back(std::format("+{} spell power", path.spellPower));
+        if (path.manaRegen > 0.0f) lines.push_back(std::format("+{:g} {} a second", path.manaRegen, stamina ? "stamina" : "mana"));
+        return lines;
+    }
+
+    std::vector<PathCard> GameEngine::PathCards() const {
+        std::vector<PathCard> cards;
+        if (const auto* classData = PlayerClassDefinition()) {
+            for (const auto& path : classData->specializations) {
+                cards.push_back({ path.key, path.name, path.flavor.empty() ? path.description : path.flavor, PathBonuses(path), path.color });
+            }
+        }
+        return cards;
+    }
+
+    // The cards: left and right (or up and down) compare, confirm takes the path, back returns
+    void GameEngine::UpdatePathChoice() {
+        const auto triggered = [this](std::string_view action) { return inputSystem_.IsActionTriggered(std::string(action)); };
+        const auto cards = PathCards();
+        if (triggered(MenuBackAction) || triggered(CharacterScreenAction)) {
+            session_->pathChoice.Close();
+            PlaySound(GameSound::ScreenClose);
+            return;
+        }
+        const int step = (triggered(MenuRightAction) || triggered(MenuDownAction) ? 1 : 0) - (triggered(MenuLeftAction) || triggered(MenuUpAction) ? 1 : 0);
+        if (step != 0) {
+            session_->pathChoice.Step(step, cards.size());
+            PlaySound(GameSound::MenuMove);
+        }
+        if (triggered(MenuConfirmAction) && session_->pathChoice.Cursor() < cards.size()) {
+            if (ChoosePath(cards[session_->pathChoice.Cursor()].key)) {
+                session_->pathChoice.Close();
+                session_->characterScreen.Close();   // to the game, where the banner shows
+                PlaySound(GameSound::MenuConfirm);
+            }
+        }
+    }
+
+    void GameEngine::DrawFanfare() {
+        session_->fanfare.Draw(renderingSystem_, assets_.menuArt);
     }
 
 } // namespace LB::Engine

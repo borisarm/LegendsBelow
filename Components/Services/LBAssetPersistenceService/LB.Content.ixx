@@ -169,6 +169,8 @@ export namespace LB::Content {
         String key;                                   // e.g. "path_warrior_berserker"
         String name;
         String description;
+        String flavor;                                // what the path is about (the choice's card)
+        std::array<float, 3> color{ 0.95f, 0.75f, 0.30f };   // its color on the card and banner (display RGB)
         std::int32_t damage{0};
         std::int32_t attackBonus{0};
         std::int32_t armorClass{0};

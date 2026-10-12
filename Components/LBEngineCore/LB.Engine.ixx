@@ -23,6 +23,7 @@ export import :Walls;
 export import :Decor;
 export import :GameEvents;
 export import :Allies;
+export import :Ceremony;
 export import :Torches;
 export import :Minimap;
 export import :CombatText;

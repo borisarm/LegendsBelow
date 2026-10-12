@@ -88,6 +88,7 @@ namespace LB::Engine {
         session_->effects.Draw(renderingSystem_, shade(1.0f, 1.0f, 1.0f));
         if (!menu_.IsOpen() && !ScreenOpen()) {   // full-screen panels show only the dungeon behind them
             DrawHud();
+            DrawFanfare();
             DrawMinimap();
         }
         DrawCharacterScreen();
