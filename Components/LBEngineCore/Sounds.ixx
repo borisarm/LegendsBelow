@@ -42,6 +42,9 @@ export namespace LB::Engine {
         Spikes,         // a trap's spikes coming up
         FootstepDirt,   // walking a cave's earth
         FootstepGrass,  // walking the weeds of the ruins
+        GateOpens,      // a key turned, bars sinking
+        WallBreaks,     // a secret wall crumbling
+        CandleTouched,  // a puzzle candle flaring or snuffed
         Count
     };
 
@@ -168,6 +171,9 @@ export namespace LB::Engine {
         inline constexpr std::string_view Spikes[] = { "metalLatch" };
         inline constexpr std::string_view FootstepDirt[] = { "footstep00", "footstep01", "footstep02", "footstep03", "footstep04" };
         inline constexpr std::string_view FootstepGrass[] = { "footstep_grass_000", "footstep_grass_001", "footstep_grass_002", "footstep_grass_003", "footstep_grass_004" };
+        inline constexpr std::string_view GateOpens[] = { "doorOpen_1", "doorOpen_2" };
+        inline constexpr std::string_view WallBreaks[] = { "impactMining_000", "impactMining_001", "impactMining_002" };
+        inline constexpr std::string_view CandleTouched[] = { "clothBelt", "clothBelt2" };
         inline constexpr std::string_view ArrowHitsWall[] = { "impactWood_light_000", "impactWood_light_001", "impactWood_light_002", "impactWood_light_003", "impactWood_light_004" };
     }
 
@@ -204,6 +210,9 @@ export namespace LB::Engine {
         case GameSound::Spikes: return { Spikes, 0.6f };
         case GameSound::FootstepDirt: return { FootstepDirt, 0.35f };
         case GameSound::FootstepGrass: return { FootstepGrass, 0.3f };
+        case GameSound::GateOpens: return { GateOpens, 0.8f };
+        case GameSound::WallBreaks: return { WallBreaks, 0.9f };
+        case GameSound::CandleTouched: return { CandleTouched, 0.6f };
         default: return {};
         }
     }

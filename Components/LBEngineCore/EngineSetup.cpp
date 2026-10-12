@@ -47,6 +47,7 @@ namespace LB::Engine {
             audioSystem_.EnableDeviceOutput();
         }
         ApplyPreferences(persistenceSystem_.LoadPreferences());
+        legacy_ = Legacy::FromProfile(persistenceSystem_.LoadProfile());
 
         inputSystem_.Initialize();
         RegisterDefaultBindings();
@@ -79,7 +80,9 @@ namespace LB::Engine {
     bool GameEngine::StartRun() {
         audioSystem_.StopAll();
         session_ = std::make_unique<Session>();
-        session_->playing = !menu_.IsOpen();   // a run started from a menu is behind it until play begins
+        // With the title screen a run is the player's only from New Game, Continue, or a load; one
+        // started from a menu is behind it until play begins
+        session_->playing = !menu_.IsOpen() && !options_.titleScreen;
         SubscribeToEvents();
         {
             const auto& clips = assets_.playerClips;
@@ -131,7 +134,13 @@ namespace LB::Engine {
         if (!initialized_) return false;
 
         Systems::Persistence::SaveSlotInfo metadata{};
-        metadata.saveName = slotIndex == QuickSaveSlot ? "Quick Save" : slotIndex == AutoSaveSlot ? "Autosave" : std::format("Save {}", slotIndex);
+        if (const auto* player = PlayerCharacter()) {
+            const auto* classData = PlayerClassDefinition();
+            metadata.characterName = classData ? classData->name : std::string{};
+            metadata.characterLevel = player->GetLevel();
+            metadata.location = session_->dungeonMode ? std::format("depth {}", session_->depth) : std::string("the arena");
+        }
+        metadata.saveName = slotIndex == QuickSaveSlot ? "Quick Save" : slotIndex == AutoSaveSlot ? "Autosave" : std::format("Slot {}", slotIndex - SaveSlots.front() + 1);
         metadata.playtimeSeconds = static_cast<std::int32_t>(session_->gameTimeSeconds);
 
         Systems::Persistence::SaveData data;
@@ -148,6 +157,7 @@ namespace LB::Engine {
 
     bool GameEngine::AutoSave() {
         if (!options_.autoSave || !initialized_ || !session_->playing || !session_->playerId || !IsPlayerAlive()) return false;
+        SaveLegacy();   // the records go with every autosave
         if (!SaveGame(AutoSaveSlot)) return false;
         session_->savedNoticeSeconds = SavedNoticeSeconds;
         return true;
@@ -156,7 +166,7 @@ namespace LB::Engine {
     std::optional<std::int32_t> GameEngine::LatestSaveSlot() const {
         std::optional<std::int32_t> latest;
         std::string newest;
-        for (const auto slot : { QuickSaveSlot, AutoSaveSlot }) {
+        for (const auto slot : { QuickSaveSlot, AutoSaveSlot, SaveSlots[0], SaveSlots[1], SaveSlots[2] }) {
             const auto info = persistenceSystem_.GetSaveSlotInfo(slot);
             if (!info || !info->exists) continue;
             if (!latest || info->timestamp >= newest) {   // ISO 8601: newer sorts later
@@ -237,7 +247,8 @@ namespace LB::Engine {
         assets_.characterModels.clear();
 
         // Loot on the floor, weapons in the knight's hand, and dungeon props (KayKit Dungeon Pack)
-        for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel, TorchModel, MerchantModel, ShrineModel, CandlesModel }) {
+        for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel, TorchModel, MerchantModel, ShrineModel, CandlesModel,
+                                 GreaterChestModel, GateModel, CandleModel, LitCandleModel, std::string_view("key.gltf") }) {
             assets_.characterModels[std::string(file)] = load(file);
         }
         for (const auto file : PropModels) {

@@ -64,8 +64,14 @@ TEST(GameEngineTorchTests, NearbyTorches_BurnWithParticles) {
     const auto& particles = engine.GetParticles().GetParticles();
     ASSERT_FALSE(particles.empty());
     EXPECT_EQ(engine.GetRendering().GetQueuedParticles().size(), particles.size());
-    // Every particle rises from a torch within range of the player
+    // Every particle rises from a torch within range of the player (but the sparkles of loot lying about)
+    const auto atLoot = [&](const auto& particle) {
+        return std::ranges::any_of(engine.GetGroundItems(), [&](const GroundItem& ground) {
+            return std::hypot(ground.position.x - particle.position.x, ground.position.y - particle.position.z) < 1.0f;
+        });
+    };
     for (const auto& particle : particles) {
+        if (atLoot(particle)) continue;
         const auto nearest = std::ranges::min(engine.GetTorches() | std::views::transform([&](const GameEngine::Torch& torch) {
             return std::hypot(torch.position.x - particle.position.x, torch.position.y - particle.position.z);
         }));

@@ -1014,7 +1014,7 @@ TEST(EnemyValidationTests, BadRigAndUnknownSummon_Rejected) {
 // ============================================================================
 
 TEST_F(ShippedContentTests, Rarities_GrowRarerItemsWithDepth) {
-    ASSERT_EQ(content_.GetRarities().size(), 4u);
+    ASSERT_EQ(content_.GetRarities().size(), 5u);   // and Legendary
     const auto* common = content_.FindRarity("rarity_common");
     const auto* rare = content_.FindRarity("rarity_rare");
     ASSERT_NE(common, nullptr);
@@ -1024,6 +1024,26 @@ TEST_F(ShippedContentTests, Rarities_GrowRarerItemsWithDepth) {
     EXPECT_GT(common->WeightAt(1), common->WeightAt(10));   // design-loot-and-progression.md 4.3
     EXPECT_LT(rare->WeightAt(1), rare->WeightAt(10));
     EXPECT_NEAR(common->WeightAt(10), 43.0f, 0.01f);        // the design's late depth: ~40%
+
+    const auto* legendary = content_.FindRarity("rarity_legendary");
+    ASSERT_NE(legendary, nullptr);
+    EXPECT_TRUE(legendary->legendary);
+    EXPECT_EQ(legendary->WeightAt(1), 0.0f);                 // never on the first floor
+    EXPECT_GT(legendary->WeightAt(8), 0.0f);
+}
+
+TEST_F(ShippedContentTests, Affixes_AttributesHitPointsAndPowers) {
+    const auto* mighty = content_.FindAffix("affix_prefix_mighty");
+    ASSERT_NE(mighty, nullptr);
+    EXPECT_EQ(mighty->strength, 1);
+    EXPECT_EQ(content_.FindAffix("affix_prefix_hale")->hitPoints, 4);
+    const auto* storms = content_.FindAffix("affix_power_storms");
+    ASSERT_NE(storms, nullptr);
+    EXPECT_TRUE(storms->IsPower());
+    EXPECT_EQ(storms->power, "ChainLightning");
+    EXPECT_TRUE(storms->onWeapons);
+    EXPECT_FALSE(storms->description.empty());
+    EXPECT_TRUE(content_.FindAffix("affix_power_thorns")->onArmour);
 }
 
 TEST_F(ShippedContentTests, Affixes_PrefixesAndSuffixes) {

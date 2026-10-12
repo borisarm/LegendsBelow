@@ -19,7 +19,10 @@ export namespace LB::Engine {
         Credits,
         ChooseClass, // New Game: the hero's class
         Controls,    // the keyboard and controller assignments
-        Fallen       // the hero went down: the run so far, and what next
+        Fallen,      // the hero went down: the run so far, and what next
+        SaveSlots,   // Save Game: the slots to save into
+        LoadSlots,   // Load Game: the saves to load (autosave, quick save, the slots)
+        Legacy       // the records of every run, and the boons they unlock
     };
 
     /// <summary>
@@ -34,6 +37,11 @@ export namespace LB::Engine {
         Options,
         Controls,
         RiseAgain,      // a fallen hero gets up at the floor's entrance
+        OpenSaveSlots,
+        OpenLoadSlots,
+        SaveToSlot,     // the item's slot
+        LoadFromSlot,
+        Legacy,
         Credits,
         QuitToTitle,
         Quit,           // leave the game (the host closes the window)
@@ -55,6 +63,7 @@ export namespace LB::Engine {
         MenuCommand command{MenuCommand::Back};
         bool enabled{true};
         std::string value;    // shown on the right ("70%")
+        std::int32_t slot{-1};   // a save slot (SaveToSlot, LoadFromSlot)
 
         [[nodiscard]] bool IsAdjustable() const noexcept {
             return command == MenuCommand::MasterVolume || command == MenuCommand::MusicVolume || command == MenuCommand::EffectsVolume;
@@ -382,8 +391,9 @@ export namespace LB::Engine {
                 text(item.text, left, y, 2.6f, color);
                 if (!item.value.empty()) {
                     const auto value = item.IsAdjustable() ? std::format("< {} >", item.value) : item.value;
-                    const auto size = renderer.MeasureText(value, 2.6f);
-                    text(value, right - static_cast<std::int32_t>(size.width), y, 2.6f, color);
+                    const float valueScale = item.slot >= 0 ? 1.7f : 2.6f;   // a save's summary is long
+                    const auto size = renderer.MeasureText(value, valueScale);
+                    text(value, right - static_cast<std::int32_t>(size.width), y + (item.slot >= 0 ? 8 : 0), valueScale, color);
                 }
                 y += rowHeight;
             }

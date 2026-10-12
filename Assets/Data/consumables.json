@@ -22,5 +22,6 @@
     "model": "arrow_crossbow_bundle.gltf",
     "ammoType": "Bolt",
     "value": 1
-  }
+  },
+  {"id": "consumable_key_iron", "name": "Iron Key", "maxStack": 5, "model": "key.gltf", "value": 0, "isKey": true}
 ]

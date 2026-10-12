@@ -372,6 +372,7 @@ export namespace LB::Content {
         std::int32_t maxStack{10};
         String model;                                 // how it lies on the floor
         String ammoType;                              // ammunition for weapons of this ammoType ("Arrow", "Bolt"); empty: not ammunition
+        bool isKey{false};                            // opens a locked gate (design-dungeon-and-world.md 4.3); not used from the bag
         std::int32_t value{0};                        // gold a merchant asks for one
 
         [[nodiscard]] bool IsAmmunition() const noexcept { return !ammoType.empty(); }
@@ -390,6 +391,7 @@ export namespace LB::Content {
         float weight{0.0f};                           // at depth 1
         float weightPerDepth{0.0f};                   // added for each floor deeper (never below 0)
         float priceMultiplier{1.0f};                  // on the item's value
+        bool legendary{false};                        // carries a legendary power besides its affixes
 
         [[nodiscard]] float WeightAt(std::int32_t depth) const noexcept {
             return std::max(0.0f, weight + weightPerDepth * static_cast<float>(std::max(0, depth - 1)));
@@ -413,6 +415,20 @@ export namespace LB::Content {
         std::int32_t armor{0};                        // flat physical armour
         std::int32_t spellPower{0};
         float manaRegen{0.0f};                        // mana per second
+        std::int32_t strength{0};                     // attributes (design-loot-and-progression.md 3.2)
+        std::int32_t dexterity{0};
+        std::int32_t intelligence{0};
+        std::int32_t wisdom{0};
+        std::int32_t hitPoints{0};                    // added to the maximum
+        std::int32_t mana{0};
+        // A legendary power (type "Power": only on legendary items, design-loot-and-progression.md
+        // 3.3): ChainLightning, LifeSteal, Frostbite, Ignite (weapons), Thorns (armour)
+        String power;
+        float chance{0.0f};                           // of a hit setting it off (LifeSteal, Thorns: the share of the damage)
+        std::int32_t powerDamage{0};                  // ChainLightning's damage
+        String description;                           // what it does, for the character screen
+
+        [[nodiscard]] bool IsPower() const noexcept { return !power.empty(); }
     };
 
     /// <summary>

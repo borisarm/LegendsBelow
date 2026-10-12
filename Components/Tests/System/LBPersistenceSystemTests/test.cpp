@@ -501,3 +501,15 @@ TEST_F(PersistenceSystemTests, Initialize_UnicodePath_Works) {
     }
     EXPECT_TRUE(std::filesystem::exists(dir_ / std::filesystem::path(std::u8string(u8"Partida_") + char8_t(0xC3) + char8_t(0xB1)) / "save_0.json")) << listing;
 }
+
+TEST_F(PersistenceSystemTests, Profile_KeptOnDisk) {
+    {
+        PersistenceSystem system;
+        system.Initialize(SaveDir());
+        EXPECT_TRUE(system.LoadProfile().empty());
+        ASSERT_TRUE(system.SaveProfile({ { "legacy.deepest", "7" } }));
+    }
+    PersistenceSystem system;
+    system.Initialize(SaveDir());
+    EXPECT_EQ(system.LoadProfile().at("legacy.deepest"), "7");
+}

@@ -84,6 +84,14 @@ namespace EngineTests {
 
     // The player is created from class data, so movement tests load the shipped content. They
     // test the player and the arena, so no enemies come.
+    // Assets/UI of the repository (menu frames, item icons)
+    inline std::string ShippedUiDirectory() {
+        const auto content = ShippedContentDirectory();
+        const auto ui = std::filesystem::path(std::u8string(content.begin(), content.end())).parent_path() / "UI";
+        const auto text = ui.u8string();
+        return std::string(text.begin(), text.end());
+    }
+
     inline void InitializeWithContent(GameEngine& engine) {
         ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false }))
             << engine.GetInitializationError();

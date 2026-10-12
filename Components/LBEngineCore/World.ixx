@@ -96,8 +96,26 @@ export namespace LB::Engine {
 
         [[nodiscard]] bool IsOpen(WorldPoint p) const noexcept {
             const auto [x, y] = CellOf(p);
-            return layout_.IsFloor(x, y);
+            return Walkable(x, y);
         }
+
+        /// <summary>
+        /// A floor cell closed off (a gate, a secret wall): solid to bodies, sight, and paths until opened
+        /// </summary>
+        void SetBlocked(std::int32_t x, std::int32_t y, bool blocked) {
+            if (!layout_.InBounds(x, y)) return;
+            if (blocked_.size() != layout_.cells.size()) blocked_.assign(layout_.cells.size(), 0);
+            blocked_[Index(x, y)] = blocked ? 1 : 0;
+        }
+        void ClearBlocked() noexcept { blocked_.clear(); }
+        [[nodiscard]] bool IsBlocked(std::int32_t x, std::int32_t y) const noexcept {
+            return layout_.InBounds(x, y) && blocked_.size() == layout_.cells.size() && blocked_[Index(x, y)] != 0;
+        }
+
+        /// <summary>
+        /// A floor cell that is not closed off
+        /// </summary>
+        [[nodiscard]] bool Walkable(std::int32_t x, std::int32_t y) const noexcept { return layout_.IsFloor(x, y) && !IsBlocked(x, y); }
 
         /// <summary>
         /// The room a point is in, or -1 (corridors, walls)
@@ -134,7 +152,7 @@ export namespace LB::Engine {
             const auto [x1, y1] = CellOf({ p.x + radius, p.y + radius });
             for (std::int32_t y = y0; y <= y1; ++y) {
                 for (std::int32_t x = x0; x <= x1; ++x) {
-                    if (layout_.IsFloor(x, y)) continue;
+                    if (Walkable(x, y)) continue;
                     // Closest point of the solid cell to the circle's center
                     const auto corner = CellCorner(x, y);
                     const float cx = std::clamp(p.x, corner.x, corner.x + CellTiles);
@@ -291,7 +309,7 @@ export namespace LB::Engine {
             const auto [x1, y1] = CellOf({ p.x + radius, p.y + radius });
             for (std::int32_t y = y0; y <= y1; ++y) {
                 for (std::int32_t x = x0; x <= x1; ++x) {
-                    if (layout_.IsFloor(x, y)) continue;
+                    if (Walkable(x, y)) continue;
                     const auto corner = CellCorner(x, y);
                     const float cx = std::clamp(p.x, corner.x, corner.x + CellTiles);
                     const float cy = std::clamp(p.y, corner.y, corner.y + CellTiles);
@@ -318,7 +336,7 @@ export namespace LB::Engine {
             float reached = target;
             for (std::int32_t y = y0; y <= y1; ++y) {
                 for (std::int32_t x = x0; x <= x1; ++x) {
-                    if (layout_.IsFloor(x, y)) continue;
+                    if (Walkable(x, y)) continue;
                     const auto corner = CellCorner(x, y);
                     const float cellLo = alongX ? corner.x : corner.y;
                     const float cellHi = cellLo + CellTiles;
@@ -346,12 +364,13 @@ export namespace LB::Engine {
 
         // A diagonal step only where both cells beside it are open (no cutting wall corners)
         [[nodiscard]] bool Passable(std::int32_t x, std::int32_t y, std::int32_t dx, std::int32_t dy) const noexcept {
-            if (!layout_.IsFloor(x + dx, y + dy)) return false;
-            return dx == 0 || dy == 0 || (layout_.IsFloor(x + dx, y) && layout_.IsFloor(x, y + dy));
+            if (!Walkable(x + dx, y + dy)) return false;
+            return dx == 0 || dy == 0 || (Walkable(x + dx, y) && Walkable(x, y + dy));
         }
 
         Dungeon::FloorLayout layout_;
         std::vector<Obstacle> obstacles_;
+        std::vector<std::uint8_t> blocked_;   // per cell, 1: closed off (empty: none)
         WorldPoint origin_{};
         // Last flow field (a cache: rebuilt when enemies need a path)
         mutable std::vector<std::int32_t> flow_;

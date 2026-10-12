@@ -313,9 +313,10 @@ export namespace LB::Engine {
                     Face(ally, foe->position);
                     if (type.IsRanged()) {
                         const WorldPoint direction{ foe->position.x - ally.position.x, foe->position.y - ally.position.y };
-                        encounter.Shoot(ally.Attack(), ally.position, direction, type.projectileSpeed, type.attackRange * 1.15f, type.projectileModel, Radius);
+                        encounter.Shoot(ally.Attack(), ally.position, direction, type.projectileSpeed, type.attackRange * 1.15f, type.projectileModel, Radius, ally.id);
                     }
                     else if (auto event = encounter.StrikeEnemy(foe->id, ally.Attack(), ally.position, type.attackRange)) {
+                        event->byAlly = true;
                         events.push_back(*event);
                     }
                 }

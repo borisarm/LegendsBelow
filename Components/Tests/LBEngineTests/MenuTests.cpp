@@ -207,8 +207,11 @@ TEST(GameEngineMenuTests, SaveFromPause_ThenContinueFromTheTitle) {
     engine.GiveItem("armor_head_leather_cap_t1");
     Press(engine, Keys::Escape);
 
-    Choose(engine, "Save Game");
+    Choose(engine, "Save Game");   // the slots
+    ASSERT_EQ(engine.GetMenu().Page(), MenuPage::SaveSlots);
+    Choose(engine, "Slot 1");
     EXPECT_EQ(engine.GetMenu().Message(), "Game saved");
+    Press(engine, Keys::Escape);   // back to the pause menu
     EXPECT_TRUE(HasItem(engine, "Load Game", true));
 
     Choose(engine, "Quit to Title");
@@ -258,15 +261,6 @@ TEST(GameEngineUiScaleTests, LargerWindow_HudLaidOutInUiUnits) {
 // ============================================================================
 // Menu Frame Tests
 // ============================================================================
-
-namespace {
-    std::string ShippedUiDirectory() {
-        const auto content = ShippedContentDirectory();
-        const auto ui = std::filesystem::path(std::u8string(content.begin(), content.end())).parent_path() / "UI";
-        const auto text = ui.u8string();
-        return std::string(text.begin(), text.end());
-    }
-}
 
 TEST(GameEngineMenuFrameTests, Title_FramedPanelSelectionAndOrnaments) {
     GameEngine engine;

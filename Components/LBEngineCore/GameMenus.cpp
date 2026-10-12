@@ -41,16 +41,20 @@ namespace LB::Engine {
         art.frame = load(MenuArt::FrameFile);
         art.selection = load(MenuArt::SelectionFile);
         art.divider = load(MenuArt::DividerFile);
+        std::unordered_map<std::string, Systems::Rendering::ImageId, StringHash, std::equal_to<>> icons;
+        for (const auto name : ItemIcons) icons[std::string(name)] = load(std::format("icon_{}.png", name));
         if (!errors.empty()) {
             initializationError_ = std::format("UI images in '{}' could not be loaded ({} problems):", uiDirectory, errors.size());
             for (const auto& error : errors) initializationError_ += "\n" + error;
             return false;
         }
         assets_.menuArt = art;
+        assets_.itemIcons = std::move(icons);
         return true;
     }
 
     void GameEngine::OpenMenu(MenuPage page) {
+        if (page == MenuPage::Title) session_->playing = false;   // the run behind the title is nobody's
         menu_.Open(page);
         SetPaused(true);
         menu_.SetItems(BuildMenuItems());
@@ -72,6 +76,8 @@ namespace LB::Engine {
             return {
                 { "New Game", MenuCommand::NewGame },
                 { "Continue", MenuCommand::Continue, saved },
+                { "Load Game", MenuCommand::OpenLoadSlots, saved },
+                { "Legacy", MenuCommand::Legacy },
                 { "Options", MenuCommand::Options },
                 { "Controls", MenuCommand::Controls },
                 { "Credits", MenuCommand::Credits },
@@ -80,8 +86,8 @@ namespace LB::Engine {
         case MenuPage::Pause:
             return {
                 { "Resume", MenuCommand::Resume },
-                { "Save Game", MenuCommand::SaveGame },
-                { "Load Game", MenuCommand::LoadGame, saved },
+                { "Save Game", MenuCommand::OpenSaveSlots },
+                { "Load Game", MenuCommand::OpenLoadSlots, saved },
                 { "Options", MenuCommand::Options },
                 { "Controls", MenuCommand::Controls },
                 { "Credits", MenuCommand::Credits },
@@ -96,11 +102,31 @@ namespace LB::Engine {
             };
         case MenuPage::Credits:
         case MenuPage::Controls:
+        case MenuPage::Legacy:
             return { { "Back", MenuCommand::Back } };
+        case MenuPage::SaveSlots:
+        case MenuPage::LoadSlots: {
+            // Saving: the player's slots (over what is there); loading: every save there is
+            const bool saving = menu_.Page() == MenuPage::SaveSlots;
+            std::vector<MenuItem> items;
+            const auto add = [&](std::string name, std::int32_t slot) {
+                const auto summary = SlotSummary(slot);
+                MenuItem item{ std::move(name), saving ? MenuCommand::SaveToSlot : MenuCommand::LoadFromSlot, saving || !summary.empty(), summary.empty() ? std::string("Empty") : summary };
+                item.slot = slot;
+                items.push_back(std::move(item));
+            };
+            if (!saving) {
+                add("Autosave", AutoSaveSlot);
+                add("Quick Save", QuickSaveSlot);
+            }
+            for (std::size_t i = 0; i < SaveSlots.size(); ++i) add(std::format("Slot {}", i + 1), SaveSlots[i]);
+            items.push_back({ "Back", MenuCommand::Back });
+            return items;
+        }
         case MenuPage::Fallen:
             return {
                 { "Rise Again", MenuCommand::RiseAgain, true, "at the entrance" },
-                { "Load Game", MenuCommand::LoadGame, saved },
+                { "Load Last Save", MenuCommand::LoadGame, saved },
                 { "Quit to Title", MenuCommand::QuitToTitle },
             };
         case MenuPage::ChooseClass:
@@ -156,7 +182,7 @@ namespace LB::Engine {
         }
         if (triggered(MenuConfirmAction)) {
             const auto command = selected->command;   // the items are rebuilt by what it does
-            ChooseMenuItem(command);
+            ChooseMenuItem(command, selected->slot);
         }
     }
 
@@ -172,7 +198,7 @@ namespace LB::Engine {
         menu_.SetItems(BuildMenuItems());
     }
 
-    void GameEngine::ChooseMenuItem(MenuCommand command) {
+    void GameEngine::ChooseMenuItem(MenuCommand command, std::int32_t slot) {
         PlaySound(GameSound::MenuConfirm);
         switch (command) {
         case MenuCommand::NewGame:
@@ -188,11 +214,12 @@ namespace LB::Engine {
             StartRun();
             CloseMenu();
             session_->playing = true;
-            AutoSave();   // Continue works from the first floor on
+            GrantBoons();   // what past runs unlocked
+            AutoSave();     // Continue works from the first floor on
             break;
         case MenuCommand::Continue:
             StartRun();
-            if (const auto slot = LatestSaveSlot(); slot && LoadGame(*slot)) CloseMenu();
+            if (const auto latest = LatestSaveSlot(); latest && LoadGame(*latest)) CloseMenu();
             else {
                 OpenMenu(MenuPage::Title);
                 menu_.SetMessage("The saved game could not be loaded");
@@ -205,7 +232,7 @@ namespace LB::Engine {
             menu_.SetMessage(SaveGame(QuickSaveSlot) ? "Game saved" : "The game could not be saved");
             break;
         case MenuCommand::LoadGame:
-            if (const auto slot = LatestSaveSlot(); slot && LoadGame(*slot)) CloseMenu();
+            if (const auto latest = LatestSaveSlot(); latest && LoadGame(*latest)) CloseMenu();
             else menu_.SetMessage("The saved game could not be loaded");
             break;
         case MenuCommand::Options:
@@ -213,6 +240,24 @@ namespace LB::Engine {
             break;
         case MenuCommand::Controls:
             menu_.Push(MenuPage::Controls);
+            break;
+        case MenuCommand::OpenSaveSlots:
+            menu_.Push(MenuPage::SaveSlots);
+            break;
+        case MenuCommand::OpenLoadSlots:
+            menu_.Push(MenuPage::LoadSlots);
+            break;
+        case MenuCommand::Legacy:
+            menu_.Push(MenuPage::Legacy);
+            break;
+        case MenuCommand::SaveToSlot:
+            menu_.SetMessage(slot >= 0 && SaveGame(slot) ? "Game saved" : "The game could not be saved");
+            break;
+        case MenuCommand::LoadFromSlot:
+            // From the title, over a fresh run (the one behind it is not the player's)
+            if (!session_->playing) StartRun();
+            if (slot >= 0 && LoadGame(slot)) CloseMenu();
+            else menu_.SetMessage("The saved game could not be loaded");
             break;
         case MenuCommand::RiseAgain:
             RespawnPlayer();
@@ -247,7 +292,9 @@ namespace LB::Engine {
         model.titlePage = menu_.Page() == MenuPage::Title;
         model.heading = menu_.Page() == MenuPage::Pause ? "PAUSED" : menu_.Page() == MenuPage::Options ? "OPTIONS"
                       : menu_.Page() == MenuPage::Credits ? "CREDITS" : menu_.Page() == MenuPage::ChooseClass ? "CHOOSE YOUR HERO"
-                      : menu_.Page() == MenuPage::Controls ? "CONTROLS" : menu_.Page() == MenuPage::Fallen ? "YOU HAVE FALLEN" : "";
+                      : menu_.Page() == MenuPage::Controls ? "CONTROLS" : menu_.Page() == MenuPage::Fallen ? "YOU HAVE FALLEN"
+                      : menu_.Page() == MenuPage::SaveSlots ? "SAVE GAME" : menu_.Page() == MenuPage::LoadSlots ? "LOAD GAME"
+                      : menu_.Page() == MenuPage::Legacy ? "LEGACY" : "";
         model.items = menu_.Items();
         model.cursor = menu_.Cursor();
         model.message = menu_.Message();
@@ -261,6 +308,7 @@ namespace LB::Engine {
             model.firstLine = menu_.ScrollPosition();
         }
         if (menu_.Page() == MenuPage::Fallen) model.lines = FallenSummary();
+        if (menu_.Page() == MenuPage::Legacy) model.lines = LegacyLines();
         MenuView::Draw(renderingSystem_, model);
     }
 
@@ -363,6 +411,72 @@ namespace LB::Engine {
             std::format("Time below: {}:{:02}", seconds / 60, seconds % 60),
             std::format("Falls: {}", stats.falls),
         };
+    }
+
+    std::string GameEngine::SlotSummary(std::int32_t slot) const {
+        const auto info = persistenceSystem_.GetSaveSlotInfo(slot);
+        if (!info || !info->exists) return {};
+        const auto minutes = info->playtimeSeconds / 60;
+        const auto who = info->characterName.empty() ? std::string("A hero") : info->characterName;
+        return info->location.empty() ? std::format("{}, level {} - {}:{:02}", who, info->characterLevel, minutes / 60, minutes % 60)
+                                      : std::format("{}, level {}, {} - {}:{:02}", who, info->characterLevel, info->location, minutes / 60, minutes % 60);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Legacy (design-loot-and-progression.md 7.1): records of every run, boons for new heroes
+    // ------------------------------------------------------------------------------------------
+
+    // New records: kept in the profile; a boon they unlock is announced across the screen
+    void GameEngine::UpdateLegacy(const Legacy& next) {
+        const auto unlocked = next.NewSince(legacy_);
+        legacy_ = next;
+        SaveLegacy();
+        for (const auto* boon : unlocked) {
+            std::string name(boon->name);
+            std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+            session_->fanfare.Show(FanfareCard{ std::format("LEGACY: {}", name), "for every new hero", { std::format("New heroes {}", boon->gives) }, { 0.70f, 0.85f, 1.0f } });
+        }
+    }
+
+    void GameEngine::SaveLegacy() {
+        auto profile = persistenceSystem_.LoadProfile();
+        for (const auto& [key, value] : legacy_.ToProfile()) profile[key] = value;
+        persistenceSystem_.SaveProfile(profile);
+    }
+
+    // A new hero's boons: a potion, gold, an heirloom weapon (their class's, rolled uncommon)
+    void GameEngine::GrantBoons() {
+        auto next = legacy_;
+        ++next.runs;
+        next.deepest = std::max(next.deepest, session_->depth);
+        UpdateLegacy(next);
+        if (!session_->playerId) return;
+        if (legacy_.Has(Boon::Provisions)) GiveItem(HealingPotion);
+        if (legacy_.Has(Boon::OldCoin)) session_->gold += Legacy::OldCoinGold;
+        if (legacy_.Has(Boon::Heirloom)) {
+            const auto weapon = GetPlayerWeaponItem();
+            const auto* uncommon = content_->FindRarity("rarity_uncommon");
+            auto affixes = session_->lootRoller.RollAffixes(*content_, true, 1);
+            if (weapon.IsValid() && uncommon && !affixes.empty()) {
+                const auto heirloom = session_->rolls.Add(RolledItem{ session_->rolls.BaseOf(weapon), uncommon, std::move(affixes), {}, 1 }, *content_);
+                GiveItemRef(heirloom);
+                EquipItemRef(heirloom);   // the plain one goes to the bag
+            }
+        }
+    }
+
+    std::vector<std::string> GameEngine::LegacyLines() const {
+        std::vector<std::string> lines{
+            std::format("Deepest floor reached: {}", legacy_.deepest),
+            std::format("Bosses defeated: {}", legacy_.bosses),
+            std::format("Enemies slain: {}", legacy_.kills),
+            std::format("Heroes sent below: {}", legacy_.runs),
+            "",
+        };
+        for (const auto& boon : Boons) {
+            lines.push_back(legacy_.Has(boon.boon) ? std::format("{}: {}", boon.name, boon.gives) : std::format("{} (locked): {}", boon.name, boon.requirement));
+        }
+        return lines;
     }
 
 } // namespace LB::Engine

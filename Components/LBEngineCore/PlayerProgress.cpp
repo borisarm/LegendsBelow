@@ -146,14 +146,19 @@ namespace LB::Engine {
 
     // A weapon or armour piece dropped: its rarity at this depth (the wave in the arena) and, above
     // common, its affixes (design-loot-and-progression.md 3-4)
-    ItemRef GameEngine::RollDrop(ItemRef item) {
+    ItemRef GameEngine::RollDrop(ItemRef item, std::int32_t depthBonus) {
         if (item.kind != ItemKind::Weapon && item.kind != ItemKind::Armor) return item;
-        const auto depth = session_->depth > 0 ? session_->depth : std::max(1, session_->encounter.GetWave());
+        const auto depth = (session_->depth > 0 ? session_->depth : std::max(1, session_->encounter.GetWave())) + depthBonus;
         const auto* rarity = session_->lootRoller.RollRarity(*content_, depth);
         if (!rarity || rarity->affixes <= 0) return item;
-        auto affixes = session_->lootRoller.RollAffixes(*content_, item.kind == ItemKind::Weapon, rarity->affixes);
+        const bool weapon = item.kind == ItemKind::Weapon;
+        auto affixes = session_->lootRoller.RollAffixes(*content_, weapon, rarity->affixes);
+        if (rarity->legendary) {
+            if (const auto* power = session_->lootRoller.RollPower(*content_, weapon)) affixes.push_back(power);
+        }
         if (affixes.empty()) return item;
-        return session_->rolls.Add(RolledItem{ item, rarity, std::move(affixes), {} }, *content_);
+        // Its level: the depth it dropped at (a greater chest's deeper still)
+        return session_->rolls.Add(RolledItem{ item, rarity, std::move(affixes), {}, depth }, *content_);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -283,7 +288,8 @@ namespace LB::Engine {
         return true;
     }
 
-    // The weapon in hand and the armour pieces CharacterService works out speed and casting from
+    // The weapon in hand, the armour pieces CharacterService works out speed and casting from, and
+    // what the gear adds to the character (attributes, hit points, mana)
     void GameEngine::SyncEquipment() {
         const auto weapon = session_->rolls.BaseOf(GetPlayerWeaponItem());
         session_->playerWeapon = weapon.kind == ItemKind::Weapon ? content_->FindWeapon(weapon.id) : nullptr;
@@ -302,6 +308,13 @@ namespace LB::Engine {
             piece.castPenalty = armor->castPenalty;
             session_->characterService.EquipArmor(id, piece);
         }
+        auto bonuses = session_->rolls.BonusesOf(GetPlayerWeaponItem());
+        for (const auto& [slot, item] : WornItems()) bonuses += session_->rolls.BonusesOf(item);
+        Services::Character::GearBonus gear{};
+        gear.attributes = LB::Attributes{ bonuses.strength, bonuses.dexterity, 0, bonuses.intelligence, bonuses.wisdom, 0 };
+        gear.hitPoints = bonuses.hitPoints;
+        gear.mana = bonuses.mana;
+        session_->characterService.SetGear(id, gear);
     }
 
     bool GameEngine::UnequipArmorSlot(EquipmentSlot slot) {
@@ -318,7 +331,7 @@ namespace LB::Engine {
 
         const auto* consumable = content_->FindConsumable(item.id);
         const auto* player = PlayerCharacter();
-        if (!consumable || !player) return false;
+        if (!consumable || !player || consumable->isKey) return false;
         const auto& character = *player;
         if (consumable->healing.count > 0 && character.GetCurrentHitPoints() >= character.GetMaxHitPoints()) {
             return false;   // no waste at full health
@@ -352,6 +365,7 @@ namespace LB::Engine {
 
     void GameEngine::GrantExperience(std::int32_t experience) {
         if (!session_->playerId || experience <= 0) return;
+        if (legacy_.Has(Boon::Veteran)) experience = static_cast<std::int32_t>(std::lround(static_cast<float>(experience) * Legacy::VeteranExperience));
         const auto previous = PlayerCharacter()->GetLevel();
         if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, experience); progress && progress->levelIncreased) {
             session_->events.Publish(LevelGainedEvent{ previous, progress->newLevel, progress->hitPointIncrease, progress->manaPointIncrease,
@@ -363,7 +377,17 @@ namespace LB::Engine {
     // sounds) to levels and paths. Subscribed once per run, on the run's own bus.
     void GameEngine::SubscribeToEvents() {
         auto& events = session_->events;
-        events.Subscribe<EnemyKilledEvent>([this](const EnemyKilledEvent&) { ++session_->stats.kills; });
+        events.Subscribe<EnemyKilledEvent>([this](const EnemyKilledEvent& kill) {
+            ++session_->stats.kills;
+            if (!session_->playing) return;
+            ++legacy_.kills;   // kept with the next autosave or record
+            const auto* enemy = content_->FindEnemy(kill.enemyKey);
+            if (enemy && enemy->boss) {
+                auto next = legacy_;
+                ++next.bosses;
+                UpdateLegacy(next);
+            }
+        });
         events.Subscribe<EnemyKilledEvent>([this](const EnemyKilledEvent& kill) {
             GrantExperience(kill.experience);
             if (!kill.lootTable.empty()) DropLoot(kill.lootTable, kill.at);
@@ -403,11 +427,15 @@ namespace LB::Engine {
         });
     }
 
-    void GameEngine::DropLoot(std::string_view lootTable, WorldPoint at) {
+    void GameEngine::DropLoot(std::string_view lootTable, WorldPoint at, std::int32_t rolls, std::int32_t depthBonus) {
         const auto* table = content_->FindLootTable(lootTable);
         if (!table) return;
-        for (auto drop : session_->lootRoller.Roll(*table, *content_)) {
-            drop.item = RollDrop(drop.item);
+        std::vector<GroundItem> drops;
+        for (std::int32_t roll = 0; roll < std::max(1, rolls); ++roll) {
+            for (auto drop : session_->lootRoller.Roll(*table, *content_)) drops.push_back(drop);
+        }
+        for (auto drop : drops) {
+            drop.item = RollDrop(drop.item, depthBonus);
             const auto offset = session_->lootRoller.Scatter(0.45f);
             drop.id = session_->nextGroundItemId++;
             const WorldPoint spot{ at.x + offset.x, at.y + offset.y };
@@ -477,10 +505,14 @@ namespace LB::Engine {
         // Attributes: with points to spend, each one below its cap can be raised
         const auto points = character.GetUnspentAttributePoints();
         heading(points > 0 ? std::format("Attributes - {} point{} to spend", points, points == 1 ? "" : "s") : std::string("Attributes"));
+        const auto effective = session_->characterService.GetEffectiveAttributes(*session_->playerId).value_or(status.currentAttributes);
         for (const auto& [attribute, name] : AttributeNames) {
-            const auto value = status.currentAttributes.Get(attribute);
+            // The value with what the gear adds (its modifier is what counts), the gear's share shown
+            const auto base = status.currentAttributes.Get(attribute);
+            const auto value = effective.Get(attribute);
             const auto modifier = static_cast<std::int32_t>(std::floor((value - 10) / 2.0));
-            ScreenRow row{ std::format("{} {}", name, value), std::format("{}{}", modifier >= 0 ? "+" : "", modifier) };
+            ScreenRow row{ value != base ? std::format("{} {} ({:+} gear)", name, value, value - base) : std::format("{} {}", name, value),
+                           std::format("{}{}", modifier >= 0 ? "+" : "", modifier) };
             if (points > 0) {
                 row.action = ScreenAction::SpendPoint;
                 row.attribute = attribute;
@@ -525,7 +557,9 @@ namespace LB::Engine {
         if (session_->playerWeapon) {
             ScreenRow row{ std::format("Main hand: {}", ItemName(GetPlayerWeaponItem())), std::format("{} +{}", DiceText(session_->playerWeapon->damageDice), GetPlayerAttackProfile().damageBonus) };
             row.color = RarityColorOf(GetPlayerWeaponItem());
+            row.item = GetPlayerWeaponItem();
             rows.push_back(std::move(row));
+            if (const auto* rolled = session_->rolls.Find(GetPlayerWeaponItem()); rolled && rolled->Power()) info("  " + rolled->Power()->description);
         }
         for (const auto& [slot, item] : WornItems()) {
             const auto* armor = content_->FindArmor(session_->rolls.BaseOf(item).id);
@@ -534,7 +568,9 @@ namespace LB::Engine {
             row.color = RarityColorOf(item);
             row.action = ScreenAction::Unequip;
             row.slot = slot;
+            row.item = item;
             rows.push_back(std::move(row));
+            if (const auto* rolled = session_->rolls.Find(item); rolled && rolled->Power()) info("  " + rolled->Power()->description);
         }
         info("Defense", std::format("AC {}   AR {}", GetPlayerDefense().armorClass, GetPlayerDefense().physicalArmor));
 
@@ -565,6 +601,9 @@ namespace LB::Engine {
                 if (consumable->IsAmmunition()) {
                     row.detail = "ammunition";
                 }
+                else if (consumable->isKey) {
+                    row.detail = "opens a locked gate";
+                }
                 else {
                     row.action = ScreenAction::Use;
                     row.detail = consumable->healing.count > 0 ? std::format("heals {}", DiceText(consumable->healing)) : std::string("use");
@@ -574,18 +613,20 @@ namespace LB::Engine {
                 row.action = ScreenAction::Equip;
                 const auto reason = CanEquip(item);
                 row.enabled = reason.empty();
+                const auto* rolled = session_->rolls.Find(item);
+                const auto level = rolled ? std::format("L{} ", rolled->level) : std::string{};
                 if (base.kind == ItemKind::Weapon) {
                     const auto* weapon = content_->FindWeapon(base.id);
                     const auto delta = averageBlow(item) - (GetPlayerWeaponItem().IsValid() ? averageBlow(GetPlayerWeaponItem()) : 0.0f);
                     const auto bonus = weapon->damageBonus + session_->rolls.BonusesOf(item).damage;
-                    row.detail = reason.empty() ? std::format("{}{} {:+.1f}", DiceText(weapon->damageDice), bonus > 0 ? std::format("+{}", bonus) : std::string{}, delta) : reason;
+                    row.detail = reason.empty() ? std::format("{}{}{} {:+.1f}", level, DiceText(weapon->damageDice), bonus > 0 ? std::format("+{}", bonus) : std::string{}, delta) : reason;
                 }
                 else {
                     const auto* armor = content_->FindArmor(base.id);
                     const auto worn = EquippedItem(armor->slot);
                     const std::int32_t current = worn.IsValid() ? armourOf(worn) : 0;
                     const auto mine = armourOf(item);
-                    row.detail = reason.empty() ? std::format("{} {} {:+d}", SlotName(armor->slot), mine, mine - current) : reason;
+                    row.detail = reason.empty() ? std::format("{}{} {} {:+d}", level, SlotName(armor->slot), mine, mine - current) : reason;
                 }
             }
             rows.push_back(std::move(row));
@@ -688,6 +729,17 @@ namespace LB::Engine {
         const auto text = [&](std::string line, std::int32_t x, std::int32_t y, float scale, Color color) {
             renderingSystem_.DrawText(Systems::Rendering::TextRenderData{ std::move(line), LB::Position{ x, y }, {}, color, scale, 32, false });
         };
+        // A name that would run into the detail column: smaller, then cut short with "..."
+        const std::int32_t detailX = left + panelWidth / 2 + 60;
+        const auto fitted = [&](std::string line, std::int32_t x, std::int32_t y, float scale, Color color, bool hasDetail) {
+            const float room = static_cast<float>((hasDetail ? detailX - 10 : left + panelWidth - 16) - x);
+            while (scale > 1.45f && renderingSystem_.MeasureText(line, scale).width > room) scale -= 0.1f;
+            if (renderingSystem_.MeasureText(line, scale).width > room) {
+                while (line.size() > 4 && renderingSystem_.MeasureText(line + "...", scale).width > room) line.pop_back();
+                line += "...";
+            }
+            text(std::move(line), x, y, scale, color);
+        };
         text(std::string(title), left + 16, top + 12, 2.6f, Display(0.95f, 0.75f, 0.30f));
         const std::string help = &screen == &session_->characterScreen ? "Enter/A: choose   X/Del: drop   Esc/B: close" : "Enter/A: choose   Esc/B: close";
         text(help, left + panelWidth - static_cast<std::int32_t>(renderingSystem_.MeasureText(help, 1.6f).width) - 16, top + 16, 1.6f, Display(0.6f, 0.6f, 0.6f));
@@ -706,8 +758,21 @@ namespace LB::Engine {
                              : !row.enabled ? Display(0.55f, 0.40f, 0.40f)
                              : row.color ? *row.color
                              : row.IsSelectable() ? Display(1.0f, 1.0f, 1.0f) : Display(0.75f, 0.75f, 0.75f);
-            text(row.heading ? row.text : "  " + row.text, left + 16, y, row.heading ? 2.0f : 1.8f, color);
-            if (!row.detail.empty()) text(row.detail, left + panelWidth / 2 + 60, y, 1.8f, row.enabled ? Display(0.70f, 0.70f, 0.70f) : color);
+            // Items get their icon before the name
+            const auto icon = row.item.IsValid() ? IconFor(row.item) : Systems::Rendering::InvalidImageId;
+            if (icon != Systems::Rendering::InvalidImageId) {
+                Systems::Rendering::ImageRenderData image{};
+                image.image = icon;
+                image.rect = { left + 18, y - 3, lineHeight - 2, lineHeight - 2 };
+                image.layerDepth = 33;
+                image.color = row.enabled ? Display(1.0f, 1.0f, 1.0f) : Display(0.55f, 0.5f, 0.5f);
+                renderingSystem_.DrawImage(image);
+                fitted(row.text, left + 18 + lineHeight + 2, y, 1.8f, color, !row.detail.empty());
+            }
+            else {
+                text(row.heading ? row.text : "  " + row.text, left + 16, y, row.heading ? 2.0f : 1.8f, color);
+            }
+            if (!row.detail.empty()) text(row.detail, detailX, y, 1.8f, row.enabled ? Display(0.70f, 0.70f, 0.70f) : color);
         }
     }
 
@@ -830,7 +895,7 @@ namespace LB::Engine {
         if (!rolled) return DescribeItem(*content_, item).second;
         std::string affixes;
         for (const auto* affix : rolled->affixes) affixes += (affixes.empty() ? "" : ",") + affix->key;
-        return std::format("~{}|{}|{}", DescribeItem(*content_, rolled->base).second, rolled->rarity ? rolled->rarity->key : std::string{}, affixes);
+        return std::format("~{}|{}|{}|{}", DescribeItem(*content_, rolled->base).second, rolled->rarity ? rolled->rarity->key : std::string{}, affixes, rolled->level);
     }
 
     // The item a save names (a rolled one is rolled again from its parts; unknown parts are left out)
@@ -846,6 +911,8 @@ namespace LB::Engine {
                 if (const auto* affix = content_->FindAffix(key)) rolled.affixes.push_back(affix);
             }
         }
+        if (parts.size() > 3) ParseInt(parts[3], rolled.level);   // older saves: level 1
+        rolled.level = std::max(1, rolled.level);
         return rolled.affixes.empty() ? base : session_->rolls.Add(std::move(rolled), *content_);
     }
 
@@ -992,6 +1059,45 @@ namespace LB::Engine {
 
     void GameEngine::DrawFanfare() {
         session_->fanfare.Draw(renderingSystem_, assets_.menuArt);
+    }
+
+    // An item's icon: by its weapon category, armour slot or kind, or what a consumable is
+    Systems::Rendering::ImageId GameEngine::IconFor(ItemRef item) const {
+        const auto base = session_->rolls.BaseOf(item);
+        std::string_view name;
+        switch (base.kind) {
+        case ItemKind::Weapon:
+            switch (content_->FindWeapon(base.id)->category) {
+            case LB::Combat::WeaponType::Axe: name = "axe"; break;
+            case LB::Combat::WeaponType::Dagger: name = "dagger"; break;
+            case LB::Combat::WeaponType::Mace: name = "mace"; break;
+            case LB::Combat::WeaponType::Staff: name = "staff"; break;
+            case LB::Combat::WeaponType::Wand: name = "wand"; break;
+            case LB::Combat::WeaponType::Bow: name = "bow"; break;
+            case LB::Combat::WeaponType::Crossbow: name = "crossbow"; break;
+            default: name = "sword"; break;
+            }
+            break;
+        case ItemKind::Armor: {
+            const auto* armor = content_->FindArmor(base.id);
+            if (armor->category == LB::Combat::ArmorCategory::Shield) name = "shield";
+            else switch (armor->slot) {
+            case LB::Combat::EquipmentSlot::Head: name = "helmet"; break;
+            case LB::Combat::EquipmentSlot::Hands: name = "gloves"; break;
+            case LB::Combat::EquipmentSlot::Feet: name = "boots"; break;
+            default: name = "chest"; break;
+            }
+            break;
+        }
+        case ItemKind::Consumable: {
+            const auto* consumable = content_->FindConsumable(base.id);
+            name = consumable->isKey ? "key" : consumable->ammoType == "Bolt" ? "bolts" : consumable->IsAmmunition() ? "arrows" : "potion";
+            break;
+        }
+        default: return Systems::Rendering::InvalidImageId;
+        }
+        const auto it = assets_.itemIcons.find(name);
+        return it != assets_.itemIcons.end() ? it->second : Systems::Rendering::InvalidImageId;
     }
 
 } // namespace LB::Engine

@@ -358,7 +358,7 @@ namespace LB::Engine {
         const auto* player = PlayerCharacter();
         const auto* classData = PlayerClassDefinition();
         if (!player || !classData) return 0;
-        const auto& attributes = player->GetAttributes();
+        const auto attributes = session_->characterService.GetEffectiveAttributes(*session_->playerId).value_or(player->GetAttributes());
         std::int32_t modifier = 0;
         switch (player->GetClass()) {
         case LB::Character::CharacterClass::Warrior: modifier = attributes.GetStrengthModifier(); break;   // a warrior's might
@@ -755,6 +755,7 @@ namespace LB::Engine {
         }
 
         UpdateAllies(elapsedSeconds);
+        ApplyItemPowers();
 
         if (session_->encounter.GetWave() != wave) {
             session_->characterService.RestCharacter(*session_->playerId);
@@ -993,6 +994,77 @@ namespace LB::Engine {
             session_->shakeSeconds = shakeSeconds;
             session_->shakeDuration = shakeSeconds;
             session_->shakeStrength = shakeStrength;
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Legendary powers (design-loot-and-progression.md 3.3): what the hero's own blows set off
+    // with the weapon's power, and what striking them costs with the armour's
+    // ------------------------------------------------------------------------------------------
+
+    void GameEngine::ApplyItemPowers() {
+        const auto* weaponItem = session_->rolls.Find(GetPlayerWeaponItem());
+        const auto* weaponPower = weaponItem ? weaponItem->Power() : nullptr;
+        const Content::AffixDefinition* armourPower = nullptr;
+        for (const auto& [slot, item] : WornItems()) {
+            if (const auto* rolled = session_->rolls.Find(item); rolled && rolled->Power()) armourPower = rolled->Power();
+        }
+        if (!weaponPower && !armourPower) return;
+
+        std::vector<CombatEvent> more;
+        const auto count = session_->combatEvents.size();
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto event = session_->combatEvents[i];
+            if (!event.result.hit || event.result.finalDamage <= 0) continue;
+            const auto* enemy = session_->encounter.FindEnemy(event.enemyId);
+            if (!enemy) continue;
+            const auto at = enemy->position;
+
+            // The hero's weapon blows (not spells, not allies')
+            if (event.kind == CombatEventKind::PlayerAttack && !event.byAlly && !event.spell && weaponPower) {
+                const auto& power = *weaponPower;
+                if (power.power == "LifeSteal") {
+                    const auto healed = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(event.result.finalDamage) * power.chance)));
+                    if (IsPlayerAlive()) session_->characterService.HealCharacter(*session_->playerId, healed);
+                }
+                else if (session_->lootRoller.Chance(power.chance)) {
+                    if (power.power == "Frostbite") session_->encounter.ApplyStatus(event.enemyId, "status_slow_basic");
+                    else if (power.power == "Ignite") session_->encounter.ApplyStatus(event.enemyId, "status_burning_basic");
+                    else if (power.power == "ChainLightning") {
+                        // Arcs to the two nearest other foes within four tiles
+                        std::vector<std::pair<float, std::uint32_t>> nearby;
+                        for (const auto& other : session_->encounter.GetEnemies()) {
+                            const float distance = Distance(other.position, at);
+                            if (other.id != event.enemyId && other.IsTargetable() && distance <= 4.0f) nearby.emplace_back(distance, other.id);
+                        }
+                        std::ranges::sort(nearby);
+                        for (std::size_t k = 0; k < nearby.size() && k < 2; ++k) {
+                            const auto* target = session_->encounter.FindEnemy(nearby[k].second);
+                            const Systems::Rendering::Vector3 from{ at.x, 1.0f, at.y };
+                            const Systems::Rendering::Vector3 to{ target->position.x, 1.0f, target->position.y };
+                            for (int s = 0; s <= 6; ++s) {
+                                const float t = static_cast<float>(s) / 6.0f;
+                                session_->effects.Emit(ParticleEffect::HitSparks, { from.x + (to.x - from.x) * t, from.y + 0.2f * std::sin(t * 9.0f), from.z + (to.z - from.z) * t }, 3, 0.6f);
+                            }
+                            if (auto hit = session_->encounter.DamageEnemy(nearby[k].second, power.powerDamage + session_->depth / 2, LB::Combat::DamageType::Lightning)) more.push_back(*hit);
+                        }
+                    }
+                }
+            }
+            // A foe striking the hero up close, through thorns
+            if (event.kind == CombatEventKind::EnemyAttack && event.ally == 0 && armourPower && armourPower->power == "Thorns"
+                && Distance(at, session_->playerPosition) <= 2.5f) {
+                // Magical thorns: a share of the blow and a little more, past armour
+                const auto back = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(event.result.finalDamage) * armourPower->chance))) + armourPower->powerDamage;
+                if (auto hit = session_->encounter.DamageEnemy(event.enemyId, back, LB::Combat::DamageType::Arcane)) more.push_back(*hit);
+            }
+        }
+        for (auto& hit : more) {
+            hit.byAlly = true;   // not the hero's weapon: it sets nothing off again
+            session_->combatEvents.push_back(hit);
+            if (hit.killed) {
+                if (const auto* enemy = session_->encounter.FindEnemy(hit.enemyId)) OnEnemyKilled(*enemy);
+            }
         }
     }
 

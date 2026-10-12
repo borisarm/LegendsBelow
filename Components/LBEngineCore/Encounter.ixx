@@ -271,6 +271,25 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// Damage dealt straight to an enemy (a legendary power: lightning, thorns), through its
+        /// resistances like a spell; null when it is gone
+        /// </summary>
+        std::optional<CombatEvent> DamageEnemy(std::uint32_t id, std::int32_t rawDamage, Services::Combat::DamageType type) {
+            auto* enemy = Find(id);
+            if (!enemy || !enemy->IsTargetable()) return std::nullopt;
+            return Hit(*enemy, Services::Combat::CombatService::ResolveSpellHit(rawDamage, type, DefenseOf(*enemy)));
+        }
+
+        /// <summary>
+        /// A status (statuses.json) on an enemy
+        /// </summary>
+        void ApplyStatus(std::uint32_t id, std::string_view statusKey) {
+            auto* enemy = Find(id);
+            if (!enemy || !enemy->IsTargetable() || !content_) return;
+            if (const auto* status = content_->FindStatus(statusKey)) enemy->statuses.Apply(*status);
+        }
+
+        /// <summary>
         /// A spell striking an enemy at once (the player's smite); null when it is gone
         /// </summary>
         std::optional<CombatEvent> StrikeWithSpell(const SpellPayload& payload, std::uint32_t id) {
@@ -305,11 +324,12 @@ export namespace LB::Engine {
         /// resolved when it arrives (Update returns that attack). Returns its id.
         /// </summary>
         std::uint32_t Shoot(const Services::Combat::WeaponAttackProfile& attack, WorldPoint from, WorldPoint direction, float speed, float range,
-                            std::string model, float bodyRadius) {
+                            std::string model, float bodyRadius, std::uint32_t shooter = 0) {
             const float length = std::max(1e-5f, std::hypot(direction.x, direction.y));
             const float offset = bodyRadius + ProjectileSet::Radius;
             Projectile shot{};
             shot.side = ProjectileSide::Player;
+            shot.shooter = shooter;
             shot.position = { from.x + direction.x / length * offset, from.y + direction.y / length * offset };
             shot.direction = direction;
             shot.speed = speed;
@@ -436,7 +456,10 @@ export namespace LB::Engine {
                     }
                 }
                 else if (auto* enemy = Find(*impact.target)) {
-                    if (!impact.projectile.spell) events.push_back(Hit(*enemy, combat_.ResolveWeaponAttack(impact.projectile.attack, DefenseOf(*enemy))));
+                    if (!impact.projectile.spell) {
+                        events.push_back(Hit(*enemy, combat_.ResolveWeaponAttack(impact.projectile.attack, DefenseOf(*enemy))));
+                        events.back().byAlly = impact.projectile.shooter != 0;   // an ally's arrow
+                    }
                     else if (impact.projectile.spell->spell->radius <= 0.0f) events.push_back(SpellHit(*enemy, *impact.projectile.spell));
                 }
                 // A spell with a radius bursts where it lands, against a body or a wall

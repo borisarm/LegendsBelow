@@ -104,7 +104,7 @@ export namespace LB::Services::Dungeon {
             // Rooms: a random size, placed at random inside the slot with at least a cell of margin
             const std::int32_t largest = std::max(params.minRoomSize, std::min(params.maxRoomSize, slotSize - 2));
             std::uniform_int_distribution<std::int32_t> size(std::max(1, std::min(params.minRoomSize, largest)), largest);
-            const std::int32_t totalWeight = std::max(1, params.treasureWeight + params.eliteWeight + params.safeWeight);
+            const std::int32_t totalWeight = std::max(1, params.treasureWeight + params.eliteWeight + params.safeWeight + params.puzzleWeight);
             for (std::size_t i = 0; i < slots.size(); ++i) {
                 const std::int32_t width = size(rng);
                 const std::int32_t height = size(rng);
@@ -122,7 +122,8 @@ export namespace LB::Services::Dungeon {
                 else {
                     const std::int32_t roll = std::uniform_int_distribution<std::int32_t>(1, totalWeight)(rng);
                     room.type = roll <= params.treasureWeight ? RoomType::Treasure
-                              : roll <= params.treasureWeight + params.eliteWeight ? RoomType::Elite : RoomType::Safe;
+                              : roll <= params.treasureWeight + params.eliteWeight ? RoomType::Elite
+                              : roll <= params.treasureWeight + params.eliteWeight + params.safeWeight ? RoomType::Safe : RoomType::Puzzle;
                 }
                 for (std::int32_t y = top; y < top + height; ++y) {
                     for (std::int32_t x = left; x < left + width; ++x) layout.SetFloor(x, y);

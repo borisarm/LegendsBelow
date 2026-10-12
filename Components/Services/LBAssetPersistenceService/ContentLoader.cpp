@@ -700,6 +700,7 @@ namespace LB::Content {
             reader.ReadFloat("weight", rarity.weight, true);
             reader.ReadFloat("weightPerDepth", rarity.weightPerDepth, false);
             reader.ReadFloat("priceMultiplier", rarity.priceMultiplier, false);
+            reader.ReadBool("legendary", rarity.legendary);
             if (const Json* color = reader.Nested("color", true, true)) {
                 if (color->size() != 3) reader.Error("'color' must be three numbers (display RGB, 0..1)");
                 else {
@@ -728,7 +729,21 @@ namespace LB::Content {
             reader.ReadInt("armor", affix.armor, false);
             reader.ReadInt("spellPower", affix.spellPower, false);
             reader.ReadFloat("manaRegen", affix.manaRegen, false);
-            if (type != "Prefix" && type != "Suffix") reader.Error(std::format("'type' must be Prefix or Suffix, not '{}'", type));
+            reader.ReadInt("strength", affix.strength, false);
+            reader.ReadInt("dexterity", affix.dexterity, false);
+            reader.ReadInt("intelligence", affix.intelligence, false);
+            reader.ReadInt("wisdom", affix.wisdom, false);
+            reader.ReadInt("hitPoints", affix.hitPoints, false);
+            reader.ReadInt("mana", affix.mana, false);
+            reader.ReadString("power", affix.power, type == "Power");
+            reader.ReadFloat("chance", affix.chance, false);
+            reader.ReadInt("powerDamage", affix.powerDamage, false);
+            reader.ReadString("description", affix.description, false);
+            if (type != "Prefix" && type != "Suffix" && type != "Power") reader.Error(std::format("'type' must be Prefix, Suffix, or Power, not '{}'", type));
+            if (type == "Power" && affix.power != "ChainLightning" && affix.power != "LifeSteal" && affix.power != "Frostbite" && affix.power != "Ignite" && affix.power != "Thorns") {
+                reader.Error(std::format("'power' '{}' is not one the game knows (ChainLightning, LifeSteal, Frostbite, Ignite, Thorns)", affix.power));
+            }
+            if (affix.chance < 0.0f || affix.chance > 1.0f) reader.Error("'chance' must be in [0, 1]");
             affix.prefix = type == "Prefix";
             for (const auto& target : appliesTo) {
                 if (target == "Weapon") affix.onWeapons = true;
@@ -767,6 +782,7 @@ namespace LB::Content {
             reader.ReadDice("healing", consumable.healing, false);
             reader.ReadInt("maxStack", consumable.maxStack, false);
             reader.ReadString("ammoType", consumable.ammoType, false);
+            reader.ReadBool("isKey", consumable.isKey);
             reader.ReadInt("value", consumable.value, false);
             reader.ReadString("model", consumable.model, true);
 

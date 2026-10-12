@@ -126,6 +126,7 @@ namespace LB::Systems::Persistence {
         saveSlots_.clear();
         saveData_.clear();
         preferences_ = PlayerPreferences{};
+        profile_.clear();
         saveDirectory_ = saveDirectory.empty() ? std::filesystem::path{} : FromUtf8(saveDirectory);
 
         if (!saveDirectory_.empty()) {
@@ -147,6 +148,11 @@ namespace LB::Systems::Persistence {
 
             if (auto json = ReadJsonFile(GetPreferencesFilePath())) {
                 preferences_ = PreferencesFromJson(*json);
+            }
+            if (auto json = ReadJsonFile(GetProfileFilePath()); json && json->is_object()) {
+                for (const auto& [key, value] : json->items()) {
+                    if (value.is_string()) profile_[key] = value.get<String>();
+                }
             }
         }
 
@@ -260,6 +266,21 @@ namespace LB::Systems::Persistence {
 
     std::filesystem::path PersistenceSystem::GetPreferencesFilePath() const {
         return saveDirectory_ / "preferences.json";
+    }
+
+    bool PersistenceSystem::SaveProfile(const SaveData& profile) {
+        if (!initialized_) return false;
+        if (IsPersistentStorage()) {
+            Json json = Json::object();
+            for (const auto& [key, value] : profile) json[key] = value;
+            if (!WriteJsonFile(GetProfileFilePath(), json)) return false;
+        }
+        profile_ = profile;
+        return true;
+    }
+
+    std::filesystem::path PersistenceSystem::GetProfileFilePath() const {
+        return saveDirectory_ / "profile.json";
     }
 
 } // namespace LB::Systems::Persistence

@@ -31,6 +31,8 @@ import :Decor;
 import :GameEvents;
 import :Allies;
 import :Ceremony;
+import :Features;
+import :Legacy;
 import :Loot;
 import :Particles;
 import :Effects;
@@ -145,6 +147,18 @@ export namespace LB::Engine {
         // Save slot used by quick save/load (F5/F9)
         static constexpr std::int32_t QuickSaveSlot = 0;
         static constexpr std::int32_t AutoSaveSlot = 1;
+        // The slots Save Game writes to (the player's own: "Slot 1" to "Slot 3")
+        static constexpr std::array<std::int32_t, 3> SaveSlots = { 2, 3, 4 };
+
+        /// <summary>
+        /// A save's summary for the slot pages ("Warrior, level 5, depth 7 - 12:34"); empty: no save there
+        /// </summary>
+        [[nodiscard]] std::string SlotSummary(std::int32_t slot) const;
+
+        /// <summary>
+        /// The records of every run and the boons they unlock (the profile)
+        /// </summary>
+        [[nodiscard]] const Legacy& GetLegacy() const noexcept { return legacy_; }
         static constexpr float SavedNoticeSeconds = 2.0f;   // "Saved" shows this long after an autosave
 
         /// <summary>
@@ -154,7 +168,7 @@ export namespace LB::Engine {
         bool AutoSave();
 
         /// <summary>
-        /// The newest save, autosave or quick save (what Continue and Load Game load); none: no save yet
+        /// The newest save, of any slot (what Continue and the death screen load); none: no save yet
         /// </summary>
         [[nodiscard]] std::optional<std::int32_t> LatestSaveSlot() const;
 
@@ -264,6 +278,22 @@ export namespace LB::Engine {
         static constexpr std::string_view OpenChestModel = "chest_common_empty.glb";
         static constexpr std::string_view TrapdoorModel = "trapdoor.glb";
         static constexpr std::string_view ChestLootTable = "loot_chest";
+        // Behind a gate or a puzzle: a greater chest, rolled this many times, its finds as rare as
+        // this many floors deeper
+        static constexpr std::int32_t GreaterChestRolls = 3;
+        static constexpr std::int32_t GreaterChestDepthBonus = 4;
+        static constexpr std::string_view GreaterChestModel = "chest_large_gold.gltf";
+        static constexpr std::string_view KeyItem = "consumable_key_iron";
+        // The item icons in the UI directory (icon_<name>.png)
+        static constexpr std::array<std::string_view, 17> ItemIcons = {
+            "sword", "axe", "dagger", "mace", "staff", "wand", "bow", "crossbow", "shield", "helmet", "chest", "gloves", "boots", "potion", "arrows", "bolts", "key" };
+        static constexpr std::string_view GateModel = "wall_gated.gltf";
+        static constexpr std::string_view SecretWallModel = "wall_cracked.gltf";
+        static constexpr std::string_view CandleModel = "candle.gltf";
+        static constexpr std::string_view LitCandleModel = "candle_lit.gltf";
+        static constexpr float GateReach = 1.6f;          // the hero this close to a gate tries it
+        static constexpr float GateSinkSeconds = 0.8f;     // an opened gate sinks into the floor
+        static constexpr float CandleReach = 1.2f;
         static constexpr float InteractRadius = 1.0f;
 
         // Torches on room walls (TorchSet), and how dark the dungeon is without them (the
@@ -569,7 +599,7 @@ export namespace LB::Engine {
             if (!character) return attack;
 
             const auto& weapon = *session_->playerWeapon;
-            const auto& attributes = character->get().GetAttributes();
+            const auto attributes = session_->characterService.GetEffectiveAttributes(*session_->playerId).value_or(character->get().GetAttributes());
             const std::int32_t modifier = weapon.attributeScale == "DEX" ? attributes.GetDexterityModifier()
                                         : weapon.attributeScale == "STR" ? attributes.GetStrengthModifier() : 0;
             const auto bonuses = EquippedBonuses();
@@ -592,7 +622,8 @@ export namespace LB::Engine {
             const auto character = session_->characterService.GetCharacter(*session_->playerId);
             if (!character) return defense;
 
-            defense.armorClass = character->get().GetArmorClass() + character->get().GetAttributes().GetDexterityModifier();
+            defense.armorClass = character->get().GetArmorClass()
+                               + session_->characterService.GetEffectiveAttributes(*session_->playerId).value_or(character->get().GetAttributes()).GetDexterityModifier();
             for (const auto& piece : session_->characterService.GetEquippedArmor(*session_->playerId)) {
                 if (const auto* armor = content_->FindArmor(piece.armorId)) {
                     defense.physicalArmor += armor->physicalAR + armor->armorBonus;
@@ -742,6 +773,30 @@ export namespace LB::Engine {
         /// The floor's props and spike traps, and the look of its tier
         /// </summary>
         [[nodiscard]] const FloorDecor& GetDecor() const noexcept { return session_->decor; }
+
+        /// <summary>
+        /// The floor's gates (locked and secret) and candle puzzles
+        /// </summary>
+        [[nodiscard]] const FloorFeatures& GetFeatures() const noexcept { return session_->features; }
+
+        /// <summary>
+        /// An item from its description as saves write it: a content key, or
+        /// "~base|rarity|affix,affix|level" for a rolled one (tools and tests; it is not given)
+        /// </summary>
+        ItemRef MakeItem(std::string_view description) { return ItemFromSaveKey(description); }
+
+        /// <summary>
+        /// A rolled item's level (the depth it dropped at); 0 for anything else
+        /// </summary>
+        [[nodiscard]] std::int32_t ItemLevel(ItemRef item) const noexcept {
+            const auto* rolled = session_->rolls.Find(item);
+            return rolled ? rolled->level : 0;
+        }
+
+        /// <summary>
+        /// Touch a puzzle candle by index (as Interact beside it does; tools and tests)
+        /// </summary>
+        void TouchCandle(std::size_t puzzle, std::size_t candle);
         [[nodiscard]] const FloorTheme& GetTheme() const noexcept { return session_->dungeonMode ? ThemeForDepth(session_->depth) : FloorThemes[0]; }
         [[nodiscard]] const CharacterScreen& GetTradeScreen() const noexcept { return session_->trade; }
 
@@ -940,7 +995,7 @@ export namespace LB::Engine {
         /// <summary>
         /// Drop a loot table's roll at a point (enemies do this when they die)
         /// </summary>
-        void DropLoot(std::string_view lootTable, WorldPoint at);
+        void DropLoot(std::string_view lootTable, WorldPoint at, std::int32_t rolls = 1, std::int32_t depthBonus = 0);
 
         /// <summary>
         /// Place an enemy from enemies.json, ready to act (no spawn animation). Returns its id, or
@@ -1039,6 +1094,10 @@ export namespace LB::Engine {
         // Equipment: record an item in a slot (or clear it), then bring the weapon and
         // CharacterService's armour pieces in line with the inventory's slots
         void SubscribeToEvents();
+        [[nodiscard]] Systems::Rendering::ImageId IconFor(ItemRef item) const;
+        void ApplyItemPowers();
+        void UpdateFeatures();
+        void DrawFeatures(const Systems::Rendering::Color& tint);
         void UpdatePathChoice();
         void DrawFanfare();
         [[nodiscard]] std::vector<std::string> PathBonuses(const Content::SpecializationDefinition& path) const;
@@ -1097,7 +1156,11 @@ export namespace LB::Engine {
         std::vector<MenuItem> BuildMenuItems() const;
         void UpdateMenu();
         void AdjustMenuItem(MenuCommand command, int direction);
-        void ChooseMenuItem(MenuCommand command);
+        void ChooseMenuItem(MenuCommand command, std::int32_t slot = -1);
+        void UpdateLegacy(const Legacy& next);
+        void SaveLegacy();
+        void GrantBoons();
+        [[nodiscard]] std::vector<std::string> LegacyLines() const;
         void DrawMenu();
 
         // Sounds (GameSounds.cpp): `at` places a sound in the world (heard from the player)
@@ -1151,7 +1214,7 @@ export namespace LB::Engine {
         ItemRef ItemFromSaveKey(std::string_view text);
         std::optional<Systems::Rendering::Color> RarityColorOf(ItemRef item) const;
         bool SpendAmmo(std::string_view ammoType);
-        ItemRef RollDrop(ItemRef item);
+        ItemRef RollDrop(ItemRef item, std::int32_t depthBonus = 0);
 
         // The player's character; null before Initialize, without class content, or if it is gone
         [[nodiscard]] const LB::Character::Character* PlayerCharacter() const {
@@ -1227,6 +1290,7 @@ export namespace LB::Engine {
             bool soundsLoaded{false};
             bool musicLoaded{false};
             MenuArt menuArt;
+            std::unordered_map<std::string, Systems::Rendering::ImageId, StringHash, std::equal_to<>> itemIcons;   // "sword" -> its icon (Scripts/MakeIcons.py)
         };
 
         // The player's side of combat
@@ -1295,6 +1359,7 @@ export namespace LB::Engine {
             bool shrineUsed{false};
             std::vector<StockEntry> stock;
             FloorDecor decor;                        // props and traps of the floor
+            FloorFeatures features;                  // gates, secret walls, candle puzzles
             EventBus events;                         // what happens in the run (GameEvents), dispatched after each step
             AllyParty allies;                        // the hero's companions
             std::string ambienceClip;                // the loop playing under the floor (empty: none)
@@ -1344,7 +1409,8 @@ export namespace LB::Engine {
         GameMenu menu_;                             // spans runs: New Game and Quit to Title start new ones
         bool quitRequested_{false};
         std::vector<std::string> credits_;
-        std::unique_ptr<Session> session_ = std::make_unique<Session>();   // on the heap: it is large (~20 KB)
+        std::unique_ptr<Session> session_ = std::make_unique<Session>();
+        Legacy legacy_;   // outlives runs: loaded from the profile at startup   // on the heap: it is large (~20 KB)
         StepTimer timer_;
         bool active_{true};
         bool initialized_{false};

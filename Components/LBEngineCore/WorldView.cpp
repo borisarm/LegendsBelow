@@ -471,6 +471,18 @@ namespace LB::Engine {
         // The tactical pause and the order in hand; by the merchant, how to trade
         if (IsTacticallyPaused()) hud.hint = "PAUSED - right click or arrows + Space: target   1-4: cast at it   Tab: resume";
         else if (NearMerchant() && !session_->trade.IsOpen()) hud.hint = "F or d-pad up: trade with the merchant";
+        else {
+            // A cracked wall, or a puzzle's candles, nearby
+            for (const auto& gate : session_->features.Gates()) {
+                if (!gate.open && gate.kind == GateKind::Secret && Distance(gate.center, session_->playerPosition) <= GateReach + 1.0f) hud.hint = "A cracked wall: strike it";
+            }
+            for (const auto& puzzle : session_->features.Puzzles()) {
+                if (puzzle.solved) continue;
+                for (const auto& candle : puzzle.candles) {
+                    if (Distance(candle.position, session_->playerPosition) <= CandleReach) hud.hint = "F or d-pad up: touch the candle (it flips its neighbours too) - light them all";
+                }
+            }
+        }
         const auto& order = session_->order;
         const auto* target = order.target ? session_->encounter.FindEnemy(*order.target) : nullptr;
         if (order.kind == OrderKind::Move) hud.order = "Order: move";

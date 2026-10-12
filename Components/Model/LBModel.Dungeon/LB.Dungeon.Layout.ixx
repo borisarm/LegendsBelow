@@ -103,6 +103,7 @@ export namespace LB::Dungeon {
         std::int32_t treasureWeight{4};
         std::int32_t eliteWeight{3};
         std::int32_t safeWeight{2};
+        std::int32_t puzzleWeight{0};           // a puzzle room (design-dungeon-and-world.md 2.2): candles to light
     };
 
 } // namespace LB::Dungeon

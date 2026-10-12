@@ -84,14 +84,34 @@ export namespace LB::Engine {
         std::int32_t armor{0};
         std::int32_t spellPower{0};
         float manaRegen{0.0f};
+        std::int32_t strength{0};
+        std::int32_t dexterity{0};
+        std::int32_t intelligence{0};
+        std::int32_t wisdom{0};
+        std::int32_t hitPoints{0};
+        std::int32_t mana{0};
 
         ItemBonuses& operator+=(const Content::AffixDefinition& affix) noexcept {
-            damage += affix.damage;
-            attackBonus += affix.attackBonus;
-            armorClass += affix.armorClass;
-            armor += affix.armor;
-            spellPower += affix.spellPower;
-            manaRegen += affix.manaRegen;
+            return Add(affix, 1.0f);
+        }
+
+        /// <summary>
+        /// An affix's numbers grown by an item level's scale (whole numbers rounded)
+        /// </summary>
+        ItemBonuses& Add(const Content::AffixDefinition& affix, float scale) noexcept {
+            const auto grown = [scale](std::int32_t value) { return static_cast<std::int32_t>(std::lround(static_cast<float>(value) * scale)); };
+            damage += grown(affix.damage);
+            attackBonus += grown(affix.attackBonus);
+            armorClass += grown(affix.armorClass);
+            armor += grown(affix.armor);
+            spellPower += grown(affix.spellPower);
+            manaRegen += affix.manaRegen * scale;
+            strength += grown(affix.strength);
+            dexterity += grown(affix.dexterity);
+            intelligence += grown(affix.intelligence);
+            wisdom += grown(affix.wisdom);
+            hitPoints += grown(affix.hitPoints);
+            mana += grown(affix.mana);
             return *this;
         }
 
@@ -102,9 +122,23 @@ export namespace LB::Engine {
             armor += other.armor;
             spellPower += other.spellPower;
             manaRegen += other.manaRegen;
+            strength += other.strength;
+            dexterity += other.dexterity;
+            intelligence += other.intelligence;
+            wisdom += other.wisdom;
+            hitPoints += other.hitPoints;
+            mana += other.mana;
             return *this;
         }
     };
+
+    /// <summary>
+    /// How much an item level grows its affixes (design-loot-and-progression.md 3.1): a quarter
+    /// more for each level above the first
+    /// </summary>
+    [[nodiscard]] inline float ItemLevelScale(std::int32_t level) noexcept {
+        return 1.0f + 0.25f * static_cast<float>(std::max(0, level - 1));
+    }
 
     /// <summary>
     /// A weapon or armour piece dropped with a rarity and affixes (design-loot-and-progression.md 3)
@@ -114,6 +148,15 @@ export namespace LB::Engine {
         const Content::RarityDefinition* rarity{nullptr};     // into the content, which outlives the run
         std::vector<const Content::AffixDefinition*> affixes;
         std::string name;                                     // "Keen Iron Mace of the Bear"
+        std::int32_t level{1};                                // the depth it dropped at: its affixes grow with it
+
+        /// <summary>
+        /// Its legendary power (null: none)
+        /// </summary>
+        [[nodiscard]] const Content::AffixDefinition* Power() const noexcept {
+            const auto it = std::ranges::find_if(affixes, &Content::AffixDefinition::IsPower);
+            return it != affixes.end() ? *it : nullptr;
+        }
     };
 
     /// <summary>
@@ -147,7 +190,7 @@ export namespace LB::Engine {
         [[nodiscard]] ItemBonuses BonusesOf(ItemRef item) const noexcept {
             ItemBonuses bonuses;
             if (const auto* rolled = Find(item)) {
-                for (const auto* affix : rolled->affixes) bonuses += *affix;
+                for (const auto* affix : rolled->affixes) bonuses.Add(*affix, ItemLevelScale(rolled->level));
             }
             return bonuses;
         }
@@ -244,7 +287,7 @@ export namespace LB::Engine {
                 const bool wantPrefix = i % 2 == 0;
                 std::vector<const Content::AffixDefinition*> pool;
                 for (const auto& affix : content.GetAffixes()) {
-                    const bool fits = weapon ? affix.onWeapons : affix.onArmour;
+                    const bool fits = (weapon ? affix.onWeapons : affix.onArmour) && !affix.IsPower();
                     if (fits && std::ranges::find(chosen, &affix) == chosen.end()) pool.push_back(&affix);
                 }
                 std::vector<const Content::AffixDefinition*> preferred;
@@ -256,6 +299,17 @@ export namespace LB::Engine {
                 chosen.push_back(from[std::uniform_int_distribution<std::size_t>(0, from.size() - 1)(rng_)]);
             }
             return chosen;
+        }
+
+        /// <summary>
+        /// A legendary power for a weapon (or an armour piece); null without one
+        /// </summary>
+        const Content::AffixDefinition* RollPower(const Content::ContentDatabase& content, bool weapon) {
+            std::vector<const Content::AffixDefinition*> pool;
+            for (const auto& affix : content.GetAffixes()) {
+                if (affix.IsPower() && (weapon ? affix.onWeapons : affix.onArmour)) pool.push_back(&affix);
+            }
+            return pool.empty() ? nullptr : pool[std::uniform_int_distribution<std::size_t>(0, pool.size() - 1)(rng_)];
         }
 
         /// <summary>
@@ -280,12 +334,16 @@ export namespace LB::Engine {
             return { std::cos(a) * d, std::sin(a) * d };
         }
 
-    private:
+        /// <summary>
+        /// True with a probability (0..1)
+        /// </summary>
         bool Chance(float probability) {
             if (probability <= 0.0f) return false;
             if (probability >= 1.0f) return true;
             return std::uniform_real_distribution<float>(0.0f, 1.0f)(rng_) < probability;
         }
+
+    private:
 
         std::mt19937 rng_;
     };

@@ -109,6 +109,7 @@ export namespace LB::Engine {
         bool killed{false};
         const Content::SpellDefinition* spell{nullptr};   // a spell's hit (its statuses go to the target); null: an attack
         std::uint32_t ally{0};              // an enemy attack's target when it was an ally (0: the player)
+        bool byAlly{false};                 // a blow of the hero's side struck by an ally (not the hero)
     };
 
     /// <summary>

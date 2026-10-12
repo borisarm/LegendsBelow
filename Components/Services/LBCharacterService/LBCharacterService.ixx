@@ -70,6 +70,16 @@ export namespace LB::Services::Character {
     };
 
     /// <summary>
+    /// What equipment adds to a character (CharacterService::SetGear): attributes (each a change,
+    /// from 0) and points of health and mana
+    /// </summary>
+    struct GearBonus {
+        Attributes attributes{0, 0, 0, 0, 0, 0};
+        std::int32_t hitPoints{0};
+        std::int32_t mana{0};
+    };
+
+    /// <summary>
     /// Character progression result
     /// Contains information about level-up results and stat changes
     /// </summary>
@@ -249,8 +259,8 @@ export namespace LB::Services::Character {
                 character.SetUnspentAttributePoints(character.GetUnspentAttributePoints() + freePoints);
 
                 // Recompute max HP and MP from the progression table at the new level
-                const auto newMaxHP = calculateMaxHitPoints(rules, newLevel, newAttributes);
-                const auto newMaxMP = calculateMaxManaPoints(character.GetClass(), rules, newLevel, newAttributes);
+                const auto newMaxHP = calculateMaxHitPoints(rules, newLevel, newAttributes) + gearOf(id).hitPoints;
+                const auto newMaxMP = std::max(0, calculateMaxManaPoints(character.GetClass(), rules, newLevel, newAttributes) + gearOf(id).mana);
                 result.hitPointIncrease = newMaxHP - character.GetMaxHitPoints();
                 result.manaPointIncrease = newMaxMP - character.GetMaxManaPoints();
 
@@ -389,7 +399,7 @@ export namespace LB::Services::Character {
             // design-armour-system.md 4.2: BaseSpeed * (1 - sum of armour penalties), each penalty
             // scaled by how well the class handles that armour category
             const float baseSpeed = rules->baseMovementSpeed
-                + static_cast<float>(character.GetAttributes().GetDexterityModifier()) * 0.1f;
+                + static_cast<float>(EffectiveAttributesOf(id, character).GetDexterityModifier()) * 0.1f;
             float penalty = 0.0f;
             for (const auto& piece : equippedArmorOf(id)) {
                 penalty += piece.movementPenalty * armorAdjustmentFor(*rules, piece.category).movementScale;
@@ -473,8 +483,8 @@ export namespace LB::Services::Character {
             character.SetUnspentAttributePoints(character.GetUnspentAttributePoints() - 1);
 
             const auto level = character.GetLevel();
-            const auto newMaxHP = calculateMaxHitPoints(classRules, level, attributes);
-            const auto newMaxMP = calculateMaxManaPoints(character.GetClass(), classRules, level, attributes);
+            const auto newMaxHP = calculateMaxHitPoints(classRules, level, attributes) + gearOf(id).hitPoints;
+            const auto newMaxMP = std::max(0, calculateMaxManaPoints(character.GetClass(), classRules, level, attributes) + gearOf(id).mana);
             character.SetHitPoints(std::clamp(character.GetCurrentHitPoints() + newMaxHP - character.GetMaxHitPoints(), 0, newMaxHP), newMaxHP);
             character.SetManaPoints(std::clamp(character.GetCurrentManaPoints() + newMaxMP - character.GetMaxManaPoints(), 0, newMaxMP), newMaxMP);
             return true;
@@ -508,8 +518,8 @@ export namespace LB::Services::Character {
             character.SetAttributes(attributes);
             character.SetUnspentAttributePoints(unspentPoints);
 
-            const auto maxHP = calculateMaxHitPoints(classRules, level, attributes);
-            const auto maxMP = calculateMaxManaPoints(character.GetClass(), classRules, level, attributes);
+            const auto maxHP = calculateMaxHitPoints(classRules, level, attributes) + gearOf(id).hitPoints;
+            const auto maxMP = std::max(0, calculateMaxManaPoints(character.GetClass(), classRules, level, attributes) + gearOf(id).mana);
             character.SetHitPoints(std::clamp(static_cast<std::int32_t>(std::lround(health * maxHP)), character.IsAlive() ? 1 : 0, maxHP), maxHP);
             character.SetManaPoints(maxMP, maxMP);
             return true;
@@ -536,6 +546,41 @@ export namespace LB::Services::Character {
         }
 
         /// <summary>
+        /// What a character's equipment adds (design-loot-and-progression.md 3.2): attributes, which
+        /// count for attack, speed, and spell power but not toward the class caps (and are not part of
+        /// the saved progression), and hit points and mana on top of the class tables. Changing it
+        /// moves current hit points and mana by the change in their maximum.
+        /// </summary>
+        bool SetGear(CharacterId id, const GearBonus& gear) {
+            auto it = characters_.find(id);
+            if (it == characters_.end()) return false;
+            const auto* rules = GetRulesFor(id);
+            if (rules == nullptr) return false;
+            auto& character = it->second;
+            gear_[id] = gear;
+            const auto level = character.GetLevel();
+            const auto& attributes = character.GetAttributes();
+            const auto maxHP = std::max(1, calculateMaxHitPoints(*rules, level, attributes) + gear.hitPoints);
+            const auto maxMP = std::max(0, calculateMaxManaPoints(character.GetClass(), *rules, level, attributes) + gear.mana);
+            const auto hp = std::clamp(character.GetCurrentHitPoints() + maxHP - character.GetMaxHitPoints(), character.IsAlive() ? 1 : 0, maxHP);
+            const auto mp = std::clamp(character.GetCurrentManaPoints() + maxMP - character.GetMaxManaPoints(), 0, maxMP);
+            character.SetHitPoints(hp, maxHP);
+            character.SetManaPoints(mp, maxMP);
+            return true;
+        }
+
+        [[nodiscard]] GearBonus GetGear(CharacterId id) const { return gearOf(id); }
+
+        /// <summary>
+        /// The attributes with what the equipment adds
+        /// </summary>
+        [[nodiscard]] std::optional<Attributes> GetEffectiveAttributes(CharacterId id) const {
+            const auto it = characters_.find(id);
+            if (it == characters_.end()) return std::nullopt;
+            return EffectiveAttributesOf(id, it->second);
+        }
+
+        /// <summary>
         /// Attack bonus with a weapon category (design-character-system.md 4.2 plus class adjustment):
         /// melee = class melee bonus + STR_mod, ranged (bows, crossbows) = class ranged bonus + DEX_mod,
         /// then + the class adjustment for that weapon category
@@ -551,9 +596,8 @@ export namespace LB::Services::Character {
             const auto totals = classRules.progression.TotalsAt(character.GetLevel());
             const bool ranged = weapon == WeaponType::Bow || weapon == WeaponType::Crossbow;
             const std::int32_t classBonus = ranged ? totals.rangedAttackBonus : totals.meleeAttackBonus;
-            const std::int32_t attributeBonus = ranged
-                ? character.GetAttributes().GetDexterityModifier()
-                : character.GetAttributes().GetStrengthModifier();
+            const auto attributes = EffectiveAttributesOf(id, character);
+            const std::int32_t attributeBonus = ranged ? attributes.GetDexterityModifier() : attributes.GetStrengthModifier();
 
             return classBonus + attributeBonus + *GetWeaponAdjustment(id, weapon);
         }
@@ -798,6 +842,24 @@ export namespace LB::Services::Character {
         std::unordered_map<CharacterId, Character> characters_;
         std::unordered_map<CharacterClass, ClassRules> classRules_;
         std::unordered_map<CharacterId, std::map<EquipmentSlot, ArmorPiece>> equippedArmor_;
+        std::unordered_map<CharacterId, GearBonus> gear_;
+
+        [[nodiscard]] GearBonus gearOf(CharacterId id) const {
+            const auto it = gear_.find(id);
+            return it != gear_.end() ? it->second : GearBonus{};
+        }
+
+        [[nodiscard]] Attributes EffectiveAttributesOf(CharacterId id, const Character& character) const {
+            const auto gear = gearOf(id);
+            auto attributes = character.GetAttributes();
+            attributes.strength += gear.attributes.strength;
+            attributes.dexterity += gear.attributes.dexterity;
+            attributes.constitution += gear.attributes.constitution;
+            attributes.intelligence += gear.attributes.intelligence;
+            attributes.wisdom += gear.attributes.wisdom;
+            attributes.charisma += gear.attributes.charisma;
+            return attributes;
+        }
         CharacterId nextId_{1};
 
         CharacterId generateNextId() {

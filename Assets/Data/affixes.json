@@ -9,5 +9,17 @@
   { "id": "affix_suffix_of_precision", "name": "of Precision", "type": "Suffix", "appliesTo": ["Weapon"], "attackBonus": 2 },
   { "id": "affix_suffix_of_the_turtle", "name": "of the Turtle", "type": "Suffix", "appliesTo": ["Armor"], "armor": 1, "armorClass": 1 },
   { "id": "affix_suffix_of_focus", "name": "of Focus", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "spellPower": 1, "manaRegen": 0.5 },
-  { "id": "affix_suffix_of_the_sage", "name": "of the Sage", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "manaRegen": 1.0 }
+  { "id": "affix_suffix_of_the_sage", "name": "of the Sage", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "manaRegen": 1.0 },
+  {"id": "affix_prefix_mighty", "name": "Mighty", "type": "Prefix", "appliesTo": ["Weapon", "Armor"], "strength": 1},
+  {"id": "affix_prefix_nimble", "name": "Nimble", "type": "Prefix", "appliesTo": ["Weapon", "Armor"], "dexterity": 1},
+  {"id": "affix_prefix_hale", "name": "Hale", "type": "Prefix", "appliesTo": ["Armor"], "hitPoints": 4},
+  {"id": "affix_suffix_of_the_owl", "name": "of the Owl", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "intelligence": 1},
+  {"id": "affix_suffix_of_the_hermit", "name": "of the Hermit", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "wisdom": 1},
+  {"id": "affix_suffix_of_vigor", "name": "of Vigor", "type": "Suffix", "appliesTo": ["Armor"], "hitPoints": 3, "mana": 2},
+  {"id": "affix_suffix_of_the_well", "name": "of the Well", "type": "Suffix", "appliesTo": ["Weapon", "Armor"], "mana": 4},
+  {"id": "affix_power_storms", "name": "of Storms", "type": "Power", "appliesTo": ["Weapon"], "power": "ChainLightning", "chance": 0.3, "powerDamage": 5, "description": "Hits may arc lightning to two foes nearby"},
+  {"id": "affix_power_leech", "name": "of the Leech", "type": "Power", "appliesTo": ["Weapon"], "power": "LifeSteal", "chance": 0.2, "description": "Heals you for a fifth of the damage dealt"},
+  {"id": "affix_power_winter", "name": "of Winter", "type": "Power", "appliesTo": ["Weapon"], "power": "Frostbite", "chance": 0.5, "description": "Hits may chill the foe, slowing it"},
+  {"id": "affix_power_embers", "name": "of Embers", "type": "Power", "appliesTo": ["Weapon"], "power": "Ignite", "chance": 0.35, "description": "Hits may set the foe on fire"},
+  {"id": "affix_power_thorns", "name": "of Thorns", "type": "Power", "appliesTo": ["Armor"], "power": "Thorns", "chance": 0.4, "powerDamage": 2, "description": "Foes striking you up close take part of the blow back"}
 ]

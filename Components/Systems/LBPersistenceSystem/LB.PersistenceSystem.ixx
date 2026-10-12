@@ -158,6 +158,17 @@ export namespace LB::Systems::Persistence {
         }
 
         /// <summary>
+        /// The player's profile: what carries over from one game to the next (records, unlocks),
+        /// as named values (profile.json); kept in memory without a save directory
+        /// </summary>
+        bool SaveProfile(const SaveData& profile);
+
+        [[nodiscard]] SaveData LoadProfile() const {
+            if (!initialized_) return SaveData{};
+            return profile_;
+        }
+
+        /// <summary>
         /// Get maximum number of save slots
         /// </summary>
         std::int32_t GetMaxSaveSlots() const {
@@ -185,6 +196,7 @@ export namespace LB::Systems::Persistence {
 
         std::filesystem::path GetSaveFilePath(std::int32_t slotIndex) const;
         std::filesystem::path GetPreferencesFilePath() const;
+        std::filesystem::path GetProfileFilePath() const;
 
         bool initialized_{false};
         std::filesystem::path saveDirectory_;
@@ -192,6 +204,7 @@ export namespace LB::Systems::Persistence {
         std::map<std::int32_t, SaveSlotInfo> saveSlots_;
         std::map<std::int32_t, SaveData> saveData_;   // in-memory payloads (memory-only mode)
         PlayerPreferences preferences_{};
+        SaveData profile_;
     };
 
 } // namespace LB::Systems::Persistence
