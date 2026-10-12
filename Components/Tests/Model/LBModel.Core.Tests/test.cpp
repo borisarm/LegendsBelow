@@ -346,3 +346,70 @@ TEST(EntityTests, SetName_UpdatesName) {
 
     EXPECT_EQ(entity.GetName(), "Updated");
 }
+// ============================================================================
+// EventBus Tests
+// ============================================================================
+
+namespace {
+    struct Hit { int damage{0}; };
+    struct Healed { int amount{0}; };
+}
+
+TEST(EventBusTests, Publish_WaitsForDispatch_ThenReachesItsTypesHandlers) {
+    EventBus bus;
+    std::vector<int> hits;
+    int heals = 0;
+    bus.Subscribe<Hit>([&](const Hit& hit) { hits.push_back(hit.damage); });
+    bus.Subscribe<Healed>([&](const Healed& healed) { heals += healed.amount; });
+
+    bus.Publish(Hit{ 3 });
+    bus.Publish(Healed{ 5 });
+    bus.Publish(Hit{ 7 });
+    EXPECT_TRUE(hits.empty());   // queued
+    EXPECT_EQ(bus.Pending(), 3u);
+
+    EXPECT_EQ(bus.Dispatch(), 3u);
+    EXPECT_EQ(hits, (std::vector<int>{ 3, 7 }));   // in publish order
+    EXPECT_EQ(heals, 5);
+    EXPECT_EQ(bus.Pending(), 0u);
+}
+
+TEST(EventBusTests, EveryHandler_InSubscriptionOrder) {
+    EventBus bus;
+    std::string order;
+    bus.Subscribe<Hit>([&](const Hit&) { order += "a"; });
+    bus.Subscribe<Hit>([&](const Hit&) { order += "b"; });
+    bus.Publish(Hit{});
+    bus.Dispatch();
+    EXPECT_EQ(order, "ab");
+}
+
+TEST(EventBusTests, EventsPublishedByHandlers_ArriveInTheSameDispatch) {
+    EventBus bus;
+    int heals = 0;
+    bus.Subscribe<Hit>([&](const Hit& hit) { bus.Publish(Healed{ hit.damage * 2 }); });
+    bus.Subscribe<Healed>([&](const Healed& healed) { heals += healed.amount; });
+
+    bus.Publish(Hit{ 4 });
+    EXPECT_EQ(bus.Dispatch(), 2u);
+    EXPECT_EQ(heals, 8);
+}
+
+TEST(EventBusTests, ACycle_StopsAtTheLimit) {
+    EventBus bus;
+    bus.Subscribe<Hit>([&](const Hit& hit) { bus.Publish(Hit{ hit.damage + 1 }); });
+    bus.Publish(Hit{});
+    EXPECT_EQ(bus.Dispatch(), EventBus::MaxDeliveries);
+    EXPECT_EQ(bus.Pending(), 0u);
+}
+
+TEST(EventBusTests, Clear_DropsWhatIsQueued) {
+    EventBus bus;
+    int hits = 0;
+    bus.Subscribe<Hit>([&](const Hit&) { ++hits; });
+    bus.Publish(Hit{});
+    bus.Clear();
+    bus.Publish(Healed{});   // no one listens: delivered to nobody
+    EXPECT_EQ(bus.Dispatch(), 1u);
+    EXPECT_EQ(hits, 0);
+}

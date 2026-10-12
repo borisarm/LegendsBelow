@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
-    EXPECT_EQ(content_.GetSpells().size(), 52u);   // 45, the rogue's four abilities, the warrior's three
+    EXPECT_EQ(content_.GetSpells().size(), 53u);   // 45, the rogue's four abilities, the warrior's three, the healing circle
     EXPECT_EQ(content_.GetWeapons().size(), 12u);
     EXPECT_EQ(content_.GetArmour().size(), 15u);
 }
@@ -158,7 +158,7 @@ TEST_F(ShippedContentTests, SpellRepository_OverShippedContent) {
     auto shared = std::make_shared<const ContentDatabase>(content_);
     LB::Repositories::SpellRepository repo = MakeContentSpellRepository(shared);
 
-    EXPECT_EQ(repo->GetAllSpellIds().size(), 52u);
+    EXPECT_EQ(repo->GetAllSpellIds().size(), 53u);
 
     const auto* bolt = content_.FindSpell("spell_evocation_arcane_bolt_l1");
     auto spell = repo->GetSpell(bolt->id);
@@ -311,7 +311,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 10u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes
+    EXPECT_EQ(result.errors.size(), 11u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }

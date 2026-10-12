@@ -79,6 +79,11 @@ namespace LB::Engine {
     bool GameEngine::StartRun() {
         audioSystem_.StopAll();
         session_ = std::make_unique<Session>();
+        SubscribeToEvents();
+        {
+            const auto& clips = assets_.playerClips;
+            session_->allies.SetClips(AllyClips{ clips.idle, clips.run, clips.slashTwoHanded, clips.bowDraw, clips.hit, clips.death });
+        }
         session_->dungeonMode = options_.dungeon;
         session_->baseSeed = options_.randomSeed ? *options_.randomSeed : std::random_device{}();
         session_->world = WorldMap::Arena(ArenaHalfWidth, ArenaHalfHeight);
@@ -216,6 +221,12 @@ namespace LB::Engine {
         }
         for (const auto file : HeldModels) {
             assets_.characterModels[std::string(file)] = load(file);
+        }
+        // The companions to hire: their bodies, weapons, and arrows
+        for (const auto& ally : content_->GetAllies()) {
+            for (const auto* file : { &ally.model, &ally.mainHandModel, &ally.projectileModel }) {
+                if (!file->empty() && !assets_.characterModels.contains(*file)) assets_.characterModels[*file] = load(*file);
+            }
         }
         // The tiers' floors and walls, props, and traps (KayKit Dungeon Pack 1.1)
         for (const auto file : FloorDecor::Models) {

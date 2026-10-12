@@ -21,6 +21,8 @@ export import :Particles;
 export import :Effects;
 export import :Walls;
 export import :Decor;
+export import :GameEvents;
+export import :Allies;
 export import :Torches;
 export import :Minimap;
 export import :CombatText;

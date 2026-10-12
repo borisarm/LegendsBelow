@@ -328,6 +328,37 @@ export namespace LB::Content {
     };
 
     /// <summary>
+    /// A companion who fights beside the hero (Assets/Data/allies.json): hired from the merchant,
+    /// growing with the hero's level (design-character-system.md 7, companions)
+    /// </summary>
+    struct AllyDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "ally_barbarian"
+        String name;
+        String description;
+        std::int32_t hitPoints{20};                   // at the hero's level 1
+        std::int32_t hitPointsPerLevel{4};            // more for each level of the hero's above 1
+        std::int32_t armorClass{12};
+        std::int32_t physicalArmor{0};
+        std::int32_t attackBonus{3};                  // and +1 for every two levels of the hero's above 1
+        LB::Dice damageDice{1, 8, 0};
+        std::int32_t damageBonus{0};                  // and +1 for every three levels of the hero's above 1
+        DamageType damageType{DamageType::Slashing};
+        float attackTimeSeconds{1.0f};                // the swing or the draw, its blow halfway
+        float attackRecoverySeconds{0.5f};
+        float attackRange{1.3f};                      // tiles between centers
+        float projectileSpeed{0.0f};                  // tiles per second: a shooter; 0: melee
+        String projectileModel;
+        float movementSpeed{3.2f};
+        std::int32_t price{60};                       // gold the merchant asks to hire them
+        String model;                                 // a KayKit Adventurers body (Rig_Medium)
+        String mainHandModel;
+        float modelScale{0.5f};
+
+        [[nodiscard]] bool IsRanged() const noexcept { return projectileSpeed > 0.0f; }
+    };
+
+    /// <summary>
     /// A consumable item (Assets/Data/consumables.json, design-loot-and-progression.md 2.1): used
     /// from the inventory or the quick-use button
     /// </summary>
@@ -444,7 +475,7 @@ export namespace LB::Content {
     public:
         /// <summary>
         /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json,
-        /// loot.json, statuses.json, rarities.json, and affixes.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// loot.json, statuses.json, rarities.json, affixes.json, and allies.json from a directory (UTF-8 path). On any error the database is left empty and
         /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
@@ -457,7 +488,8 @@ export namespace LB::Content {
         ContentLoadResult LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                        const String& classesJson = "[]", const String& enemiesJson = "[]",
                                        const String& consumablesJson = "[]", const String& lootJson = "[]",
-                                       const String& statusesJson = "[]", const String& raritiesJson = "[]", const String& affixesJson = "[]");
+                                       const String& statusesJson = "[]", const String& raritiesJson = "[]", const String& affixesJson = "[]",
+                                       const String& alliesJson = "[]");
 
         void Clear() {
             spells_.clear();
@@ -470,6 +502,7 @@ export namespace LB::Content {
             statuses_.clear();
             rarities_.clear();
             affixes_.clear();
+            allies_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
@@ -489,6 +522,8 @@ export namespace LB::Content {
         [[nodiscard]] const std::vector<AffixDefinition>& GetAffixes() const noexcept { return affixes_; }
         [[nodiscard]] const RarityDefinition* FindRarity(std::string_view key) const { return FindByKey(rarities_, key); }
         [[nodiscard]] const AffixDefinition* FindAffix(std::string_view key) const { return FindByKey(affixes_, key); }
+        [[nodiscard]] const std::vector<AllyDefinition>& GetAllies() const noexcept { return allies_; }
+        [[nodiscard]] const AllyDefinition* FindAlly(std::string_view key) const { return FindByKey(allies_, key); }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
         [[nodiscard]] const SpellDefinition* FindSpell(std::string_view key) const { return FindByKey(spells_, key); }
@@ -554,6 +589,7 @@ export namespace LB::Content {
         std::vector<StatusDefinition> statuses_;
         std::vector<RarityDefinition> rarities_;
         std::vector<AffixDefinition> affixes_;
+        std::vector<AllyDefinition> allies_;
     };
 
 } // namespace LB::Content

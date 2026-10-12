@@ -45,6 +45,13 @@ export namespace LB::Engine {
         };
 
         std::optional<Player> player;
+        // A companion's health (top left)
+        struct AllyBar {
+            std::string name;
+            float fraction{1.0f};
+            bool down{false};
+        };
+        std::vector<AllyBar> allies;
         std::vector<EnemyBar> enemyBars;
         std::string banner;                   // "WAVE 2", "DEPTH 3" (top center); empty: none
         std::vector<SpellSlot> spellBar;      // bottom right; empty: none
@@ -172,6 +179,14 @@ export namespace LB::Engine {
                 bar(x, y, width, 7, *hud.castFraction, display(0.70f, 0.55f, 1.0f));
                 const auto size = renderer.MeasureText(hud.castName, 1.6f);
                 label(hud.castName, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), y + 10, 1.6f, display(0.85f, 0.80f, 1.0f));
+            }
+
+            // Companions: a name and a health bar each (top left; grey while down)
+            for (std::size_t i = 0; i < hud.allies.size(); ++i) {
+                const auto& ally = hud.allies[i];
+                const auto y = 16 + static_cast<std::int32_t>(i) * 34;
+                label(ally.down ? ally.name + " - DOWN" : ally.name, 24, y, 1.6f, ally.down ? display(0.6f, 0.6f, 0.6f) : display(0.55f, 0.95f, 0.55f));
+                bar(24, y + 16, 140, 8, ally.down ? 0.0f : ally.fraction, display(0.25f, 0.75f, 0.30f));
             }
 
             if (hud.boss) {

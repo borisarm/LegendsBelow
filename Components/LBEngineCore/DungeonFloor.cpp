@@ -102,6 +102,7 @@ namespace LB::Engine {
             session_->characterService.PlaceCharacter(*session_->playerId, ToTile(session_->playerPosition));
             session_->camera.SnapTo({ session_->playerPosition.x, session_->playerPosition.y });
         }
+        session_->allies.PlaceAround(session_->world, session_->playerPosition, true);   // the companions come along (on their feet)
         // The tier's look; props in the rooms, traps in the corridors (the same for the same floor)
         session_->decor.Build(session_->world, depth, FloorSeed(session_->baseSeed, depth) ^ 0x5EEDu, session_->restFloor);
         if (assets_.models.loaded) {
@@ -209,6 +210,7 @@ namespace LB::Engine {
         // The shrine restores health and mana and lifts every status, once a floor
         if (session_->shrine && !session_->shrineUsed && Encounter::Distance(*session_->shrine, session_->playerPosition) <= InteractRadius) {
             session_->shrineUsed = true;
+            session_->allies.RestoreAll();
             session_->characterService.RestCharacter(*session_->playerId);
             session_->playerStatuses.Clear();
             session_->combatText.Add("BLESSED", { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.95f, 0.85f, 0.45f, 1.0f }, 3.0f);
@@ -332,6 +334,10 @@ namespace LB::Engine {
         for (const auto& consumable : content_->GetConsumables()) {
             if (consumable.IsAmmunition()) add(ItemRef{ ItemKind::Consumable, consumable.id }, MerchantArrowBundle, true);
         }
+        // Companions to hire (one at a time: AllyParty::MaxAllies)
+        for (const auto& ally : content_->GetAllies()) {
+            session_->stock.push_back(StockEntry{ ItemRef{}, 1, ally.price, false, &ally });
+        }
         if (const auto* table = content_->FindLootTable(MerchantStockTable)) {
             for (std::int32_t i = 0; i < MerchantGearCount; ++i) {
                 for (const auto& drop : session_->lootRoller.Roll(*table, *content_)) {
@@ -356,6 +362,12 @@ namespace LB::Engine {
         if (!NearMerchant() || index >= session_->stock.size()) return false;
         const auto entry = session_->stock[index];
         if (session_->gold < entry.price) return false;
+        if (entry.ally) {
+            if (!HireAlly(entry.ally->key)) return false;   // the party is full
+            session_->gold -= entry.price;
+            session_->stock.erase(session_->stock.begin() + static_cast<std::ptrdiff_t>(index));
+            return true;
+        }
         if (GiveItemRef(entry.item, entry.quantity) < entry.quantity) return false;   // the bag is full
         session_->gold -= entry.price;
         if (!entry.unlimited) session_->stock.erase(session_->stock.begin() + static_cast<std::ptrdiff_t>(index));
@@ -377,6 +389,16 @@ namespace LB::Engine {
         heading(std::format("Buy - you have {} gold", session_->gold));
         for (std::size_t i = 0; i < session_->stock.size(); ++i) {
             const auto& entry = session_->stock[i];
+            if (entry.ally) {
+                const bool full = session_->allies.Allies().size() >= AllyParty::MaxAllies;
+                ScreenRow row{ std::format("Hire: {}", entry.ally->name), full ? std::string("party full") : std::format("{} gold", entry.price) };
+                row.action = ScreenAction::Buy;
+                row.index = i;
+                row.color = Systems::Rendering::Color{ 0.55f, 0.95f, 0.55f, 1.0f };
+                row.enabled = !full && session_->gold >= entry.price;
+                rows.push_back(std::move(row));
+                continue;
+            }
             ScreenRow row{ entry.quantity > 1 ? std::format("{} x{}", ItemName(entry.item), entry.quantity) : ItemName(entry.item), std::format("{} gold", entry.price) };
             row.action = ScreenAction::Buy;
             row.index = i;
@@ -453,12 +475,15 @@ namespace LB::Engine {
     // The floor's props, and its traps: a grate over the cell, the spikes rising through it
     void GameEngine::DrawDecor(const Systems::Rendering::Color& tint) {
         if (!assets_.models.loaded || !session_->dungeonMode) return;
+        const auto view = GetViewArea();
         for (const auto& prop : session_->decor.Props()) {
+            if (!view.Contains(prop.position, 2.0f)) continue;
             const auto model = ModelOf(prop.model);
             if (model == Systems::Rendering::InvalidModelId) continue;
             renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ model, { prop.position.x, 0.0f, prop.position.y }, prop.yaw, ModelScale, tint });
         }
         for (const auto& trap : session_->decor.Traps()) {
+            if (!view.Contains(trap.center, WorldMap::CellTiles)) continue;
             const float raise = FloorDecor::Raise(trap, session_->gameTimeSeconds);
             renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(FloorDecor::GrateModel), { trap.center.x, -0.03f, trap.center.y }, 0.0f, ModelScale, tint });
             // The spikes stand a tile tall: sunk below the floor, they come up through the grate

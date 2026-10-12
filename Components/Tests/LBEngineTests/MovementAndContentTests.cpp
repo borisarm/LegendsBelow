@@ -252,7 +252,7 @@ TEST(GameEngineContentTests, ShippedContent_Loads) {
 
     ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = *dir })) << engine.GetInitializationError();
 
-    EXPECT_EQ(engine.GetContent()->GetSpells().size(), 52u);   // 45, the rogue's four abilities, the warrior's three
+    EXPECT_EQ(engine.GetContent()->GetSpells().size(), 53u);   // 45, the rogue's four abilities, the warrior's three, the healing circle
     EXPECT_EQ(engine.GetContent()->GetWeapons().size(), 12u);
     EXPECT_EQ(engine.GetContent()->GetArmour().size(), 15u);
     EXPECT_NE(engine.GetContent()->FindWeapon("weapon_sword_rusted_shortsword_t1"), nullptr);
@@ -271,6 +271,7 @@ TEST(GameEngineContentTests, InvalidContent_FailsWithAllErrors) {
     std::ofstream(dir.path / "statuses.json") << "[]";
     std::ofstream(dir.path / "rarities.json") << "[]";
     std::ofstream(dir.path / "affixes.json") << "[]";
+    std::ofstream(dir.path / "allies.json") << "[]";
     GameEngine engine;
 
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() }));
@@ -315,7 +316,7 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
     TempSaveDir dir;
     std::filesystem::create_directories(dir.path);
     const std::filesystem::path source(std::u8string(shipped->begin(), shipped->end()));
-    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json", "rarities.json", "affixes.json" }) {
+    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json", "rarities.json", "affixes.json", "allies.json" }) {
         std::filesystem::copy_file(source / file, dir.path / file);
     }
 

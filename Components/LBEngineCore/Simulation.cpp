@@ -85,6 +85,9 @@ namespace LB::Engine {
         session_->walls.UpdateFade(session_->camera.GetView().eye,
             session_->playerId ? std::optional{ session_->playerPosition } : std::nullopt, static_cast<float>(elapsedSeconds));
 
+        // What happened this step (or on a screen: a path chosen) reaches those who react to it
+        session_->events.Dispatch();
+
         // Fire keeps burning during the pause and on the character screen: it is only a look
         UpdateEffects(static_cast<float>(elapsedSeconds), running);
         UpdateSounds(static_cast<float>(elapsedSeconds), running);
@@ -265,10 +268,34 @@ namespace LB::Engine {
         else if (order.kind != OrderKind::Move) {
             return std::nullopt;
         }
-        const float dx = goal.x - session_->playerPosition.x;
-        const float dy = goal.y - session_->playerPosition.y;
+        const auto at = session_->playerPosition;
+        if (Distance(at, goal) <= ArriveTiles) return std::nullopt;
+
+        // In sight: straight there. Otherwise along a path around the walls (found again when the
+        // goal moves to another cell), heading for the farthest of its next points in sight
+        WorldPoint heading = goal;
+        auto& route = session_->route;
+        if (!session_->world.LineOfSight(at, goal)) {
+            const auto goalCell = session_->world.CellOf(goal);
+            if (route.goalCell != goalCell || route.next >= route.points.size()) {
+                route = { session_->world.FindPath(at, goal), 0, goalCell };
+            }
+            while (route.next + 1 < route.points.size() && Distance(at, route.points[route.next]) < 0.5f) ++route.next;
+            for (std::size_t ahead = std::min(route.points.size(), route.next + 4); ahead-- > route.next;) {
+                if (session_->world.LineOfSight(at, route.points[ahead])) {
+                    route.next = ahead;
+                    break;
+                }
+            }
+            if (route.next < route.points.size()) heading = route.points[route.next];
+        }
+        else {
+            route = {};
+        }
+        const float dx = heading.x - at.x;
+        const float dy = heading.y - at.y;
         const float length = std::hypot(dx, dy);
-        if (length <= ArriveTiles) return std::nullopt;
+        if (length <= 1e-4f) return std::nullopt;
         return WorldPoint{ dx / length, dy / length };
     }
 
@@ -452,7 +479,7 @@ namespace LB::Engine {
 
         if (spell.IsHeal()) {
             // design-spells-system.md 5.2: base + coefficient x the caster's power; a cure lifts hindrances
-            HealPlayer(heal);
+            HealParty(spell, heal);
             session_->playerStatuses.RemoveHindrances(spell.cleansesStatuses);
         }
         else if (spell.IsDash()) {
@@ -680,13 +707,18 @@ namespace LB::Engine {
             UpdateFloorInteractions();
         }
         const auto wave = session_->encounter.GetWave();
-        for (const auto& event : session_->encounter.Update(elapsedSeconds, target)) {
+        const auto allies = session_->allies.Targets();
+        for (const auto& event : session_->encounter.Update(elapsedSeconds, target, allies)) {
             session_->combatEvents.push_back(event);
-            // The player's arrows and bolts arrive during the enemies' step
+            // The player's (and allies') arrows and bolts arrive during the enemies' step
             if (event.kind == CombatEventKind::PlayerAttack) {
                 if (event.killed) {
                     if (const auto* enemy = session_->encounter.FindEnemy(event.enemyId)) OnEnemyKilled(*enemy);
                 }
+                continue;
+            }
+            if (event.ally != 0) {   // an ally took it
+                if (event.result.hit && event.result.finalDamage > 0) session_->allies.Damage(event.ally, event.result.finalDamage);
                 continue;
             }
             if (event.result.hit && session_->evadeSeconds > 0.0f && IsPlayerAlive()) {
@@ -712,6 +744,8 @@ namespace LB::Engine {
             }
         }
 
+        UpdateAllies(elapsedSeconds);
+
         if (session_->encounter.GetWave() != wave) {
             session_->characterService.RestCharacter(*session_->playerId);
         }
@@ -731,6 +765,11 @@ namespace LB::Engine {
                 const auto* enemy = session_->encounter.FindEnemy(event.enemyId);
                 if (!enemy) continue;
                 at = { enemy->position.x, EnemyTop(*enemy), enemy->position.y };
+            }
+            else if (event.ally != 0) {
+                const auto* ally = session_->allies.Find(event.ally);
+                if (!ally) continue;
+                at = { ally->position.x, PlayerTop(), ally->position.y };
             }
             session_->combatText.AddAttack(event, at);
             if (event.kind == CombatEventKind::PlayerAttack && event.result.hit && event.result.extraDamage > 0) {
@@ -761,6 +800,7 @@ namespace LB::Engine {
         session_->playerStatuses.Clear();
         session_->groundItems.clear();
         StartEncounter();
+        session_->allies.PlaceAround(session_->world, session_->playerPosition, true);   // up again beside the hero
     }
 
     /// <summary>
@@ -856,6 +896,63 @@ namespace LB::Engine {
         if (!session_->characterService.MoveCharacter(*session_->playerId, tile)) {
             session_->characterService.PlaceCharacter(*session_->playerId, tile);
         }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Allies (design-character-system.md 7): they fight beside the hero; their blows are the hero's side's
+    // ------------------------------------------------------------------------------------------
+
+    void GameEngine::UpdateAllies(float elapsedSeconds) {
+        for (const auto& event : session_->allies.Update(elapsedSeconds, session_->world, session_->encounter, session_->playerPosition, IsPlayerAlive())) {
+            session_->combatEvents.push_back(event);
+            if (event.killed) {
+                if (const auto* enemy = session_->encounter.FindEnemy(event.enemyId)) OnEnemyKilled(*enemy);
+            }
+        }
+    }
+
+    std::optional<std::uint32_t> GameEngine::HireAlly(std::string_view key) {
+        const auto* definition = content_->FindAlly(key);
+        const auto* player = PlayerCharacter();
+        if (!definition || !player) return std::nullopt;
+        const auto id = session_->allies.Add(*definition, session_->playerPosition, player->GetLevel());
+        if (!id) return std::nullopt;
+        session_->allies.PlaceAround(session_->world, session_->playerPosition, false);
+        session_->combatText.Add(std::format("{} JOINS YOU", definition->name), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y },
+                                 { 0.55f, 0.95f, 0.55f, 1.0f }, 3.0f);
+        return id;
+    }
+
+    // A healing circle mends everyone around the caster; a single heal goes to whoever in its reach
+    // is worst off, by the share of health left (the caster on a tie)
+    void GameEngine::HealParty(const Content::SpellDefinition& spell, std::int32_t amount) {
+        const auto healAlly = [&](const Ally& ally) {
+            const auto at = ally.position;
+            const auto healed = session_->allies.Heal(ally.id, amount);
+            session_->combatText.Add(std::format("+{}", healed), { at.x, PlayerTop(), at.y }, { 0.45f, 0.95f, 0.45f, 1.0f }, 3.0f);
+            session_->effects.Emit(ParticleEffect::Healing, { at.x, 0.1f, at.y }, 34);
+        };
+        if (spell.radius > 0.0f) {
+            HealPlayer(amount);
+            for (const auto& ally : session_->allies.Allies()) {
+                if (!ally.IsDown() && Distance(ally.position, session_->playerPosition) <= spell.radius) healAlly(ally);
+            }
+            return;
+        }
+        const auto* player = PlayerCharacter();
+        const float reach = spell.range > 0.0f ? spell.range : 8.0f;
+        const Ally* worst = nullptr;
+        float worstShare = static_cast<float>(player->GetCurrentHitPoints()) / static_cast<float>(std::max(1, player->GetMaxHitPoints()));
+        for (const auto& ally : session_->allies.Allies()) {
+            if (ally.IsDown() || Distance(ally.position, session_->playerPosition) > reach) continue;
+            const float share = static_cast<float>(ally.hitPoints) / static_cast<float>(std::max(1, ally.maxHitPoints));
+            if (share < worstShare) {
+                worstShare = share;
+                worst = &ally;
+            }
+        }
+        if (worst) healAlly(*worst);
+        else HealPlayer(amount);
     }
 
 } // namespace LB::Engine

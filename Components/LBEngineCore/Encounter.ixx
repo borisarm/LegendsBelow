@@ -150,7 +150,7 @@ export namespace LB::Engine {
         /// bodies are pushed apart, corpses cleared, and the next wave starts once one is cleared.
         /// Returns the enemy attacks resolved this step (the engine applies their damage).
         /// </summary>
-        std::vector<CombatEvent> Update(float elapsedSeconds, const PlayerTarget& player) {
+        std::vector<CombatEvent> Update(float elapsedSeconds, const PlayerTarget& player, std::span<const PlayerTarget> allies = {}) {
             std::vector<CombatEvent> events;
             shots_.clear();
             wallHits_.clear();
@@ -162,24 +162,29 @@ export namespace LB::Engine {
             for (auto& enemy : enemies_) {
                 UpdateStatuses(enemy, elapsedSeconds, events);
                 const auto formation = formations.find(enemy.group);
-                switch (behavior_.Update(enemy, elapsedSeconds, player, formation != formations.end() ? formation->second : Formation{})) {
+                const auto& target = TargetOf(enemy, player, allies);
+                switch (behavior_.Update(enemy, elapsedSeconds, target, formation != formations.end() ? formation->second : Formation{})) {
                 case EnemyAction::Strike:
-                    events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), player.defense), false });
+                    events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), target.defense), false, nullptr, target.ally });
                     break;
                 case EnemyAction::Shoot:
-                    if (enemy.definition->IsCaster()) CastAtPlayer(enemy, player.position);
-                    else ShootAtPlayer(enemy, player.position);
+                    if (enemy.definition->IsCaster()) CastAtPlayer(enemy, target.position);
+                    else ShootAtPlayer(enemy, target.position);
                     break;
                 case EnemyAction::Slam: {
                     // Everyone inside the ring is struck (through armour, like a spell)
                     const auto& type = *enemy.definition;
                     bursts_.push_back({ enemy.slamCenter, type.slamRadius, type.slamDamageType });
-                    if (player.alive && Distance(player.position, enemy.slamCenter) <= type.slamRadius + player.radius) {
+                    const auto strike = [&](const PlayerTarget& body) {
+                        if (!body.alive || Distance(body.position, enemy.slamCenter) > type.slamRadius + body.radius) return;
                         auto dice = type.slamDamage;
                         dice.bonus += enemy.bonusDamage;
                         const auto damage = combat_.RollDice(dice);
-                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, Services::Combat::CombatService::ResolveSpellHit(damage, type.slamDamageType, player.defense), false });
-                    }
+                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, Services::Combat::CombatService::ResolveSpellHit(damage, type.slamDamageType, body.defense),
+                                           false, nullptr, body.ally });
+                    };
+                    strike(player);
+                    for (const auto& ally : allies) strike(ally);
                     break;
                 }
                 case EnemyAction::None:
@@ -187,9 +192,9 @@ export namespace LB::Engine {
                 }
             }
             for (int pass = 0; pass < EnemyBehavior::SeparationPasses; ++pass) {
-                behavior_.Separate(enemies_, player);
+                behavior_.Separate(enemies_, player, allies);
             }
-            UpdateProjectiles(elapsedSeconds, player, events);
+            UpdateProjectiles(elapsedSeconds, player, allies, events);
             UpdateSummoners(elapsedSeconds, player);
 
             std::erase_if(enemies_, [](const Enemy& e) { return e.IsDead() && e.stateSeconds >= CorpseSeconds; });
@@ -403,9 +408,12 @@ export namespace LB::Engine {
 
         // Move the projectiles; resolve those that reached a body (the player, or an enemy for the
         // player's shots) and note those that struck walls
-        void UpdateProjectiles(float elapsedSeconds, const PlayerTarget& player, std::vector<CombatEvent>& events) {
+        void UpdateProjectiles(float elapsedSeconds, const PlayerTarget& player, std::span<const PlayerTarget> allies, std::vector<CombatEvent>& events) {
             std::vector<ProjectileTarget> targets;
             if (player.alive) targets.push_back({ 0, ProjectileSide::Player, player.position, player.radius });
+            for (const auto& ally : allies) {
+                if (ally.alive) targets.push_back({ ally.ally, ProjectileSide::Player, ally.position, ally.radius });
+            }
             for (const auto& enemy : enemies_) {
                 if (enemy.IsTargetable()) targets.push_back({ enemy.id, ProjectileSide::Enemies, enemy.position, CharacterRadius });
             }
@@ -414,13 +422,17 @@ export namespace LB::Engine {
                     wallHits_.push_back(impact.at);
                 }
                 else if (impact.projectile.side == ProjectileSide::Enemies) {
+                    // The player (id 0) or the ally it reached
+                    const auto ally = std::ranges::find(allies, *impact.target, &PlayerTarget::ally);
+                    const auto& body = *impact.target != 0 && ally != allies.end() ? *ally : player;
                     if (impact.projectile.spell) {
                         const auto& payload = *impact.projectile.spell;
                         events.push_back({ CombatEventKind::EnemyAttack, impact.projectile.shooter,
-                            Services::Combat::CombatService::ResolveSpellHit(payload.rawDamage, payload.spell->damageType, player.defense), false, payload.spell });
+                            Services::Combat::CombatService::ResolveSpellHit(payload.rawDamage, payload.spell->damageType, body.defense), false, payload.spell, body.ally });
                     }
                     else {
-                        events.push_back({ CombatEventKind::EnemyAttack, impact.projectile.shooter, combat_.ResolveWeaponAttack(impact.projectile.attack, player.defense), false });
+                        events.push_back({ CombatEventKind::EnemyAttack, impact.projectile.shooter, combat_.ResolveWeaponAttack(impact.projectile.attack, body.defense),
+                                           false, nullptr, body.ally });
                     }
                 }
                 else if (auto* enemy = Find(*impact.target)) {
@@ -468,6 +480,21 @@ export namespace LB::Engine {
             shot.spell = SpellPayload{ spell, SpellDamage(*spell, enemy.definition->spellPower) };
             projectiles_.Launch(std::move(shot));
             shots_.push_back(enemy.position);
+        }
+
+        // Whom an enemy goes after: the nearest of the player and their allies still standing
+        static const PlayerTarget& TargetOf(const Enemy& enemy, const PlayerTarget& player, std::span<const PlayerTarget> allies) {
+            const PlayerTarget* best = &player;
+            float bestDistance = player.alive ? Distance(enemy.position, player.position) : std::numeric_limits<float>::infinity();
+            for (const auto& ally : allies) {
+                if (!ally.alive) continue;
+                const float distance = Distance(enemy.position, ally.position);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = &ally;
+                }
+            }
+            return *best;
         }
 
         // Each group's formation: its nearest tank and nearest melee fighter closing in on the player

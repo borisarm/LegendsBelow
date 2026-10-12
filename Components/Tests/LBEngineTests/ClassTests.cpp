@@ -129,9 +129,11 @@ TEST(ClericTests, DivineLight_HealsTheCaster) {
     EXPECT_TRUE(std::ranges::any_of(engine.GetFloatingTexts(), [](const auto& t) { return t.text.starts_with("+"); }));
 }
 
-TEST(ClericTests, MinorCure_LiftsAHindrance) {
+TEST(ClericTests, HealingCircle_LiftsAHindrance) {
     GameEngine engine;
     InitializeAs(engine, LB::Character::CharacterClass::Cleric);
+    engine.GrantExperience(400);   // level 3: the circle opens
+    engine.Tick(OneSixtieth);
     engine.SpawnEnemy(GameEngine::CasterEnemy, { 6.0f, 0.0f });
     for (int i = 0; i < 60 * 6 && !engine.GetPlayerStatuses().Has("status_slow_basic"); ++i) engine.Tick(OneSixtieth);
     ASSERT_TRUE(engine.GetPlayerStatuses().Has("status_slow_basic"));

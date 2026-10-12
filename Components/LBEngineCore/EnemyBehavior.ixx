@@ -266,7 +266,7 @@ export namespace LB::Engine {
         /// <summary>
         /// Push overlapping enemies apart, and out of the player (the player is never pushed)
         /// </summary>
-        void Separate(std::vector<Enemy>& enemies, const PlayerTarget& player) const {
+        void Separate(std::vector<Enemy>& enemies, const PlayerTarget& player, std::span<const PlayerTarget> allies = {}) const {
             constexpr float minimum = CharacterRadius * 2.0f;
             for (std::size_t i = 0; i < enemies.size(); ++i) {
                 auto& a = enemies[i];
@@ -286,16 +286,20 @@ export namespace LB::Engine {
                     b.position = MoveBody(b.position, { nx * push, ny * push });
                 }
 
-                if (player.alive) {
-                    const float dx = a.position.x - player.position.x;
-                    const float dy = a.position.y - player.position.y;
+                // Out of the player and their allies (who are not pushed)
+                const auto pushOut = [&](const PlayerTarget& body) {
+                    if (!body.alive) return;
+                    const float dx = a.position.x - body.position.x;
+                    const float dy = a.position.y - body.position.y;
                     const float distance = std::hypot(dx, dy);
                     if (distance < minimum) {
                         const float nx = distance > 1e-4f ? dx / distance : 1.0f;
                         const float ny = distance > 1e-4f ? dy / distance : 0.0f;
-                        a.position = MoveBody(a.position, { player.position.x + nx * minimum - a.position.x, player.position.y + ny * minimum - a.position.y });
+                        a.position = MoveBody(a.position, { body.position.x + nx * minimum - a.position.x, body.position.y + ny * minimum - a.position.y });
                     }
-                }
+                };
+                pushOut(player);
+                for (const auto& ally : allies) pushOut(ally);
             }
         }
 

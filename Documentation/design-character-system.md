@@ -488,3 +488,24 @@ else:
 ```
 
 Equipment, perks, and buffs can modify DC or provide bonuses to specific categories (e.g., +3 vs. Poison).
+
+---
+
+## 7. Companions
+
+The hero may lead one companion (game-design.md looks to a full party in later expansions). Companions are data (`allies.json`):
+
+| Field | Meaning |
+|-------|---------|
+| hitPoints, hitPointsPerLevel | Health at the hero's level 1, and per level above it |
+| armorClass, physicalArmor | Defense as for enemies (section 4, design-combat-system.md 4.1) |
+| attackBonus, damageDice, damageBonus, damageType | The attack; +1 to hit every two hero levels above 1, +1 damage every three |
+| attackRange, projectileSpeed | Melee reach, or a shooter's range and arrow speed |
+| price | Gold to hire them from the merchant |
+
+- **Growth**: companions level with the hero; hit points gained on a level are healed.
+- **Behavior**: they keep near the hero, go after enemies awake within 7 tiles of the hero, and rejoin the hero when left far behind.
+- **Threat**: enemies attack the nearest member of the party.
+- **Going down**: at 0 hit points a companion is out of the fight; once no enemy has been awake near them for 3 seconds they get up at half health. A shrine restores them fully; they are up again on a new floor.
+- **Healing**: single-target heals go to whoever in reach has the lowest share of health (the caster on a tie); circles heal everyone within their radius.
+

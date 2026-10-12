@@ -847,5 +847,24 @@
       "status_blinded_basic"
     ],
     "notes": "Enemies around stagger blind: every blow on them is a sneak attack"
+  },
+  {
+    "id": "spell_holy_healing_circle_l2",
+    "name": "Healing Circle",
+    "school": "Holy",
+    "level": 2,
+    "categories": [
+      "Heal"
+    ],
+    "requiredClass": "Cleric",
+    "requiredLevel": 3,
+    "manaCost": 14,
+    "castTimeSeconds": 1.0,
+    "cooldownSeconds": 12.0,
+    "radius": 4.0,
+    "baseHeal": 10,
+    "powerCoefficient": 0.6,
+    "cleansesStatuses": 2,
+    "notes": "Heals everyone around the cleric and lifts their hindrances"
   }
 ]

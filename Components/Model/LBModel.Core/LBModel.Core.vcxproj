@@ -23,6 +23,7 @@
     <ClCompile Include="LB.Core.ixx" />
     <ClCompile Include="ValueObjects.ixx" />
     <ClCompile Include="Entity.ixx" />
+    <ClCompile Include="Events.ixx" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

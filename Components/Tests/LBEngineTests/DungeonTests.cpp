@@ -135,9 +135,32 @@ TEST(GameEngineDungeonTests, Walls_FollowTheFloor) {
         }
     }
     engine.Tick(OneSixtieth);
-    EXPECT_EQ(DrawsOf(engine, "wall").size(), edges);
+    const auto& rendering = engine.GetRendering();
+    const auto view = engine.GetViewArea();
+    std::size_t segments = 0, inView = 0;
+    for (const auto& piece : engine.GetWalls().Pieces()) {
+        if (rendering.GetModel(piece.model)->name != "wall") continue;
+        ++segments;
+        if (view.Contains({ piece.position.x, piece.position.z }, 2.0f)) ++inView;
+    }
+    EXPECT_EQ(segments, edges);
+    EXPECT_EQ(DrawsOf(engine, "wall").size(), inView);   // those the camera can see are drawn
     EXPECT_GT(DrawsOf(engine, "pillar").size(), 4u);
     EXPECT_EQ(DrawsOf(engine, "trapdoor").size(), 1u);
+}
+
+TEST(GameEngineDungeonTests, Culling_DrawsOnlyWhatTheCameraCanSee) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{
+        .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory(), .randomSeed = CombatSeed, .dungeon = true }))
+        << engine.GetInitializationError();
+    engine.Tick(OneSixtieth);
+
+    const auto view = engine.GetViewArea();
+    EXPECT_LT(DrawsOf(engine, "wall").size() + DrawsOf(engine, "pillar").size(), engine.GetWalls().Pieces().size());   // the far walls are left out
+    for (const auto* name : { "wall", "tileBrickB_small", "tileBrickA_small" }) {
+        for (const auto& draw : DrawsOf(engine, name)) EXPECT_TRUE(view.Contains({ draw.position.x, draw.position.z }, 3.0f)) << name;
+    }
 }
 
 TEST(GameEngineDungeonTests, Descend_NextFloorHealedAtTheEntrance) {
@@ -267,7 +290,10 @@ TEST(GameEngineTorchTests, EachTorch_LightsTheFrameAndFlickers) {
     RunSteps(engine, 7);
     const auto later = engine.GetRendering().GetQueuedLights();
 
-    ASSERT_EQ(first.size(), engine.GetTorches().size());
+    const auto view = engine.GetViewArea();
+    const auto lit = std::ranges::count_if(engine.GetTorches(), [&](const auto& torch) { return view.Contains(torch.position, GameEngine::TorchLightRadius); });
+    ASSERT_GT(lit, 0);
+    ASSERT_EQ(first.size(), static_cast<std::size_t>(lit));   // the torches whose light can reach the view
     EXPECT_FLOAT_EQ(first[0].radius, GameEngine::TorchLightRadius);
     EXPECT_GT(first[0].position.y, 1.0f);   // up at the flame
     EXPECT_NE(first[0].intensity, later[0].intensity);
@@ -296,7 +322,9 @@ TEST(GameEngineTorchTests, Torches_DrawnWithModelsOnTheirWalls) {
 
     engine.Tick(OneSixtieth);
 
-    EXPECT_EQ(DrawsOf(engine, "torchWall").size(), engine.GetTorches().size());
+    const auto view = engine.GetViewArea();
+    const auto near = std::ranges::count_if(engine.GetTorches(), [&](const auto& torch) { return view.Contains(torch.position, GameEngine::TorchLightRadius); });
+    EXPECT_EQ(DrawsOf(engine, "torchWall").size(), static_cast<std::size_t>(near));
     for (const auto& torch : engine.GetTorches()) EXPECT_TRUE(torch.wall.has_value());
 }
 

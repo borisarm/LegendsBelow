@@ -649,6 +649,39 @@ namespace LB::Content {
             return enemy;
         }
 
+        AllyDefinition ReadAlly(EntryReader& reader) {
+            AllyDefinition ally{};
+            reader.ReadString("id", ally.key, true);
+            reader.ReadString("name", ally.name, true);
+            reader.ReadString("description", ally.description, false);
+            reader.ReadInt("hitPoints", ally.hitPoints, true);
+            reader.ReadInt("hitPointsPerLevel", ally.hitPointsPerLevel, false);
+            reader.ReadInt("armorClass", ally.armorClass, true);
+            reader.ReadInt("physicalArmor", ally.physicalArmor, false);
+            reader.ReadInt("attackBonus", ally.attackBonus, true);
+            reader.ReadDice("damageDice", ally.damageDice, true);
+            reader.ReadInt("damageBonus", ally.damageBonus, false);
+            reader.ReadEnum("damageType", ally.damageType, DamageTypes, true);
+            reader.ReadFloat("attackTimeSeconds", ally.attackTimeSeconds, true);
+            reader.ReadFloat("attackRecoverySeconds", ally.attackRecoverySeconds, false);
+            reader.ReadFloat("attackRange", ally.attackRange, true);
+            reader.ReadFloat("projectileSpeed", ally.projectileSpeed, false);
+            reader.ReadString("projectileModel", ally.projectileModel, false);
+            reader.ReadFloat("movementSpeed", ally.movementSpeed, true);
+            reader.ReadInt("price", ally.price, true);
+            reader.ReadString("model", ally.model, true);
+            reader.ReadString("mainHandModel", ally.mainHandModel, false);
+            reader.ReadFloat("modelScale", ally.modelScale, false);
+            if (ally.hitPoints <= 0) reader.Error("'hitPoints' must be positive");
+            if (ally.attackTimeSeconds <= 0.0f) reader.Error("'attackTimeSeconds' must be positive");
+            if (ally.attackRange <= 0.0f) reader.Error("'attackRange' must be positive");
+            if (ally.movementSpeed <= 0.0f) reader.Error("'movementSpeed' must be positive");
+            if (ally.price < 0) reader.Error("'price' must not be negative");
+            if (ally.projectileSpeed < 0.0f) reader.Error("'projectileSpeed' must not be negative");
+            if (ally.projectileSpeed > 0.0f && ally.projectileModel.empty()) reader.Error("a shooter ('projectileSpeed') needs a 'projectileModel'");
+            return ally;
+        }
+
         RarityDefinition ReadRarity(EntryReader& reader) {
             RarityDefinition rarity{};
             reader.ReadString("id", rarity.key, true);
@@ -922,10 +955,10 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[10];
-        constexpr const char* files[10] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
-                                            "statuses.json", "rarities.json", "affixes.json" };
-        for (int i = 0; i < 10; ++i) {
+        String texts[11];
+        constexpr const char* files[11] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
+                                            "statuses.json", "rarities.json", "affixes.json", "allies.json" };
+        for (int i = 0; i < 11; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -934,13 +967,13 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                                     const String& classesJson, const String& enemiesJson,
                                                     const String& consumablesJson, const String& lootJson, const String& statusesJson,
-                                                    const String& raritiesJson, const String& affixesJson) {
+                                                    const String& raritiesJson, const String& affixesJson, const String& alliesJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -953,6 +986,7 @@ namespace LB::Content {
         auto statuses = ReadArray<StatusDefinition>(statusesJson, "statuses.json", ReadStatus, result.errors);
         auto rarities = ReadArray<RarityDefinition>(raritiesJson, "rarities.json", ReadRarity, result.errors);
         auto affixes = ReadArray<AffixDefinition>(affixesJson, "affixes.json", ReadAffix, result.errors);
+        auto allies = ReadArray<AllyDefinition>(alliesJson, "allies.json", ReadAlly, result.errors);
         if (!rarities.empty() && std::ranges::none_of(rarities, [](const RarityDefinition& r) { return r.weight > 0.0f; })) {
             result.errors.push_back("rarities.json: at least one rarity needs a positive 'weight'");
         }
@@ -982,6 +1016,7 @@ namespace LB::Content {
         statuses_ = std::move(statuses);
         rarities_ = std::move(rarities);
         affixes_ = std::move(affixes);
+        allies_ = std::move(allies);
         return result;
     }
 

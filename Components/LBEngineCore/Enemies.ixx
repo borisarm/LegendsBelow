@@ -108,16 +108,18 @@ export namespace LB::Engine {
         Services::Combat::WeaponAttackResult result{};
         bool killed{false};
         const Content::SpellDefinition* spell{nullptr};   // a spell's hit (its statuses go to the target); null: an attack
+        std::uint32_t ally{0};              // an enemy attack's target when it was an ally (0: the player)
     };
 
     /// <summary>
-    /// The player as enemies see it during a step
+    /// The player (or one of their allies) as enemies see them during a step
     /// </summary>
     struct PlayerTarget {
         WorldPoint position{};
         bool alive{true};
         Services::Combat::DefenseProfile defense{};
         float radius{0.375f};               // the body projectiles hit (tiles)
+        std::uint32_t ally{0};              // an ally's id (0: the player)
     };
 
     /// <summary>

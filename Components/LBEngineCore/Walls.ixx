@@ -45,7 +45,7 @@ export namespace LB::Engine {
         /// </summary>
         void UpdateFade(Systems::Rendering::Vector3 eye, std::optional<WorldPoint> player, float elapsedSeconds);
 
-        void Draw(Systems::Rendering::RenderingSystem& renderer, Systems::Rendering::Color tint, float modelScale) const;
+        void Draw(Systems::Rendering::RenderingSystem& renderer, Systems::Rendering::Color tint, float modelScale, const ViewArea& view = {}) const;
 
         /// <summary>
         /// The wall segment (not a corner) closest to a ground point within a distance
@@ -184,8 +184,9 @@ export namespace LB::Engine {
         }
     }
 
-    inline void WallSet::Draw(Systems::Rendering::RenderingSystem& renderer, Systems::Rendering::Color tint, float modelScale) const {
+    inline void WallSet::Draw(Systems::Rendering::RenderingSystem& renderer, Systems::Rendering::Color tint, float modelScale, const ViewArea& view) const {
         for (const auto& piece : pieces_) {
+            if (!view.Contains({ piece.position.x, piece.position.z }, 2.0f)) continue;
             auto color = tint;
             color.a = piece.opacity;
             renderer.DrawModel(Systems::Rendering::ModelRenderData{ piece.model, piece.position, piece.yaw, modelScale, color });

@@ -26,7 +26,9 @@ namespace LB::Engine {
                 }
             }
             else {
-                session_->effects.Emit(ParticleEffect::HitSparks, { session_->playerPosition.x, PlayerTop() * 0.55f, session_->playerPosition.y }, sparks * 2 / 3, strength);
+                auto at = session_->playerPosition;
+                if (const auto* ally = event.ally != 0 ? session_->allies.Find(event.ally) : nullptr) at = ally->position;
+                session_->effects.Emit(ParticleEffect::HitSparks, { at.x, PlayerTop() * 0.55f, at.y }, sparks * 2 / 3, strength);
             }
         }
     }

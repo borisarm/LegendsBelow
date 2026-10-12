@@ -5,6 +5,17 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ## [Unreleased]
 
 ### Added
+- Technical health:
+  - **`LB::EventBus`** (LB.Core `:Events`): typed, queued publish and subscribe (`Subscribe<T>`, `Publish`, `Dispatch`, `Pending`, `Clear`; events published while dispatching arrive in the same dispatch, up to `MaxDeliveries`). The engine publishes `EnemyKilledEvent`, `LevelGainedEvent`, and `PathChosenEvent` (`:GameEvents`) on the run's bus (`GameEngine::GetEvents`), dispatched at the end of each step: experience and loot, and the level-up and path fanfare, now answer events instead of being called from the combat code.
+  - **Equipment in one place**: the InventoryService's equipment slots are the only record of what is equipped (`GameEngine::EquippedItem`, `WornItems`); the weapon and CharacterService's armour pieces follow from them (`SyncEquipment`). Saves are unchanged.
+  - **Path finding for orders**: `WorldMap::FindPath` (breadth first over the cells, leaving the enemies' flow field alone); a move or attack order out of sight walks around the walls, cutting corners where it can see ahead (`GameEngine::GetOrderRoute`, `OrderMoveTo` for tools and tests).
+  - **Culling**: floors, walls, torches (with their light's reach), props, and traps outside the camera's view are not drawn (`ViewArea`, `GameEngine::GetViewArea`, `GetWalls`).
+- Allies (design-character-system.md 7):
+  - **Companions** from `Assets/Data/allies.json` (`Content::AllyDefinition`, `ContentDatabase::GetAllies`/`FindAlly`): the Barbarian (a great axe) and the Ranger (a longbow), KayKit Adventurers bodies. The merchant hires them out on resting floors, one at a time ("Hire: Barbarian", 80 and 90 gold).
+  - The `:Allies` partition (`AllyParty`, `Ally`): they follow the hero, go after awake enemies near the hero (shooters keep their distance), strike through the Encounter (their kills give the hero experience), grow with the hero's level, go down at 0 hit points and get up at half health when the fight is over (whole at a shrine; along to every new floor). Their health shows top left.
+  - Enemies go after the nearest of the hero and the allies (`PlayerTarget::ally`, `CombatEvent::ally`); their arrows, bolts, and slams hit allies too.
+  - `GameEngine::HireAlly`, `GetAllies`, `DamageAlly` (tools and tests); allies are kept in saves (`party.allies`).
+  - **The Cleric**: Divine Light heals whoever in its reach is worst off, hero or ally; **Healing Circle** (level 3, replacing Minor Cure on the bar) heals everyone within 4 tiles and lifts their hindrances.
 - Balance (a playtest-style pass, checked by a bot):
   - **`BalanceTests`**: a headless bot plays each class from floor 1 through the first boss to the resting place (it fights what is awake, casts what is ready, drinks potions when low, shoots and backs away with a bow or wand, then clears room after room) and reports deaths, potions, level, and minutes. Built only in optimized configurations (seconds in Release, minutes in Debug), so the Release CI job runs it.
   - Experience about halved (minion 12, skeleton warrior 30, crossbowman 22, skeleton mage 27, golem 60, Necromancer 200): the bot reached level 12-14 by the first boss, now about level 8 (with deaths, which respawn rooms).

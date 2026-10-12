@@ -29,6 +29,25 @@ export namespace LB::Engine {
     }
 
     /// <summary>
+    /// The part of the ground the camera can see, kept generous: a circle around its focus.
+    /// What lies outside is not drawn (the default sees everything).
+    /// </summary>
+    struct ViewArea {
+        WorldPoint center{};
+        float radius{std::numeric_limits<float>::infinity()};
+
+        /// <summary>
+        /// Is a point (with something `margin` tiles across around it) possibly in view?
+        /// </summary>
+        [[nodiscard]] bool Contains(WorldPoint p, float margin = 0.0f) const noexcept {
+            const float dx = p.x - center.x;
+            const float dy = p.y - center.y;
+            const float reach = radius + margin;
+            return dx * dx + dy * dy <= reach * reach;
+        }
+    };
+
+    /// <summary>
     /// A floor layout placed in the world. Each layout cell is CellTiles x CellTiles tiles (one
     /// KayKit wall segment long); floor cells are open, every other cell is solid. Moves slide
     /// along walls, and a flow field leads enemies around them.
@@ -184,6 +203,39 @@ export namespace LB::Engine {
                     frontier.emplace_back(x + dx, y + dy);
                 }
             }
+        }
+
+        /// <summary>
+        /// A walk from one point to another around the walls: the centers of the cells to pass
+        /// through, ending at `to` itself (empty when `from` is already in its cell or no way
+        /// leads there). Leaves the enemies' flow field alone.
+        /// </summary>
+        [[nodiscard]] std::vector<WorldPoint> FindPath(WorldPoint from, WorldPoint to) const {
+            const auto [sx, sy] = CellOf(from);
+            const auto [tx, ty] = CellOf(to);
+            if (!layout_.IsFloor(sx, sy) || !layout_.IsFloor(tx, ty) || std::pair{ sx, sy } == std::pair{ tx, ty }) return {};
+            // Breadth first from the start, remembering where each cell was reached from
+            std::vector<std::int32_t> cameFrom(layout_.cells.size(), -1);
+            const auto start = static_cast<std::int32_t>(Index(sx, sy));
+            cameFrom[static_cast<std::size_t>(start)] = start;
+            std::vector<std::pair<std::int32_t, std::int32_t>> frontier{ { sx, sy } };
+            bool found = false;
+            for (std::size_t head = 0; head < frontier.size() && !found; ++head) {
+                const auto [x, y] = frontier[head];
+                for (const auto& [dx, dy] : Neighbors) {
+                    if (!Passable(x, y, dx, dy) || cameFrom[Index(x + dx, y + dy)] >= 0) continue;
+                    cameFrom[Index(x + dx, y + dy)] = static_cast<std::int32_t>(Index(x, y));
+                    frontier.emplace_back(x + dx, y + dy);
+                    if (x + dx == tx && y + dy == ty) found = true;
+                }
+            }
+            if (!found) return {};
+            std::vector<WorldPoint> path{ to };
+            for (auto cell = cameFrom[Index(tx, ty)]; cell != start; cell = cameFrom[static_cast<std::size_t>(cell)]) {
+                path.push_back(CellCenter(cell % layout_.width, cell / layout_.width));
+            }
+            std::ranges::reverse(path);
+            return path;
         }
 
         /// <summary>

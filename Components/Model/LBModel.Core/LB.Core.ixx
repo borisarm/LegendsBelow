@@ -5,6 +5,7 @@ export module LB.Core;
 export import :Common;          // String, Id, InvalidId
 export import :ValueObjects;    // Position, Dice, Attributes, ...
 export import :Entity;          // Entity
+export import :Events;          // EventBus
 
 export namespace LB::Core {
     // Module version information

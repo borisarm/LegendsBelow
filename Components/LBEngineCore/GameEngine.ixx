@@ -28,6 +28,8 @@ import :Encounter;
 import :Projectiles;
 import :Statuses;
 import :Decor;
+import :GameEvents;
+import :Allies;
 import :Loot;
 import :Particles;
 import :Effects;
@@ -461,6 +463,7 @@ export namespace LB::Engine {
         /// The torches on the room walls of the current floor
         /// </summary>
         [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return session_->torches.Torches(); }
+        [[nodiscard]] const WallSet& GetWalls() const noexcept { return session_->walls; }
 
         /// <summary>
         /// The menus: the title screen, the pause menu, options, and credits (any open menu pauses
@@ -613,7 +616,18 @@ export namespace LB::Engine {
         /// <summary>
         /// The equipped weapon as an item (rolled or not)
         /// </summary>
-        [[nodiscard]] ItemRef GetPlayerWeaponItem() const noexcept { return session_->playerWeaponItem; }
+        [[nodiscard]] ItemRef GetPlayerWeaponItem() const { return EquippedItem(LB::Combat::EquipmentSlot::MainHand); }
+
+        /// <summary>
+        /// The item equipped in a slot (invalid: none). The inventory's equipment slots are the one
+        /// record of what is equipped; the weapon and CharacterService's armour follow from them.
+        /// </summary>
+        [[nodiscard]] ItemRef EquippedItem(LB::Combat::EquipmentSlot slot) const;
+
+        /// <summary>
+        /// The armour worn (every slot but the main hand), by slot
+        /// </summary>
+        [[nodiscard]] std::vector<std::pair<LB::Combat::EquipmentSlot, ItemRef>> WornItems() const;
 
         /// <summary>
         /// Ammunition of a type in the bag (arrows for "Arrow")
@@ -636,6 +650,35 @@ export namespace LB::Engine {
         [[nodiscard]] const PlayerOrder& GetPlayerOrder() const noexcept { return session_->order; }
 
         /// <summary>
+        /// Order a walk to a point, as a right click on the floor does (tools and tests)
+        /// </summary>
+        void OrderMoveTo(WorldPoint at) noexcept {
+            session_->order = PlayerOrder{ OrderKind::Move, at, std::nullopt, 0 };
+            session_->route = {};
+        }
+
+        // What the camera can see, generously: its distance times this, plus a margin (tiles) for
+        // tall walls whose feet are just off screen
+        static constexpr float ViewDistanceFactor = 1.5f;
+        static constexpr float ViewMargin = 4.0f;
+
+        /// <summary>
+        /// The ground the camera can see; floors, walls, torches, and props outside it are not drawn
+        /// </summary>
+        [[nodiscard]] ViewArea GetViewArea() const noexcept {
+            const auto focus = session_->camera.GetFocus();
+            return { { focus.x, focus.y }, session_->camera.GetDistance() * ViewDistanceFactor + ViewMargin };
+        }
+
+        /// <summary>
+        /// The way an order is walking: the points still ahead (empty: straight at the goal)
+        /// </summary>
+        [[nodiscard]] std::span<const WorldPoint> GetOrderRoute() const noexcept {
+            const auto& route = session_->route;
+            return route.next < route.points.size() ? std::span<const WorldPoint>(route.points).subspan(route.next) : std::span<const WorldPoint>{};
+        }
+
+        /// <summary>
         /// A merchant's ware: an item (rolled or not), how many come with it, and its price
         /// </summary>
         struct StockEntry {
@@ -643,6 +686,7 @@ export namespace LB::Engine {
             std::int32_t quantity{1};                 // per purchase (arrows come in bundles)
             std::int32_t price{0};
             bool unlimited{false};                    // potions and ammunition never run out
+            const Content::AllyDefinition* ally{nullptr};   // a companion to hire instead of an item
         };
 
         /// <summary>
@@ -758,6 +802,25 @@ export namespace LB::Engine {
         void GrantExperience(std::int32_t experience);
 
         /// <summary>
+        /// The run's events (GameEvents: kills, levels, paths), delivered at the end of each step;
+        /// tools and tests may subscribe (until the run ends)
+        /// </summary>
+        [[nodiscard]] EventBus& GetEvents() noexcept { return session_->events; }
+
+        /// <summary>
+        /// A companion from allies.json joins the hero (beside them, at their level); null for an
+        /// unknown key, without a hero, or with the party full. The merchant hires them for gold.
+        /// </summary>
+        std::optional<std::uint32_t> HireAlly(std::string_view key);
+
+        [[nodiscard]] const AllyParty& GetAllies() const noexcept { return session_->allies; }
+
+        /// <summary>
+        /// Wound an ally (tools and tests); returns whether it took them down
+        /// </summary>
+        bool DamageAlly(std::uint32_t id, std::int32_t amount) { return session_->allies.Damage(id, amount); }
+
+        /// <summary>
         /// The weapon the player attacks with
         /// </summary>
         [[nodiscard]] const Content::WeaponDefinition* GetPlayerWeapon() const noexcept { return session_->playerWeapon; }
@@ -825,14 +888,7 @@ export namespace LB::Engine {
         bool EquipPlayerArmor(std::string_view armorKey) {
             const auto* armor = content_->FindArmor(armorKey);
             if (!session_->playerId || !armor) return false;
-
-            Services::Character::ArmorPiece piece{};
-            piece.armorId = armor->id;
-            piece.slot = armor->slot;
-            piece.category = armor->category;
-            piece.movementPenalty = armor->movementPenalty;
-            piece.castPenalty = armor->castPenalty;
-            return session_->characterService.EquipArmor(*session_->playerId, piece);
+            return PutOn(ItemRef{ ItemKind::Armor, armor->id }, armor->slot);
         }
 
         /// <summary>
@@ -908,6 +964,16 @@ export namespace LB::Engine {
         void UpdateOrders();
         void FollowOrder();
         std::optional<WorldPoint> OrderStep() const;
+
+        // Equipment: record an item in a slot (or clear it), then bring the weapon and
+        // CharacterService's armour pieces in line with the inventory's slots
+        void SubscribeToEvents();
+        void UpdateAllies(float elapsedSeconds);
+        void DrawAllies(const Shade& shade);
+        void HealParty(const Content::SpellDefinition& spell, std::int32_t amount);
+        bool PutOn(ItemRef item, LB::Combat::EquipmentSlot slot);
+        bool TakeOff(LB::Combat::EquipmentSlot slot);
+        void SyncEquipment();
         bool OrderTargetInReach(const Enemy& target) const;
         void DrawOrderMarks();
         void ReleasePlayerAttack();
@@ -1128,9 +1194,14 @@ export namespace LB::Engine {
             float sneakWindowSeconds{0.0f};          // blows are sneak attacks (after a shadowstep)
             std::string path;                        // the specialization's key (empty: none yet)
             StatusSet playerStatuses;
-            const Content::WeaponDefinition* playerWeapon{nullptr};   // into content_, which outlives the session
-            ItemRef playerWeaponItem{};              // the equipped weapon as an item (rolled or not)
-            std::map<LB::Combat::EquipmentSlot, ItemRef> wornItems;   // the equipped armour as items
+            // An order's walk around the walls (design-combat-system.md 2.1, orders given in the tactical pause)
+            struct Route {
+                std::vector<WorldPoint> points;
+                std::size_t next{0};
+                std::pair<std::int32_t, std::int32_t> goalCell{ -1, -1 };
+            };
+            Route route;
+            const Content::WeaponDefinition* playerWeapon{nullptr};   // the main hand's (follows the inventory: SyncEquipment); into content_
             ItemRolls rolls;                         // rolled items of this run
             Services::Inventory::InventoryService inventoryService;
             std::int32_t gold{0};
@@ -1145,6 +1216,8 @@ export namespace LB::Engine {
             bool shrineUsed{false};
             std::vector<StockEntry> stock;
             FloorDecor decor;                        // props and traps of the floor
+            EventBus events;                         // what happens in the run (GameEvents), dispatched after each step
+            AllyParty allies;                        // the hero's companions
 
             Encounter encounter;
             bool spawnEnemies{true};

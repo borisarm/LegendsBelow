@@ -109,8 +109,8 @@ namespace LB::Engine {
 
     // What the equipped items and the chosen path add
     ItemBonuses GameEngine::EquippedBonuses() const {
-        auto bonuses = session_->rolls.BonusesOf(session_->playerWeaponItem);
-        for (const auto& [slot, item] : session_->wornItems) bonuses += session_->rolls.BonusesOf(item);
+        auto bonuses = session_->rolls.BonusesOf(GetPlayerWeaponItem());
+        for (const auto& [slot, item] : WornItems()) bonuses += session_->rolls.BonusesOf(item);
         if (const auto* path = GetPlayerPath()) {
             bonuses.damage += path->damage;
             bonuses.attackBonus += path->attackBonus;
@@ -134,8 +134,7 @@ namespace LB::Engine {
         const auto* path = classData->FindSpecialization(key);
         if (!path) return false;
         session_->path = path->key;
-        session_->combatText.Add(std::format("PATH: {}", path->name), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 1.0f, 0.82f, 0.25f, 1.0f }, 3.0f);
-        EmitLevelUpEffect();
+        session_->events.Publish(PathChosenEvent{ path->key, path->name });
         return true;
     }
 
@@ -187,11 +186,12 @@ namespace LB::Engine {
         session_->groundItems.clear();
         // The class's kit (classes.json startingWeapon, startingItems); a potion for everyone
         const auto* classData = content_->FindClass(session_->playerClass);
-        session_->playerWeapon = classData && !classData->startingWeapon.empty() ? content_->FindWeapon(classData->startingWeapon) : nullptr;
-        session_->playerWeaponItem = session_->playerWeapon ? ItemRef{ ItemKind::Weapon, session_->playerWeapon->id } : ItemRef{};
-        session_->wornItems.clear();
+        session_->playerWeapon = nullptr;
         if (!session_->playerId) return;
-        session_->inventoryService.CreateInventory(*session_->playerId, BagCapacity);
+        session_->inventoryService.CreateInventory(*session_->playerId, BagCapacity);   // empty slots too
+        if (const auto* weapon = classData && !classData->startingWeapon.empty() ? content_->FindWeapon(classData->startingWeapon) : nullptr) {
+            PutOn(ItemRef{ ItemKind::Weapon, weapon->id }, LB::Combat::EquipmentSlot::MainHand);
+        }
         GiveItem(HealingPotion, StartingPotions);
         if (classData) {
             // "key" or "key:count"
@@ -240,44 +240,76 @@ namespace LB::Engine {
         if (!inBag) return false;
         const auto base = session_->rolls.BaseOf(item);
 
+        // The item in the same slot goes back to the bag (there is room: one item just left it)
         session_->inventoryService.RemoveItem(*session_->playerId, item.Pack(), 1);
-        if (base.kind == ItemKind::Weapon) {
-            if (session_->playerWeaponItem.IsValid()) GiveItemRef(session_->playerWeaponItem);
-            session_->playerWeapon = content_->FindWeapon(base.id);
-            session_->playerWeaponItem = item;
-            return true;
-        }
+        const auto slot = base.kind == ItemKind::Weapon ? LB::Combat::EquipmentSlot::MainHand : content_->FindArmor(base.id)->slot;
+        if (const auto previous = EquippedItem(slot); previous.IsValid()) GiveItemRef(previous);
+        return PutOn(item, slot);
+    }
 
-        // The piece in the same slot goes back to the bag (there is room: one item just left it)
-        const auto* armor = content_->FindArmor(base.id);
-        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
-            if (worn.slot != armor->slot) continue;
-            const auto it = session_->wornItems.find(worn.slot);
-            if (it != session_->wornItems.end()) GiveItemRef(it->second);
-            else if (const auto* previous = content_->FindArmor(worn.armorId)) GiveItem(previous->key);
+    ItemRef GameEngine::EquippedItem(LB::Combat::EquipmentSlot slot) const {
+        if (!session_->playerId) return {};
+        const auto equipped = session_->inventoryService.GetEquippedItems(*session_->playerId);
+        const auto piece = equipped ? equipped->GetEquipment(slot) : std::nullopt;
+        return piece ? ItemRef::Unpack(piece->itemId) : ItemRef{};
+    }
+
+    std::vector<std::pair<LB::Combat::EquipmentSlot, ItemRef>> GameEngine::WornItems() const {
+        std::vector<std::pair<LB::Combat::EquipmentSlot, ItemRef>> worn;
+        if (!session_->playerId) return worn;
+        if (const auto equipped = session_->inventoryService.GetEquippedItems(*session_->playerId)) {
+            for (const auto& [slot, piece] : equipped->equipment) {
+                if (slot != LB::Combat::EquipmentSlot::MainHand) worn.emplace_back(slot, ItemRef::Unpack(piece.itemId));
+            }
         }
-        if (!EquipPlayerArmor(armor->key)) return false;
-        session_->wornItems[armor->slot] = item;
+        std::ranges::sort(worn, {}, [](const auto& entry) { return static_cast<std::uint32_t>(entry.first); });
+        return worn;
+    }
+
+    bool GameEngine::PutOn(ItemRef item, LB::Combat::EquipmentSlot slot) {
+        if (!session_->playerId || !item.IsValid()) return false;
+        Inventory::Equipment piece{};
+        piece.itemId = item.Pack();
+        piece.name = ItemName(item);
+        piece.slot = slot;
+        if (!session_->inventoryService.EquipItem(*session_->playerId, piece)) return false;
+        SyncEquipment();
         return true;
     }
 
-    bool GameEngine::UnequipArmorSlot(EquipmentSlot slot) {
-        if (!session_->playerId || !session_->inventoryService.HasInventorySpace(*session_->playerId)) return false;
-        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
-            if (worn.slot != slot) continue;
-            const auto* armor = content_->FindArmor(worn.armorId);
-            if (!armor || !session_->characterService.UnequipArmor(*session_->playerId, slot)) return false;
-            const auto it = session_->wornItems.find(slot);
-            if (it != session_->wornItems.end()) {
-                GiveItemRef(it->second);
-                session_->wornItems.erase(it);
-            }
-            else {
-                GiveItem(armor->key);
-            }
-            return true;
+    bool GameEngine::TakeOff(LB::Combat::EquipmentSlot slot) {
+        if (!session_->playerId || !session_->inventoryService.UnequipItem(*session_->playerId, slot)) return false;
+        SyncEquipment();
+        return true;
+    }
+
+    // The weapon in hand and the armour pieces CharacterService works out speed and casting from
+    void GameEngine::SyncEquipment() {
+        const auto weapon = session_->rolls.BaseOf(GetPlayerWeaponItem());
+        session_->playerWeapon = weapon.kind == ItemKind::Weapon ? content_->FindWeapon(weapon.id) : nullptr;
+        if (!session_->playerId) return;
+        const auto id = *session_->playerId;
+        for (const auto& worn : session_->characterService.GetEquippedArmor(id)) session_->characterService.UnequipArmor(id, worn.slot);
+        for (const auto& [slot, item] : WornItems()) {
+            const auto base = session_->rolls.BaseOf(item);
+            const auto* armor = base.kind == ItemKind::Armor ? content_->FindArmor(base.id) : nullptr;
+            if (!armor) continue;
+            Services::Character::ArmorPiece piece{};
+            piece.armorId = armor->id;
+            piece.slot = slot;
+            piece.category = armor->category;
+            piece.movementPenalty = armor->movementPenalty;
+            piece.castPenalty = armor->castPenalty;
+            session_->characterService.EquipArmor(id, piece);
         }
-        return false;
+    }
+
+    bool GameEngine::UnequipArmorSlot(EquipmentSlot slot) {
+        if (!session_->playerId || slot == LB::Combat::EquipmentSlot::MainHand || !session_->inventoryService.HasInventorySpace(*session_->playerId)) return false;
+        const auto item = EquippedItem(slot);
+        if (!item.IsValid() || !TakeOff(slot)) return false;
+        GiveItemRef(item);
+        return true;
     }
 
     bool GameEngine::UseItem(std::string_view key) {
@@ -312,32 +344,48 @@ namespace LB::Engine {
     // Experience and loot
     // ------------------------------------------------------------------------------------------
 
+    // A kill is published; progression (experience, loot) handles it when the step's events go out
     void GameEngine::OnEnemyKilled(const Enemy& enemy) {
         if (!session_->playerId) return;
-        GrantExperience(enemy.experience);
-        if (!enemy.definition->lootTable.empty()) {
-            DropLoot(enemy.definition->lootTable, enemy.position);
+        session_->events.Publish(EnemyKilledEvent{ enemy.id, enemy.definition->key, enemy.position, enemy.experience, enemy.definition->lootTable });
+    }
+
+    void GameEngine::GrantExperience(std::int32_t experience) {
+        if (!session_->playerId || experience <= 0) return;
+        const auto previous = PlayerCharacter()->GetLevel();
+        if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, experience); progress && progress->levelIncreased) {
+            session_->events.Publish(LevelGainedEvent{ previous, progress->newLevel });
         }
     }
 
-    // Experience, and a level up's fanfare: the abilities it opens, a path to choose
-    void GameEngine::GrantExperience(std::int32_t experience) {
-        if (!session_->playerId) return;
-        const Systems::Rendering::Vector3 overPlayer{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
-        if (experience > 0) {
-            if (const auto progress = session_->characterService.AwardExperience(*session_->playerId, experience); progress && progress->levelIncreased) {
-                session_->combatText.Add("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
-                const auto level = PlayerCharacter()->GetLevel();
-                for (const auto* spell : GetSpellBar()) {
-                    if (spell->requiredLevel == level) session_->combatText.Add(std::format("NEW: {}", spell->name), { overPlayer.x, overPlayer.y + 0.4f, overPlayer.z }, { 0.6f, 0.85f, 1.0f, 1.0f }, 2.6f);
+    // Who reacts to what happens in a run: progression to kills; the fanfare (texts, effects,
+    // sounds) to levels and paths. Subscribed once per run, on the run's own bus.
+    void GameEngine::SubscribeToEvents() {
+        auto& events = session_->events;
+        events.Subscribe<EnemyKilledEvent>([this](const EnemyKilledEvent& kill) {
+            GrantExperience(kill.experience);
+            if (!kill.lootTable.empty()) DropLoot(kill.lootTable, kill.at);
+        });
+        events.Subscribe<LevelGainedEvent>([this](const LevelGainedEvent& gained) { session_->allies.SetLevel(gained.level); });
+        events.Subscribe<LevelGainedEvent>([this](const LevelGainedEvent& gained) {
+            const Systems::Rendering::Vector3 overPlayer{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
+            session_->combatText.Add("LEVEL UP!", overPlayer, { 1.0f, 0.82f, 0.25f, 1.0f }, 4.0f);
+            for (const auto* spell : GetSpellBar()) {
+                if (spell->requiredLevel > gained.previous && spell->requiredLevel <= gained.level) {
+                    session_->combatText.Add(std::format("NEW: {}", spell->name), { overPlayer.x, overPlayer.y + 0.4f, overPlayer.z }, { 0.6f, 0.85f, 1.0f, 1.0f }, 2.6f);
                 }
-                if (level == Content::ClassDefinition::SpecializationLevel && session_->path.empty()) {
-                    session_->combatText.Add("CHOOSE A PATH (I)", { overPlayer.x, overPlayer.y + 0.8f, overPlayer.z }, { 0.55f, 0.95f, 0.55f, 1.0f }, 2.6f);
-                }
-                EmitLevelUpEffect();
-                PlaySound(GameSound::LevelUp, session_->playerPosition);
             }
-        }
+            const auto paths = Content::ClassDefinition::SpecializationLevel;
+            if (gained.previous < paths && gained.level >= paths && session_->path.empty()) {
+                session_->combatText.Add("CHOOSE A PATH (I)", { overPlayer.x, overPlayer.y + 0.8f, overPlayer.z }, { 0.55f, 0.95f, 0.55f, 1.0f }, 2.6f);
+            }
+            EmitLevelUpEffect();
+            PlaySound(GameSound::LevelUp, session_->playerPosition);
+        });
+        events.Subscribe<PathChosenEvent>([this](const PathChosenEvent& path) {
+            session_->combatText.Add(std::format("PATH: {}", path.name), { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 1.0f, 0.82f, 0.25f, 1.0f }, 3.0f);
+            EmitLevelUpEffect();
+        });
     }
 
     void GameEngine::DropLoot(std::string_view lootTable, WorldPoint at) {
@@ -455,19 +503,17 @@ namespace LB::Engine {
         // Equipment: the weapon, then each armour slot
         heading("Equipped");
         if (session_->playerWeapon) {
-            ScreenRow row{ std::format("Main hand: {}", ItemName(session_->playerWeaponItem)), std::format("{} +{}", DiceText(session_->playerWeapon->damageDice), GetPlayerAttackProfile().damageBonus) };
-            row.color = RarityColorOf(session_->playerWeaponItem);
+            ScreenRow row{ std::format("Main hand: {}", ItemName(GetPlayerWeaponItem())), std::format("{} +{}", DiceText(session_->playerWeapon->damageDice), GetPlayerAttackProfile().damageBonus) };
+            row.color = RarityColorOf(GetPlayerWeaponItem());
             rows.push_back(std::move(row));
         }
-        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
-            const auto* armor = content_->FindArmor(worn.armorId);
+        for (const auto& [slot, item] : WornItems()) {
+            const auto* armor = content_->FindArmor(session_->rolls.BaseOf(item).id);
             if (!armor) continue;
-            const auto it = session_->wornItems.find(worn.slot);
-            const auto item = it != session_->wornItems.end() ? it->second : ItemRef{ ItemKind::Armor, armor->id };
-            ScreenRow row{ std::format("{}: {}", SlotName(worn.slot), ItemName(item)), std::format("AR {}", armor->physicalAR + armor->armorBonus + session_->rolls.BonusesOf(item).armor) };
+            ScreenRow row{ std::format("{}: {}", SlotName(slot), ItemName(item)), std::format("AR {}", armor->physicalAR + armor->armorBonus + session_->rolls.BonusesOf(item).armor) };
             row.color = RarityColorOf(item);
             row.action = ScreenAction::Unequip;
-            row.slot = worn.slot;
+            row.slot = slot;
             rows.push_back(std::move(row));
         }
         info("Defense", std::format("AC {}   AR {}", GetPlayerDefense().armorClass, GetPlayerDefense().physicalArmor));
@@ -510,20 +556,14 @@ namespace LB::Engine {
                 row.enabled = reason.empty();
                 if (base.kind == ItemKind::Weapon) {
                     const auto* weapon = content_->FindWeapon(base.id);
-                    const auto delta = averageBlow(item) - (session_->playerWeaponItem.IsValid() ? averageBlow(session_->playerWeaponItem) : 0.0f);
+                    const auto delta = averageBlow(item) - (GetPlayerWeaponItem().IsValid() ? averageBlow(GetPlayerWeaponItem()) : 0.0f);
                     const auto bonus = weapon->damageBonus + session_->rolls.BonusesOf(item).damage;
                     row.detail = reason.empty() ? std::format("{}{} {:+.1f}", DiceText(weapon->damageDice), bonus > 0 ? std::format("+{}", bonus) : std::string{}, delta) : reason;
                 }
                 else {
                     const auto* armor = content_->FindArmor(base.id);
-                    const auto worn = session_->wornItems.find(armor->slot);
-                    std::int32_t current = 0;
-                    if (worn != session_->wornItems.end()) current = armourOf(worn->second);
-                    else {
-                        for (const auto& piece : session_->characterService.GetEquippedArmor(*session_->playerId)) {
-                            if (piece.slot == armor->slot) current = armourOf(ItemRef{ ItemKind::Armor, piece.armorId });
-                        }
-                    }
+                    const auto worn = EquippedItem(armor->slot);
+                    const std::int32_t current = worn.IsValid() ? armourOf(worn) : 0;
                     const auto mine = armourOf(item);
                     row.detail = reason.empty() ? std::format("{} {} {:+d}", SlotName(armor->slot), mine, mine - current) : reason;
                 }
@@ -683,8 +723,8 @@ namespace LB::Engine {
     // A shield is worn (drawn on the knight's left arm)
     bool GameEngine::PlayerHoldsShield() const {
         if (!session_->playerId) return false;
-        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
-            const auto* armor = content_->FindArmor(worn.armorId);
+        for (const auto& [slot, item] : WornItems()) {
+            const auto* armor = content_->FindArmor(session_->rolls.BaseOf(item).id);
             if (armor && armor->category == LB::Combat::ArmorCategory::Shield) return true;
         }
         return false;
@@ -732,14 +772,13 @@ namespace LB::Engine {
         data["player.points"] = std::format("{}", character.GetUnspentAttributePoints());
         data["player.gold"] = std::format("{}", session_->gold);
         data["player.path"] = session_->path;
-        data["player.weapon"] = session_->playerWeaponItem.IsValid() ? ItemSaveKey(session_->playerWeaponItem) : std::string{};
+        std::string allies;
+        for (const auto& ally : session_->allies.Allies()) allies += std::format("{}:{};", ally.definition->key, ally.hitPoints);
+        data["party.allies"] = allies;
+        data["player.weapon"] = GetPlayerWeaponItem().IsValid() ? ItemSaveKey(GetPlayerWeaponItem()) : std::string{};
 
         std::string armour;
-        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) {
-            const auto it = session_->wornItems.find(worn.slot);
-            if (it != session_->wornItems.end()) armour += ItemSaveKey(it->second) + ";";
-            else if (const auto* piece = content_->FindArmor(worn.armorId)) armour += piece->key + ";";
-        }
+        for (const auto& [slot, item] : WornItems()) armour += ItemSaveKey(item) + ";";
         data["player.armour"] = armour;
 
         std::string bag;
@@ -803,22 +842,35 @@ namespace LB::Engine {
         if (const auto* text = field("player.path"); text && content_->FindClass(session_->playerClass) && content_->FindClass(session_->playerClass)->FindSpecialization(*text)) {
             session_->path = *text;
         }
+        // The companions, with the health they had ("key:hitPoints;")
+        session_->allies.Clear();
+        if (const auto* text = field("party.allies")) {
+            for (const auto& entry : Split(*text, ';')) {
+                const auto colon = entry.rfind(':');
+                std::int32_t hitPoints = 0;
+                if (colon == std::string::npos || !ParseInt(std::string_view(entry).substr(colon + 1), hitPoints)) continue;
+                const auto* definition = content_->FindAlly(entry.substr(0, colon));
+                if (!definition) continue;
+                if (const auto id = session_->allies.Add(*definition, session_->playerPosition, level)) {
+                    const auto missing = session_->allies.Find(*id)->maxHitPoints - hitPoints;
+                    if (missing > 0) session_->allies.Damage(*id, missing);
+                }
+            }
+            session_->allies.PlaceAround(session_->world, session_->playerPosition, false);
+        }
         if (const auto* text = field("player.weapon")) {
             const auto item = ItemFromSaveKey(*text);
             if (const auto* weapon = content_->FindWeapon(session_->rolls.BaseOf(item).id); weapon && session_->rolls.BaseOf(item).kind == ItemKind::Weapon) {
-                session_->playerWeapon = weapon;
-                session_->playerWeaponItem = item;
+                PutOn(item, LB::Combat::EquipmentSlot::MainHand);
             }
         }
 
-        for (const auto& worn : session_->characterService.GetEquippedArmor(*session_->playerId)) session_->characterService.UnequipArmor(*session_->playerId, worn.slot);
-        session_->wornItems.clear();
+        for (const auto& [slot, item] : WornItems()) TakeOff(slot);
         if (const auto* text = field("player.armour")) {
             for (const auto& entry : Split(*text, ';')) {
                 const auto item = ItemFromSaveKey(entry);
                 const auto base = session_->rolls.BaseOf(item);
-                const auto* armor = base.kind == ItemKind::Armor ? content_->FindArmor(base.id) : nullptr;
-                if (armor && EquipPlayerArmor(armor->key)) session_->wornItems[armor->slot] = item;
+                if (const auto* armor = base.kind == ItemKind::Armor ? content_->FindArmor(base.id) : nullptr) PutOn(item, armor->slot);
             }
         }
 

@@ -380,7 +380,7 @@
       { "level": 19, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 1, "rangedAttackBonus": 1, "physicalSaveBonus": 0, "mentalSaveBonus": 0 },
       { "level": 20, "hpGain": 8, "mpGain": 7, "meleeAttackBonus": 0, "rangedAttackBonus": 0, "physicalSaveBonus": 1, "mentalSaveBonus": 1 }
     ],
-    "spellBar": ["spell_holy_smite_l1", "spell_holy_divine_light_l1", "spell_holy_minor_cure_l1", "spell_holy_turn_undead_l2"],
+    "spellBar": ["spell_holy_smite_l1", "spell_holy_divine_light_l1", "spell_holy_healing_circle_l2", "spell_holy_turn_undead_l2"],
     "manaRegenPerSecond": 2.0,
     "spellPowerBase": 2,
     "startingWeapon": "weapon_mace_iron_mace_t1",

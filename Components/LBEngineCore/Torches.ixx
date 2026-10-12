@@ -111,8 +111,9 @@ export namespace LB::Engine {
         /// light at each flame
         /// </summary>
         void Draw(Systems::Rendering::RenderingSystem& renderer, const WallSet& walls, Systems::Rendering::ModelId model,
-                  float modelScale, Systems::Rendering::Color tint, double timeSeconds) const {
+                  float modelScale, Systems::Rendering::Color tint, double timeSeconds, const ViewArea& view = {}) const {
             for (const auto& torch : torches_) {
+                if (!view.Contains(torch.position, LightRadius)) continue;   // its light may still reach the view
                 const auto flame = FlameOf(torch);
                 if (model != Systems::Rendering::InvalidModelId) {
                     auto color = tint;

@@ -67,6 +67,7 @@ namespace LB::Engine {
         DrawRestPlace(shade(1.0f, 1.0f, 1.0f));
         DrawDecor(shade(1.0f, 1.0f, 1.0f));
         DrawPlayer(shade);
+        DrawAllies(shade);
         DrawEnemies(shade);
         DrawTelegraphs();
         DrawProjectiles(shade);
@@ -74,7 +75,7 @@ namespace LB::Engine {
         DrawGroundItems(shade(1.0f, 1.0f, 1.0f));
         DrawFloorProps(shade(1.0f, 1.0f, 1.0f));
         session_->torches.Draw(renderingSystem_, session_->walls, assets_.models.loaded ? ModelOf(TorchModel) : Systems::Rendering::InvalidModelId,
-                              ModelScale, shade(1.0f, 1.0f, 1.0f), timer_.GetTotalSeconds());
+                              ModelScale, shade(1.0f, 1.0f, 1.0f), timer_.GetTotalSeconds(), GetViewArea());
         session_->effects.Draw(renderingSystem_, shade(1.0f, 1.0f, 1.0f));
         if (!menu_.IsOpen() && !ScreenOpen()) {   // full-screen panels show only the dungeon behind them
             DrawHud();
@@ -248,9 +249,11 @@ namespace LB::Engine {
         const auto floor = themed(theme.floor, assets_.models.floor);
         const auto floorVariant = themed(theme.floorVariant, assets_.models.floorVariant);
         const auto& layout = session_->world.Layout();
+        const auto view = GetViewArea();
         for (std::int32_t cy = 0; cy < layout.height; ++cy) {
             for (std::int32_t cx = 0; cx < layout.width; ++cx) {
                 if (!layout.IsFloor(cx, cy) || session_->decor.IsTrapCell(cx, cy)) continue;
+                if (!view.Contains(session_->world.CellCenter(cx, cy), WorldMap::CellTiles)) continue;
                 const auto corner = session_->world.CellCorner(cx, cy);
                 for (std::int32_t dy = 0; dy < static_cast<std::int32_t>(WorldMap::CellTiles); ++dy) {
                     for (std::int32_t dx = 0; dx < static_cast<std::int32_t>(WorldMap::CellTiles); ++dx) {
@@ -265,7 +268,7 @@ namespace LB::Engine {
             }
         }
 
-        session_->walls.Draw(renderingSystem_, tint, ModelScale);
+        session_->walls.Draw(renderingSystem_, tint, ModelScale, view);
     }
 
     // Red flash on characters that were just hit (tints multiply, so green and blue drop)
@@ -468,6 +471,9 @@ namespace LB::Engine {
             hud.order = target ? std::format("Order: {} at {}", spell, target->definition->name) : std::format("Order: {}", spell);
         }
 
+        for (const auto& ally : session_->allies.Allies()) {
+            hud.allies.push_back({ ally.definition->name, static_cast<float>(ally.hitPoints) / static_cast<float>(std::max(1, ally.maxHitPoints)), ally.IsDown() });
+        }
         if (session_->depth > 0) hud.banner = session_->restFloor ? std::format("DEPTH {} - RESTING PLACE", session_->depth) : std::format("DEPTH {}", session_->depth);
         else if (session_->encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_->encounter.GetWave());
 
@@ -495,6 +501,25 @@ namespace LB::Engine {
                         { enemy.slamCenter.x + c * r, 0.06f, enemy.slamCenter.y + s * r }, 0.22f, { 1.0f, 0.4f, 0.1f, 2.4f }, true });
                 }
             }
+        }
+    }
+
+    // The companions, posed by their animations, with their weapons (a bow in the left hand)
+    void GameEngine::DrawAllies(const Shade& shade) {
+        if (!assets_.models.loaded) return;
+        for (const auto& ally : session_->allies.Allies()) {
+            const auto body = ModelOf(ally.definition->model);
+            if (body == Systems::Rendering::InvalidModelId) continue;
+            const auto tint = HitTint(shade, ally.hitFlashSeconds);
+            const Systems::Rendering::Vector3 position{ ally.position.x, 0.0f, ally.position.y };
+            Systems::Rendering::ModelRenderData data{ body, position, ally.facingYaw, ally.definition->modelScale, tint };
+            data.animation = ally.animator.GetState();
+            renderingSystem_.DrawModel(data);
+            const auto& file = ally.definition->mainHandModel;
+            if (file.empty()) continue;
+            Systems::Rendering::ModelRenderData held{ ModelOf(file), position, ally.facingYaw, ally.definition->modelScale, tint };
+            held.transform = HeldTransform(body, file, ally.definition->IsRanged() ? "handslot.l" : "handslot.r", data.animation);
+            if (held.transform) renderingSystem_.DrawModel(held);
         }
     }
 
