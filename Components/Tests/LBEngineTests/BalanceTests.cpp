@@ -1,6 +1,7 @@
 // BalanceTests.cpp - LB.Engine tests: a simple bot plays each class headless through the first
-// tier (three floors and its boss) and the second (the caves' creatures and the Golem Warlord) and
-// must reach the resting place below each; it reports deaths, potions, and time for balancing. It
+// tier (three floors and its boss), the second (the caves' creatures and the Golem Warlord), and the
+// third (the ruins' creatures and the Frost Golem) and must reach the resting place below each; it
+// reports deaths, potions, and time for balancing. It
 // grows as a player would (attribute points, a path, better finds, a companion and potions from
 // the merchant, the locked gate's treasure). A run is minutes of game time, so these are built
 // only in optimized configurations (Release; seconds there, minutes in Debug).
@@ -379,8 +380,8 @@ namespace {
 
     // Every class clears the first tier, its boss included, in time. The bot charges in and sets up
     // no sneak attacks, so it dies more than a player would: the cap catches a class that got much
-    // harder (at the last pass: Warrior 3, Mage 4, Rogue 24, Cleric 6 deaths, level 5 or 6; 6 to
-    // 15 minutes; over six seeds the Warrior, Mage, and Cleric died 2 to 13 times)
+    // harder (at the last pass: Warrior 0, Mage 4, Rogue 29, Cleric 2 deaths, level 5 or 6; 5 to
+    // 14 minutes; over six seeds the Warrior, Mage, and Cleric died 2 to 13 times)
     constexpr std::int32_t RestingPlace = GameEngine::BossFloorInterval + 1;
     constexpr float BudgetMinutes = 20.0f;
     constexpr std::int32_t MostDeaths = 15;
@@ -419,7 +420,7 @@ TEST(BalanceTests, Cleric_ClearsTheFirstTier) {
 namespace {
     constexpr std::int32_t SecondRestingPlace = 2 * GameEngine::BossFloorInterval + 1;
     constexpr float SecondBudgetMinutes = 30.0f;
-    // At the last pass: Warrior 3, Mage 19, Rogue 30, Cleric 7 deaths, level 9 or 10, 13 to 25
+    // At the last pass: Warrior 0, Mage 11, Rogue 30, Cleric 3 deaths, level 10, 10 to 21
     // minutes; over six seeds the Warrior, Mage, and Cleric died 3 to 24 times, the Rogue 17 to 32
     constexpr std::int32_t MostSecondTierDeaths = 30;
     constexpr std::int32_t MostRogueSecondTierDeaths = 40;
@@ -447,6 +448,39 @@ TEST(BalanceTests, Cleric_ClearsTheSecondTier) {
     const auto report = Play(CharacterClass::Cleric, SecondRestingPlace, SecondBudgetMinutes);
     EXPECT_EQ(report.depth, SecondRestingPlace);
     EXPECT_LE(report.deaths, MostSecondTierDeaths);
+}
+
+// The third tier: the ruins' creatures and the Frost Golem, with what the first two gave
+namespace {
+    constexpr std::int32_t ThirdRestingPlace = 3 * GameEngine::BossFloorInterval + 1;
+    constexpr float ThirdBudgetMinutes = 45.0f;
+    // At the last pass: Warrior 0, Mage 18, Rogue 36, Cleric 3 deaths, level 14 or 15 (the third
+    // item tier's levels), 17 to 33 minutes
+    constexpr std::int32_t MostThirdTierDeaths = 45;
+}
+
+TEST(BalanceTests, Warrior_ClearsTheThirdTier) {
+    const auto report = Play(CharacterClass::Warrior, ThirdRestingPlace, ThirdBudgetMinutes);
+    EXPECT_EQ(report.depth, ThirdRestingPlace);
+    EXPECT_LE(report.deaths, MostThirdTierDeaths);
+}
+
+TEST(BalanceTests, Mage_ClearsTheThirdTier) {
+    const auto report = Play(CharacterClass::Mage, ThirdRestingPlace, ThirdBudgetMinutes);
+    EXPECT_EQ(report.depth, ThirdRestingPlace);
+    EXPECT_LE(report.deaths, MostThirdTierDeaths);
+}
+
+TEST(BalanceTests, Rogue_ClearsTheThirdTier) {
+    const auto report = Play(CharacterClass::Rogue, ThirdRestingPlace, ThirdBudgetMinutes);
+    EXPECT_EQ(report.depth, ThirdRestingPlace);
+    EXPECT_LE(report.deaths, MostThirdTierDeaths);
+}
+
+TEST(BalanceTests, Cleric_ClearsTheThirdTier) {
+    const auto report = Play(CharacterClass::Cleric, ThirdRestingPlace, ThirdBudgetMinutes);
+    EXPECT_EQ(report.depth, ThirdRestingPlace);
+    EXPECT_LE(report.deaths, MostThirdTierDeaths);
 }
 
 #endif // NDEBUG

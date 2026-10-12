@@ -255,10 +255,21 @@ namespace LB::Systems::Rendering {
                     }
                 };
 
-                // The key light's shadows: every model (the faded walls too) drawn from the light first
+                // The key light's shadows: every model near enough to throw one into the map (the
+                // faded walls too) drawn from the light first
                 if (gpu_->renderer.BeginShadowPass(view.target.x, view.target.y, view.target.z, lighting_.shadows)) {
-                    drawGroups(opaqueInstances_, Pass::Shadow);
-                    drawGroups(fadedInstances_, Pass::Shadow);
+                    constexpr float reach = Detail::GpuRenderer::ShadowReach;
+                    for (const auto* groups : { &opaqueInstances_, &fadedInstances_ }) {
+                        for (std::size_t i = 0; i < groups->size(); ++i) {
+                            shadowCasters_.clear();
+                            for (const auto& instance : (*groups)[i]) {
+                                if (std::abs(instance.world.m[12] - view.target.x) <= reach && std::abs(instance.world.m[14] - view.target.z) <= reach) {
+                                    shadowCasters_.push_back(instance);
+                                }
+                            }
+                            gpu_->renderer.DrawModelInstances(i, shadowCasters_.data(), shadowCasters_.size(), Pass::Shadow);
+                        }
+                    }
                     gpu_->renderer.EndShadowPass();
                     stats_.drawCalls += 1;
                 }

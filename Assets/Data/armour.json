@@ -236,5 +236,730 @@
     "movementPenalty": 0.05,
     "affixSlots": 2,
     "value": 47
+  },
+  {
+    "id": "armor_head_silk_cowl_t2",
+    "name": "Silk Cowl",
+    "slot": "Head",
+    "category": "Cloth",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 1,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 2,
+    "value": 20
+  },
+  {
+    "id": "armor_head_archmages_cowl_t3",
+    "name": "Archmage's Cowl",
+    "slot": "Head",
+    "category": "Cloth",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 2,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 40
+  },
+  {
+    "id": "armor_chest_silk_robe_t2",
+    "name": "Silk Robe",
+    "slot": "Chest",
+    "category": "Cloth",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Mage",
+      "Cleric"
+    ],
+    "physicalAR": 1,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 2,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 2,
+    "value": 20
+  },
+  {
+    "id": "armor_chest_archmages_robe_t3",
+    "name": "Archmage's Robe",
+    "slot": "Chest",
+    "category": "Cloth",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Mage",
+      "Cleric"
+    ],
+    "physicalAR": 2,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 2,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 40
+  },
+  {
+    "id": "armor_hands_silk_gloves_t2",
+    "name": "Silk Gloves",
+    "slot": "Hands",
+    "category": "Cloth",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 1,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 2,
+    "value": 20
+  },
+  {
+    "id": "armor_hands_spellweaver_gloves_t3",
+    "name": "Spellweaver Gloves",
+    "slot": "Hands",
+    "category": "Cloth",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 2,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 40
+  },
+  {
+    "id": "armor_feet_silk_slippers_t2",
+    "name": "Silk Slippers",
+    "slot": "Feet",
+    "category": "Cloth",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 1,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 1,
+    "value": 20
+  },
+  {
+    "id": "armor_feet_wayfarer_slippers_t3",
+    "name": "Wayfarer Slippers",
+    "slot": "Feet",
+    "category": "Cloth",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Mage",
+      "Cleric",
+      "Rogue"
+    ],
+    "physicalAR": 2,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 1,
+    "movementPenalty": 0.0,
+    "castPenalty": 0.0,
+    "affixSlots": 2,
+    "value": 40
+  },
+  {
+    "id": "armor_head_studded_cap_t2",
+    "name": "Studded Cap",
+    "slot": "Head",
+    "category": "Light",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior",
+      "Rogue",
+      "Cleric"
+    ],
+    "physicalAR": 2,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 2,
+    "movementPenalty": 0.02,
+    "castPenalty": 0.0,
+    "affixSlots": 2,
+    "value": 33
+  },
+  {
+    "id": "armor_head_shadowhide_hood_t3",
+    "name": "Shadowhide Hood",
+    "slot": "Head",
+    "category": "Light",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Rogue",
+      "Cleric"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 2,
+    "movementPenalty": 0.02,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 68
+  },
+  {
+    "id": "armor_chest_studded_jerkin_t2",
+    "name": "Studded Jerkin",
+    "slot": "Chest",
+    "category": "Light",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 5,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 5,
+    "movementPenalty": 0.05,
+    "castPenalty": 0.01,
+    "affixSlots": 2,
+    "value": 59
+  },
+  {
+    "id": "armor_chest_shadowhide_vest_t3",
+    "name": "Shadowhide Vest",
+    "slot": "Chest",
+    "category": "Light",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 7,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 5,
+    "movementPenalty": 0.05,
+    "castPenalty": 0.01,
+    "affixSlots": 3,
+    "value": 122
+  },
+  {
+    "id": "armor_hands_studded_gloves_t2",
+    "name": "Studded Gloves",
+    "slot": "Hands",
+    "category": "Light",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 2,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 2,
+    "movementPenalty": 0.02,
+    "castPenalty": 0.0,
+    "affixSlots": 2,
+    "value": 33
+  },
+  {
+    "id": "armor_hands_shadowhide_gloves_t3",
+    "name": "Shadowhide Gloves",
+    "slot": "Hands",
+    "category": "Light",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 2,
+    "movementPenalty": 0.02,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 68
+  },
+  {
+    "id": "armor_feet_studded_boots_t2",
+    "name": "Studded Boots",
+    "slot": "Feet",
+    "category": "Light",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 2,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 3,
+    "movementPenalty": 0.03,
+    "castPenalty": 0.0,
+    "affixSlots": 2,
+    "value": 33
+  },
+  {
+    "id": "armor_feet_shadowhide_boots_t3",
+    "name": "Shadowhide Boots",
+    "slot": "Feet",
+    "category": "Light",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 3,
+    "movementPenalty": 0.03,
+    "castPenalty": 0.0,
+    "affixSlots": 3,
+    "value": 68
+  },
+  {
+    "id": "armor_head_steel_coif_t2",
+    "name": "Steel Coif",
+    "slot": "Head",
+    "category": "Medium",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 3,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 4,
+    "movementPenalty": 0.05,
+    "castPenalty": 0.01,
+    "affixSlots": 2,
+    "value": 46
+  },
+  {
+    "id": "armor_head_mithril_coif_t3",
+    "name": "Mithril Coif",
+    "slot": "Head",
+    "category": "Medium",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 5,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 4,
+    "movementPenalty": 0.05,
+    "castPenalty": 0.01,
+    "affixSlots": 3,
+    "value": 94
+  },
+  {
+    "id": "armor_chest_scale_hauberk_t2",
+    "name": "Scale Hauberk",
+    "slot": "Chest",
+    "category": "Medium",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 7,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 8,
+    "movementPenalty": 0.1,
+    "castPenalty": 0.03,
+    "affixSlots": 3,
+    "value": 86
+  },
+  {
+    "id": "armor_chest_mithril_hauberk_t3",
+    "name": "Mithril Hauberk",
+    "slot": "Chest",
+    "category": "Medium",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 11,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 8,
+    "movementPenalty": 0.1,
+    "castPenalty": 0.03,
+    "affixSlots": 3,
+    "value": 176
+  },
+  {
+    "id": "armor_hands_mithril_gauntlets_t3",
+    "name": "Mithril Gauntlets",
+    "slot": "Hands",
+    "category": "Medium",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 5,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 6,
+    "movementPenalty": 0.06,
+    "castPenalty": 0.02,
+    "affixSlots": 2,
+    "value": 103
+  },
+  {
+    "id": "armor_head_steel_helm_t2",
+    "name": "Steel Helm",
+    "slot": "Head",
+    "category": "Heavy",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "physicalAR": 5,
+    "elementalAR": {
+      "Fire": 1,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 6,
+    "movementPenalty": 0.08,
+    "castPenalty": 0.03,
+    "affixSlots": 2,
+    "value": 59
+  },
+  {
+    "id": "armor_head_knights_greathelm_t3",
+    "name": "Knight's Greathelm",
+    "slot": "Head",
+    "category": "Heavy",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "physicalAR": 7,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 6,
+    "movementPenalty": 0.08,
+    "castPenalty": 0.03,
+    "affixSlots": 3,
+    "value": 122
+  },
+  {
+    "id": "armor_chest_steel_breastplate_t2",
+    "name": "Steel Breastplate",
+    "slot": "Chest",
+    "category": "Heavy",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 11,
+    "elementalAR": {
+      "Fire": 2,
+      "Cold": 1,
+      "Lightning": 1,
+      "Acid": 1
+    },
+    "spiritualAR": {
+      "Radiant": 1,
+      "Necrotic": 1,
+      "Psychic": 1
+    },
+    "weight": 12,
+    "movementPenalty": 0.15,
+    "castPenalty": 0.05,
+    "affixSlots": 2,
+    "value": 147
+  },
+  {
+    "id": "armor_chest_knights_plate_t3",
+    "name": "Knight's Plate",
+    "slot": "Chest",
+    "category": "Heavy",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "physicalAR": 17,
+    "elementalAR": {
+      "Fire": 3,
+      "Cold": 2,
+      "Lightning": 2,
+      "Acid": 2
+    },
+    "spiritualAR": {
+      "Radiant": 2,
+      "Necrotic": 2,
+      "Psychic": 2
+    },
+    "weight": 12,
+    "movementPenalty": 0.15,
+    "castPenalty": 0.05,
+    "affixSlots": 3,
+    "value": 302
+  },
+  {
+    "id": "armor_shield_tower_shield_t3",
+    "name": "Tower Shield",
+    "slot": "OffHand",
+    "category": "Shield",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "armorBonus": 4,
+    "blockChance": 20,
+    "blockValue": 10,
+    "weight": 8,
+    "movementPenalty": 0.05,
+    "affixSlots": 3,
+    "value": 103,
+    "physicalAR": 1
   }
 ]

@@ -16,6 +16,7 @@ export namespace LB::Engine {
         std::optional<WorldPoint> exit;
         std::vector<WorldPoint> chests;
         std::vector<WorldPoint> enemies;
+        std::optional<WorldPoint> objective;   // the floor's relic or captive (or the champion's room)
     };
 
     /// <summary>
@@ -152,6 +153,7 @@ export namespace LB::Engine {
         for (const auto chest : markers.chests) {
             if (seen(chest)) marker(chest, dot, color(0.95f, 0.80f, 0.30f, 1.0f), 16);
         }
+        if (markers.objective && seen(*markers.objective)) marker(*markers.objective, dot + 1, color(0.55f, 0.95f, 0.55f, 1.0f), 16);
         for (const auto enemy : markers.enemies) {
             marker(enemy, std::max(3, dot - 1), color(0.90f, 0.20f, 0.15f, 1.0f), 17);
         }

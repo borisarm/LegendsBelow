@@ -433,6 +433,9 @@ copy "$(VcpkgManifestRoot)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\debug
     <CopyFileToFolders Include="..\Assets\Data\allies.json">
       <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
     </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Data\objectives.json">
+      <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
+    </CopyFileToFolders>
     <CopyFileToFolders Include="..\Assets\Data\statuses.json">
       <DestinationFolders>$(OutDir)Assets\Data</DestinationFolders>
     </CopyFileToFolders>

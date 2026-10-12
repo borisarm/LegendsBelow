@@ -246,5 +246,462 @@
     "range": 9.0,
     "projectileSpeed": 14.0,
     "value": 17
+  },
+  {
+    "id": "weapon_sword_steel_longsword_t2",
+    "name": "Steel Longsword",
+    "category": "Sword",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior",
+      "Rogue",
+      "Cleric"
+    ],
+    "damageDice": "1d10",
+    "damageBonus": 3,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.0,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "STR",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "value": 92
+  },
+  {
+    "id": "weapon_sword_knights_blade_t3",
+    "name": "Knight's Blade",
+    "category": "Sword",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Rogue",
+      "Cleric"
+    ],
+    "damageDice": "1d12",
+    "damageBonus": 5,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.0,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "STR",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "value": 189
+  },
+  {
+    "id": "weapon_axe_bearded_axe_t2",
+    "name": "Bearded Axe",
+    "category": "Axe",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "damageDice": "1d8",
+    "damageBonus": 3,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.0,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "STR",
+    "scaleFactor": 1.1,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 2,
+    "value": 53
+  },
+  {
+    "id": "weapon_axe_runed_war_axe_t3",
+    "name": "Runed War Axe",
+    "category": "Axe",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "damageDice": "1d10",
+    "damageBonus": 5,
+    "damageType": [
+      "Slashing"
+    ],
+    "attackTimeSeconds": 1.0,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "STR",
+    "scaleFactor": 1.1,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "value": 108
+  },
+  {
+    "id": "weapon_mace_flanged_mace_t2",
+    "name": "Flanged Mace",
+    "category": "Mace",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "damageDice": "1d8",
+    "damageBonus": 2,
+    "damageType": [
+      "Bludgeoning"
+    ],
+    "attackTimeSeconds": 1.1,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "STR",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "BonusVsArmored"
+    ],
+    "affixSlots": 2,
+    "value": 48
+  },
+  {
+    "id": "weapon_mace_blessed_morningstar_t3",
+    "name": "Blessed Morningstar",
+    "category": "Mace",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior",
+      "Cleric"
+    ],
+    "damageDice": "1d10",
+    "damageBonus": 4,
+    "damageType": [
+      "Bludgeoning"
+    ],
+    "attackTimeSeconds": 1.1,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "STR",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "BonusVsArmored"
+    ],
+    "affixSlots": 3,
+    "value": 99
+  },
+  {
+    "id": "weapon_dagger_keen_dirk_t2",
+    "name": "Keen Dirk",
+    "category": "Dagger",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d6",
+    "damageBonus": 3,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 0.7,
+    "critRange": "19-20",
+    "critMultiplier": 1.5,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SneakBonus"
+    ],
+    "affixSlots": 2,
+    "value": 46
+  },
+  {
+    "id": "weapon_dagger_assassins_kris_t3",
+    "name": "Assassin's Kris",
+    "category": "Dagger",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d8",
+    "damageBonus": 5,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 0.7,
+    "critRange": "19-20",
+    "critMultiplier": 1.5,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SneakBonus"
+    ],
+    "affixSlots": 3,
+    "value": 94
+  },
+  {
+    "id": "weapon_bow_hunters_longbow_t2",
+    "name": "Hunter's Longbow",
+    "category": "Bow",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d8",
+    "damageBonus": 2,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.2,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 2,
+    "ammoType": "Arrow",
+    "range": 9.0,
+    "projectileSpeed": 12.0,
+    "value": 48
+  },
+  {
+    "id": "weapon_bow_elven_warbow_t3",
+    "name": "Elven Warbow",
+    "category": "Bow",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d10",
+    "damageBonus": 4,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.2,
+    "critRange": "20",
+    "critMultiplier": 1.5,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "ammoType": "Arrow",
+    "range": 10.0,
+    "projectileSpeed": 12.0,
+    "value": 99
+  },
+  {
+    "id": "weapon_crossbow_heavy_crossbow_t2",
+    "name": "Heavy Crossbow",
+    "category": "Crossbow",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d10",
+    "damageBonus": 3,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.6,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 2,
+    "ammoType": "Bolt",
+    "range": 10.0,
+    "projectileSpeed": 15.0,
+    "value": 84
+  },
+  {
+    "id": "weapon_crossbow_arbalest_t3",
+    "name": "Arbalest",
+    "category": "Crossbow",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Rogue",
+      "Warrior"
+    ],
+    "damageDice": "1d12",
+    "damageBonus": 5,
+    "damageType": [
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.6,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "DEX",
+    "scaleFactor": 1.0,
+    "isTwoHanded": false,
+    "specialProperties": [],
+    "affixSlots": 3,
+    "ammoType": "Bolt",
+    "range": 11.0,
+    "projectileSpeed": 15.0,
+    "value": 171
+  },
+  {
+    "id": "weapon_staff_oaken_staff_t2",
+    "name": "Oaken Staff",
+    "category": "Staff",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Mage",
+      "Cleric"
+    ],
+    "damageDice": "1d6",
+    "damageBonus": 2,
+    "damageType": [
+      "Bludgeoning"
+    ],
+    "attackTimeSeconds": 1.1,
+    "critRange": "20",
+    "critMultiplier": 1.3,
+    "attributeScale": "INT",
+    "scaleFactor": 0.8,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SpellFocus"
+    ],
+    "affixSlots": 2,
+    "value": 40
+  },
+  {
+    "id": "weapon_staff_archmages_staff_t3",
+    "name": "Archmage's Staff",
+    "category": "Staff",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Mage",
+      "Cleric"
+    ],
+    "damageDice": "1d8",
+    "damageBonus": 4,
+    "damageType": [
+      "Bludgeoning"
+    ],
+    "attackTimeSeconds": 1.1,
+    "critRange": "20",
+    "critMultiplier": 1.3,
+    "attributeScale": "INT",
+    "scaleFactor": 0.8,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SpellFocus"
+    ],
+    "affixSlots": 3,
+    "value": 81
+  },
+  {
+    "id": "weapon_wand_ember_wand_t2",
+    "name": "Ember Wand",
+    "category": "Wand",
+    "slot": "MainHand",
+    "requiredLevel": 6,
+    "allowedClasses": [
+      "Mage"
+    ],
+    "damageDice": "1d4",
+    "damageBonus": 2,
+    "damageType": [
+      "Arcane"
+    ],
+    "attackTimeSeconds": 0.8,
+    "critRange": "20",
+    "critMultiplier": 1.25,
+    "attributeScale": "INT",
+    "scaleFactor": 0.7,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SpellFocus"
+    ],
+    "affixSlots": 2,
+    "range": 10.0,
+    "projectileSpeed": 14.0,
+    "value": 37
+  },
+  {
+    "id": "weapon_wand_starlight_wand_t3",
+    "name": "Starlight Wand",
+    "category": "Wand",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Mage"
+    ],
+    "damageDice": "1d6",
+    "damageBonus": 4,
+    "damageType": [
+      "Arcane"
+    ],
+    "attackTimeSeconds": 0.8,
+    "critRange": "20",
+    "critMultiplier": 1.25,
+    "attributeScale": "INT",
+    "scaleFactor": 0.7,
+    "isTwoHanded": false,
+    "specialProperties": [
+      "SpellFocus"
+    ],
+    "affixSlots": 3,
+    "range": 11.0,
+    "projectileSpeed": 14.0,
+    "value": 76
+  },
+  {
+    "id": "weapon_polearm_dragon_glaive_t3",
+    "name": "Dragon Glaive",
+    "category": "Polearm",
+    "slot": "MainHand",
+    "requiredLevel": 10,
+    "allowedClasses": [
+      "Warrior"
+    ],
+    "damageDice": "1d12",
+    "damageBonus": 4,
+    "damageType": [
+      "Slashing",
+      "Piercing"
+    ],
+    "attackTimeSeconds": 1.4,
+    "critRange": "20",
+    "critMultiplier": 1.6,
+    "attributeScale": "STR",
+    "scaleFactor": 1.1,
+    "isTwoHanded": true,
+    "specialProperties": [
+      "Reach"
+    ],
+    "affixSlots": 3,
+    "value": 150
   }
 ]

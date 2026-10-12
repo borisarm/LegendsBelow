@@ -130,6 +130,8 @@ namespace LB::Engine {
             }
         }
         session_->decor.Build(session_->world, depth, FloorSeed(session_->baseSeed, depth) ^ 0x5EEDu, session_->restFloor);
+        SetUpObjective(depth);
+        if (session_->restFloor && !session_->bounty.Active()) PostBounty(depth);
         if (assets_.models.loaded) {
             const auto& theme = ThemeForDepth(depth);
             session_->walls.Build(session_->world, renderingSystem_, ModelOf(theme.wall) != Systems::Rendering::InvalidModelId ? ModelOf(theme.wall) : assets_.models.wall,
@@ -202,6 +204,24 @@ namespace LB::Engine {
             default:
                 break;
             }
+            // The floor's champion leads this room: the strongest of its enemies takes the name
+            auto& objective = session_->objective;
+            if (objective.kind == ObjectiveKind::SlayChampion && objective.room == here && !objective.champion && !objective.done) {
+                const Enemy* strongest = nullptr;
+                for (const auto id : room.enemies) {
+                    const auto* enemy = session_->encounter.FindEnemy(id);
+                    if (enemy && !enemy->definition->boss && (!strongest || enemy->maxHitPoints > strongest->maxHitPoints)) strongest = enemy;
+                }
+                if (strongest) {
+                    const auto& settings = content_->GetObjectives();
+                    const auto id = strongest->id;
+                    session_->encounter.Promote(id, objective.name, settings.championHitPointsMultiplier, settings.championDamageBonus,
+                                                settings.championExperienceMultiplier);
+                    objective.champion = id;
+                    const auto* champion = session_->encounter.FindEnemy(id);
+                    session_->combatText.Add(objective.name, { champion->position.x, 2.2f, champion->position.y }, { 0.95f, 0.75f, 0.30f, 1.0f }, 3.0f);
+                }
+            }
             if (!HasFight(type) || room.enemies.empty()) room.cleared = true;
         }
 
@@ -259,6 +279,7 @@ namespace LB::Engine {
         }
         const auto& layout = session_->world.Layout();
         UpdateFeatures();
+        UpdateObjective();
         for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
             const auto type = layout.rooms[i].type;
             const auto room = static_cast<std::int32_t>(i);
@@ -322,6 +343,7 @@ namespace LB::Engine {
             draw(session_->rooms[i].chestOpened ? OpenChestModel : greater ? GreaterChestModel : ChestModel, at, { 0.35f, 0.20f, 0.08f, 1.0f });
         }
         DrawFeatures(tint);
+        DrawObjective(tint);
         draw(TrapdoorModel, session_->world.RoomCenter(layout.exitRoom), { 0.10f, 0.08f, 0.06f, 1.0f });
     }
 
@@ -350,6 +372,7 @@ namespace LB::Engine {
             candles.push_back(bits);
         }
         data["floor.candles"] = JoinIndices(candles);
+        data["floor.objective"] = session_->objective.done ? "1" : "0";
     }
 
     // Rebuild the saved floor (same run seed and depth: same layout) and what was done on it;
@@ -388,6 +411,7 @@ namespace LB::Engine {
         for (const auto index : ParseIndices(field("floor.chests").value_or(""))) {
             if (index >= 0 && static_cast<std::size_t>(index) < session_->rooms.size()) session_->rooms[static_cast<std::size_t>(index)].chestOpened = true;
         }
+        session_->objective.done = field("floor.objective").value_or("0") == "1";
     }
 
 
@@ -407,6 +431,8 @@ namespace LB::Engine {
         for (const auto& enemy : session_->encounter.GetEnemies()) {
             if (!enemy.IsDead() && session_->world.LineOfSight(session_->playerPosition, enemy.position)) markers.enemies.push_back(enemy.position);
         }
+        const auto& objective = session_->objective;
+        if (!objective.done && objective.room >= 0 && objective.kind != ObjectiveKind::ClearFloor) markers.objective = objective.at;
         session_->minimap.Draw(renderingSystem_, session_->world, markers);
     }
 
@@ -425,7 +451,7 @@ namespace LB::Engine {
         for (const auto& consumable : content_->GetConsumables()) {
             if (consumable.IsAmmunition()) add(ItemRef{ ItemKind::Consumable, consumable.id }, MerchantArrowBundle, true);
         }
-        // Companions to hire (one at a time: AllyParty::MaxAllies)
+        // Companions to hire (AllyParty::MaxAllies at once)
         for (const auto& ally : content_->GetAllies()) {
             session_->stock.push_back(StockEntry{ ItemRef{}, 1, ally.price, false, &ally });
         }
@@ -710,6 +736,133 @@ namespace LB::Engine {
                 light.radius = 3.0f;
                 light.intensity = 0.8f;
                 renderingSystem_.DrawLight(light);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Objectives and bounties (design-dungeon-and-world.md 8.2; objectives.json)
+    // ------------------------------------------------------------------------------------------
+
+    // The floor's objective, from its own seed; a relic or a captive somewhere free in its room
+    void GameEngine::SetUpObjective(std::int32_t depth) {
+        auto& objective = session_->objective;
+        objective = ChooseObjective(session_->world, FloorSeed(session_->baseSeed, depth), content_->GetObjectives(), session_->restFloor);
+        if (objective.kind != ObjectiveKind::Retrieve && objective.kind != ObjectiveKind::Rescue) return;
+        const auto center = session_->world.RoomCenter(objective.room);
+        for (const auto [dx, dy] : { std::pair{ 1.3f, 1.3f }, std::pair{ -1.3f, 1.3f }, std::pair{ 1.3f, -1.3f }, std::pair{ -1.3f, -1.3f }, std::pair{ 0.0f, 0.0f } }) {
+            const WorldPoint at{ center.x + dx, center.y + dy };
+            if (session_->world.CircleFits(at, 0.6f)) {
+                objective.at = at;
+                break;
+            }
+        }
+    }
+
+    // A relic picked up on reaching it; a captive freed once their room is clear; the rooms counted
+    void GameEngine::UpdateObjective() {
+        auto& objective = session_->objective;
+        if (objective.done || !IsPlayerAlive()) return;
+        const float distance = Distance(objective.at, session_->playerPosition);
+        switch (objective.kind) {
+        case ObjectiveKind::Retrieve:
+            if (distance <= RelicReach) CompleteObjective();
+            break;
+        case ObjectiveKind::Rescue:
+            if (distance <= CaptiveReach && session_->rooms[static_cast<std::size_t>(objective.room)].cleared) {
+                session_->combatText.Add("THANK YOU!", { objective.at.x, 2.0f, objective.at.y }, { 0.55f, 0.95f, 0.55f, 1.0f }, 3.0f);
+                session_->effects.Emit(ParticleEffect::Healing, { objective.at.x, 0.1f, objective.at.y }, 40);
+                CompleteObjective();
+            }
+            break;
+        case ObjectiveKind::ClearFloor: {
+            const auto& layout = session_->world.Layout();
+            std::int32_t cleared = 0;
+            for (std::size_t i = 0; i < layout.rooms.size(); ++i) {
+                if (HasFight(layout.rooms[i].type) && session_->rooms[i].cleared) ++cleared;
+            }
+            objective.cleared = cleared;
+            if (cleared >= objective.rooms) CompleteObjective();
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    // Done: gold and experience by the depth, a find at the hero's feet, and a banner
+    void GameEngine::CompleteObjective() {
+        auto& objective = session_->objective;
+        if (objective.done || objective.kind == ObjectiveKind::None) return;
+        objective.done = true;
+        const auto& settings = content_->GetObjectives();
+        const auto gold = settings.rewardGoldPerDepth * session_->depth;
+        const auto experience = settings.rewardExperiencePerDepth * session_->depth;
+        session_->gold += gold;
+        GrantExperience(experience);
+        DropLoot(ChestLootTable, session_->playerPosition);
+        session_->fanfare.Show(FanfareCard{ "OBJECTIVE COMPLETE", objective.Title(), { std::format("+{} gold   +{} experience", gold, experience) },
+                                            { 0.95f, 0.85f, 0.45f } });
+        PlaySound(GameSound::LevelUp, session_->playerPosition);
+    }
+
+    // At a resting place: a bounty on one of the next tier's kinds
+    void GameEngine::PostBounty(std::int32_t depth) {
+        const auto& roster = RosterForDepth(depth + 1);
+        const std::array<std::string_view, 3> kinds{ roster.light, roster.heavy, roster.caster };
+        const auto* kind = content_->FindEnemy(kinds[FloorSeed(session_->baseSeed, depth) % kinds.size()]);
+        if (!kind) return;
+        const auto& settings = content_->GetObjectives();
+        session_->bounty = Bounty{ kind->key, Plural(kind->name), settings.bountyKills, 0, settings.bountyGoldPerDepth * (depth + 1) };
+        session_->fanfare.Show(FanfareCard{ "A BOUNTY", std::format("Slay {} {} below", settings.bountyKills, session_->bounty.plural),
+                                            { std::format("The merchant pays {} gold", session_->bounty.gold) }, { 0.85f, 0.75f, 0.55f } });
+    }
+
+    void GameEngine::CountBounty(const std::string& enemyKey) {
+        auto& bounty = session_->bounty;
+        if (!bounty.Active() || enemyKey != bounty.enemyKey) return;
+        if (++bounty.killed < bounty.needed) return;
+        session_->gold += bounty.gold;
+        session_->fanfare.Show(FanfareCard{ "BOUNTY FULFILLED", std::format("{} {} slain", bounty.needed, bounty.plural),
+                                            { std::format("+{} gold", bounty.gold) }, { 0.95f, 0.85f, 0.45f } });
+        PlaySound(GameSound::LevelUp, session_->playerPosition);
+        bounty = {};
+    }
+
+    bool GameEngine::DefeatEnemy(std::uint32_t id) {
+        const auto* enemy = session_->encounter.FindEnemy(id);
+        if (!enemy || !enemy->IsTargetable()) return false;
+        const auto hit = session_->encounter.DamageEnemy(id, enemy->hitPoints * 10 + 1000, LB::Combat::DamageType::Arcane);
+        if (!hit || !hit->killed) return false;
+        session_->combatEvents.push_back(*hit);
+        OnEnemyKilled(*session_->encounter.FindEnemy(id));
+        return true;
+    }
+
+    // The relic (turning, glinting) or the captive in their cage
+    void GameEngine::DrawObjective(const Systems::Rendering::Color& tint) {
+        const auto& objective = session_->objective;
+        if (!assets_.models.loaded || objective.room < 0 || !GetViewArea().Contains(objective.at, 2.0f)) return;
+        const auto& settings = content_->GetObjectives();
+        const Systems::Rendering::Vector3 at{ objective.at.x, 0.0f, objective.at.y };
+        if (objective.kind == ObjectiveKind::Retrieve && !objective.done) {
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(objective.model), { at.x, 0.25f, at.z },
+                static_cast<float>(session_->gameTimeSeconds) * 0.8f, ModelScale * 1.3f, tint });
+            renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ { at.x, 0.5f, at.z }, 0.5f, { 1.0f, 0.85f, 0.4f, 0.6f }, true });
+            renderingSystem_.DrawLight(Systems::Rendering::PointLight{ { at.x, 1.0f, at.z }, { 1.0f, 0.85f, 0.45f, 1.0f }, 2.5f, 0.7f });
+        }
+        if (objective.kind == ObjectiveKind::Rescue) {
+            if (!objective.done) {
+                Systems::Rendering::ModelRenderData captive{ ModelOf(settings.captiveModel), at, 0.0f, PlayerModelScale, { tint.r * 0.8f, tint.g * 0.8f, tint.b * 0.9f, tint.a } };
+                if (const auto idle = renderingSystem_.FindAnimation("Idle_B")) captive.animation.current = { *idle, static_cast<float>(session_->gameTimeSeconds), true };
+                renderingSystem_.DrawModel(captive);
+            }
+            // The cage: a side of bars on each of the four sides
+            constexpr float half = 0.75f;
+            for (const auto [dx, dz, yaw] : { std::tuple{ 0.0f, half, 0.0f }, std::tuple{ 0.0f, -half, 0.0f },
+                                              std::tuple{ half, 0.0f, 1.5708f }, std::tuple{ -half, 0.0f, 1.5708f } }) {
+                renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(settings.cageModel), { at.x + dx, 0.0f, at.z + dz }, yaw,
+                    ModelScale * 0.75f, tint });
             }
         }
     }

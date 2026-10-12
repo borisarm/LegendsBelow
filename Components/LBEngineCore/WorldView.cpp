@@ -101,7 +101,7 @@ namespace LB::Engine {
     // World height just over a character's head
     float GameEngine::EnemyTop(const Enemy& enemy) const {
         if (const auto* model = assets_.models.loaded ? renderingSystem_.GetModel(ModelOf(enemy.definition->model)) : nullptr) {
-            return model->boundsMax.y * enemy.definition->modelScale + 0.1f;
+            return model->boundsMax.y * enemy.definition->modelScale * (enemy.champion ? ChampionScale : 1.0f) + 0.1f;
         }
         return 1.4f;
     }
@@ -361,15 +361,21 @@ namespace LB::Engine {
             if (enemy.statuses.MovementMultiplier() < 1.0f || enemy.statuses.PreventsActions()) tint = { tint.r * 0.65f, tint.g * 0.82f, tint.b, tint.a };   // icy
             tint.a = Encounter::Opacity(enemy);
             const Systems::Rendering::Vector3 position{ enemy.position.x, 0.0f, enemy.position.y };
+            // A champion stands taller, warmer, in a golden light
+            const float scale = type.modelScale * (enemy.champion ? ChampionScale : 1.0f);
+            if (enemy.champion && !enemy.IsDead()) {
+                tint = { tint.r * 1.15f, tint.g * 1.0f, tint.b * 0.75f, tint.a };
+                renderingSystem_.DrawLight(Systems::Rendering::PointLight{ { position.x, 1.6f, position.z }, { 1.0f, 0.75f, 0.35f, 1.0f }, 2.5f, 0.8f });
+            }
 
             if (assets_.models.loaded) {
-                Systems::Rendering::ModelRenderData body{ ModelOf(type.model), position, enemy.facingYaw, type.modelScale, tint };
+                Systems::Rendering::ModelRenderData body{ ModelOf(type.model), position, enemy.facingYaw, scale, tint };
                 body.animation = enemy.animator.GetState();
                 renderingSystem_.DrawModel(body);
 
                 for (const auto& [file, slot] : { std::pair{ &type.mainHandModel, "handslot.r" }, std::pair{ &type.offHandModel, "handslot.l" } }) {
                     if (file->empty()) continue;
-                    Systems::Rendering::ModelRenderData held{ ModelOf(*file), position, enemy.facingYaw, type.modelScale, tint };
+                    Systems::Rendering::ModelRenderData held{ ModelOf(*file), position, enemy.facingYaw, scale, tint };
                     held.transform = HeldTransform(body.model, *file, slot, body.animation);
                     if (held.transform) renderingSystem_.DrawModel(held);
                 }
@@ -461,8 +467,8 @@ namespace LB::Engine {
         }
         for (const auto& enemy : session_->encounter.GetEnemies()) {
             const bool engaged = enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking || enemy.state == EnemyState::Staggered;
-            if (enemy.definition->boss && !enemy.IsDead() && engaged) {
-                hud.boss = HudModel::Boss{ enemy.definition->name, static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints), enemy.phaseTwo };
+            if ((enemy.definition->boss || enemy.champion) && !enemy.IsDead() && engaged) {
+                hud.boss = HudModel::Boss{ enemy.champion ? enemy.title : enemy.definition->name, static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints), enemy.phaseTwo };
                 continue;   // its bar is across the top
             }
             if (!enemy.IsTargetable() || enemy.hitPoints >= enemy.maxHitPoints) continue;
@@ -495,6 +501,14 @@ namespace LB::Engine {
         }
 
         hud.savedNotice = session_->savedNoticeSeconds / SavedNoticeSeconds;
+        if (session_->objective.kind != ObjectiveKind::None) {
+            hud.goals.push_back(session_->objective.Title());
+            hud.goalsDone.push_back(session_->objective.done);
+        }
+        if (session_->bounty.Active()) {
+            hud.goals.push_back(session_->bounty.Title());
+            hud.goalsDone.push_back(false);
+        }
         for (const auto& ally : session_->allies.Allies()) {
             hud.allies.push_back({ ally.definition->name, static_cast<float>(ally.hitPoints) / static_cast<float>(std::max(1, ally.maxHitPoints)), ally.IsDown() });
         }

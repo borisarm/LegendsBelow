@@ -1,0 +1,19 @@
+{
+  "rewardGoldPerDepth": 15,
+  "rewardExperiencePerDepth": 40,
+  "championHitPointsMultiplier": 2.5,
+  "championDamageBonus": 2,
+  "championExperienceMultiplier": 3.0,
+  "championNames": ["Grishnak", "Morvayne", "Ulric", "Skarra", "Belvane", "Thorgrim", "Ysolde", "Vexmar"],
+  "championTitles": ["the Cruel", "the Unbroken", "Bonecrusher", "the Hungry", "of the Deep", "the Red", "Oathbreaker", "the Silent"],
+  "relics": [
+    { "name": "the Lost Tome", "model": "book_tan.gltf" },
+    { "name": "the Ancestral Arms", "model": "sword_shield_gold.gltf" },
+    { "name": "the Miner's Golden Pick", "model": "pickaxe_gold.gltf" }
+  ],
+  "captiveName": "a lost scout",
+  "captiveModel": "Rogue_Hooded.glb",
+  "cageModel": "bar_straight_A.gltf",
+  "bountyKills": 12,
+  "bountyGoldPerDepth": 20
+}

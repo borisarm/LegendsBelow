@@ -1,5 +1,6 @@
 // DeepLootTests.cpp - LB.Engine tests: item levels growing affixes, attribute and hit point
-// affixes on the character, legendary powers, and the item icons
+// affixes on the character, legendary powers, the item icons, each tier's gear, and the potion
+// growing with the hero
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -119,4 +120,63 @@ TEST(DeepLootTests, ItemRows_ShowTheirIcons) {
     // The sword in hand, the bow and potions in the bag: three icons at least, besides the frames
     const auto icons = std::ranges::count_if(engine.GetRendering().GetQueuedImages(), [](const auto& image) { return image.nineSlice == 0.0f && image.layerDepth == 33; });
     EXPECT_GE(icons, 3);
+}
+
+TEST(ItemTierTests, EachTier_ItsOwnCounterpart) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    const auto& content = *engine.GetContent();
+    const auto key = [&](ItemRef item) {
+        return item.kind == ItemKind::Weapon ? content.FindWeapon(item.id)->key : content.FindArmor(item.id)->key;
+    };
+    const auto sword = ItemRef::FromKey(content, "weapon_sword_rusted_shortsword_t1");
+    EXPECT_EQ(GameEngine::TierForDepth(3), 1);
+    EXPECT_EQ(GameEngine::TierForDepth(4), 2);   // the merchant below the first tier sells the second's
+    EXPECT_EQ(GameEngine::TierForDepth(8), 3);
+
+    EXPECT_EQ(key(engine.ForTier(sword, 1)), "weapon_sword_rusted_shortsword_t1");
+    EXPECT_EQ(key(engine.ForTier(sword, 2)), "weapon_sword_steel_longsword_t2");
+    EXPECT_EQ(key(engine.ForTier(sword, 3)), "weapon_sword_knights_blade_t3");   // one-handed (not the greatblade)
+    EXPECT_EQ(key(engine.ForTier(ItemRef::FromKey(content, "armor_chest_threadbare_robe_t1"), 3)), "armor_chest_archmages_robe_t3");
+    EXPECT_EQ(key(engine.ForTier(ItemRef::FromKey(content, "armor_head_rusted_sallet_t1"), 2)), "armor_head_steel_helm_t2");
+    EXPECT_EQ(content.FindWeapon(engine.ForTier(sword, 3).id)->tier, 3);
+}
+
+TEST(ItemTierTests, TheCaves_DropTheSecondTiersGear) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = CombatSeed, .dungeon = true }));
+    engine.EnterFloor(5);
+    engine.Tick(OneSixtieth);
+    const WorldPoint away{ engine.GetPlayerPosition().x + 3.0f, engine.GetPlayerPosition().y };
+    for (int i = 0; i < 20; ++i) engine.DropLoot("loot_necromancer", away);
+
+    std::int32_t gear = 0;
+    for (const auto& ground : engine.GetGroundItems()) {
+        const auto base = engine.BaseItem(ground.item);
+        if (base.kind == ItemKind::Weapon) {
+            ++gear;
+            EXPECT_EQ(engine.GetContent()->FindWeapon(base.id)->tier, 2) << engine.GetContent()->FindWeapon(base.id)->key;
+        }
+        if (base.kind == ItemKind::Armor) {
+            ++gear;
+            EXPECT_EQ(engine.GetContent()->FindArmor(base.id)->tier, 2) << engine.GetContent()->FindArmor(base.id)->key;
+        }
+    }
+    EXPECT_GT(gear, 0);
+}
+
+TEST(ItemTierTests, ThePotion_GrowsWithTheHero) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.GrantExperience(8100);   // level 10
+    engine.Tick(OneSixtieth);
+    ASSERT_EQ(PlayerLevel(engine), 10);
+    const auto* potion = engine.GetContent()->FindConsumable(GameEngine::HealingPotion);
+    ASSERT_GT(potion->healingPerLevel, 0.0f);
+    engine.DamagePlayer(60);
+    const auto before = PlayerHitPoints(engine);
+
+    ASSERT_TRUE(engine.UseItem(GameEngine::HealingPotion));
+
+    EXPECT_GE(PlayerHitPoints(engine) - before, 4 + 15);   // 2d4+2 at the least, and 1.5 a level
 }

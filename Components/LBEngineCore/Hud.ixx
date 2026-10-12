@@ -52,6 +52,8 @@ export namespace LB::Engine {
             bool down{false};
         };
         std::vector<AllyBar> allies;
+        std::vector<std::string> goals;      // the floor's objective and the bounty (top left, under the companions)
+        std::vector<bool> goalsDone;
         float savedNotice{0.0f};              // "Saved" (top left) fading out: 1 just saved, 0 gone
         std::vector<EnemyBar> enemyBars;
         std::string banner;                   // "WAVE 2", "DEPTH 3" (top center); empty: none
@@ -186,6 +188,13 @@ export namespace LB::Engine {
             if (hud.savedNotice > 0.0f) {
                 const auto y = 16 + static_cast<std::int32_t>(hud.allies.size()) * 34;
                 label("Saved", 24, y, 1.6f, Color{ std::pow(0.95f, 2.2f), std::pow(0.80f, 2.2f), std::pow(0.40f, 2.2f), std::min(1.0f, hud.savedNotice * 2.0f) });
+            }
+
+            // The objective and the bounty, under the companions (dimmed once done)
+            for (std::size_t i = 0; i < hud.goals.size(); ++i) {
+                const auto y = 16 + static_cast<std::int32_t>(hud.allies.size()) * 34 + (hud.savedNotice > 0.0f ? 20 : 0) + static_cast<std::int32_t>(i) * 20;
+                const bool done = i < hud.goalsDone.size() && hud.goalsDone[i];
+                label(done ? hud.goals[i] + " - done" : hud.goals[i], 24, y, 1.5f, done ? display(0.55f, 0.55f, 0.50f) : display(0.95f, 0.88f, 0.60f));
             }
 
             // Companions: a name and a health bar each (top left; grey while down)

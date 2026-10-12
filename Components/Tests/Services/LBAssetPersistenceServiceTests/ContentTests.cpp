@@ -67,8 +67,8 @@ protected:
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
     EXPECT_EQ(content_.GetSpells().size(), 55u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells
-    EXPECT_EQ(content_.GetWeapons().size(), 12u);
-    EXPECT_EQ(content_.GetArmour().size(), 15u);
+    EXPECT_EQ(content_.GetWeapons().size(), 29u);   // 12, and tier 2 and 3 of each kind (17)
+    EXPECT_EQ(content_.GetArmour().size(), 41u);   // 15, and tier 2 and 3 of each kind (26)
 }
 
 TEST_F(ShippedContentTests, ArcaneBolt_FieldsMapped) {
@@ -311,7 +311,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 11u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies
+    EXPECT_EQ(result.errors.size(), 12u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies, objectives
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -374,7 +374,7 @@ TEST_F(ShippedContentTests, ProgressionTotals_MatchDesignTables) {
     // design-character-system.md section 3: level 1 base + per-level gains
     EXPECT_EQ(content_.FindClass(CharacterClass::Warrior)->TotalsAt(1).maxHitPoints, 12);
     EXPECT_EQ(content_.FindClass(CharacterClass::Warrior)->TotalsAt(20).maxHitPoints, 12 + 9 * 8 + 10 * 10);
-    EXPECT_EQ(content_.FindClass(CharacterClass::Rogue)->TotalsAt(20).maxHitPoints, 11 + 9 * 6 + 10 * 7);
+    EXPECT_EQ(content_.FindClass(CharacterClass::Rogue)->TotalsAt(20).maxHitPoints, 11 + 9 * 7 + 10 * 8);
     EXPECT_EQ(content_.FindClass(CharacterClass::Mage)->TotalsAt(20).maxManaPoints, 10 + 9 * 8 + 10 * 9);
     EXPECT_EQ(content_.FindClass(CharacterClass::Cleric)->TotalsAt(10).maxHitPoints, 10 + 9 * 7);
 

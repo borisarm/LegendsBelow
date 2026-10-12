@@ -28,6 +28,9 @@ namespace LB::Systems::Rendering::Detail
         using DeviceCallback = std::function<void()>;
         using ModelPass = Detail::ModelPass;
         static constexpr std::size_t MaxPointLights = ModelPipeline::MaxPointLights;
+        // How far from the shadow pass's focus a model can still throw a shadow into the map
+        // (half its side, and room for the tallest models' shadows)
+        static constexpr float ShadowReach = ShadowMap::Extent * 0.5f + 3.0f;
 
         // sRGB render target views over a UNORM swap chain: shaders write linear colors (glTF
         // materials are linear) and the hardware encodes them for display

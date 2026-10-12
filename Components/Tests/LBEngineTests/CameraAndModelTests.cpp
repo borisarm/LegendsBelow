@@ -261,9 +261,10 @@ TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
     // the companions' bodies and great axe (3), the greater chest, gate, candles, and key (5),
     // the caves' and ruins' creatures, the frost golem, and their weapons (15),
     // the acolyte and her mace (2),
+    // the captive (the hooded rogue again), their cage, and the three relics (5),
     // weapons and the shield in the heroes' hands and their arrows and bolts (11),
     // enemy bodies, weapons and shots (13), animation sets (5 medium, 3 large)
-    EXPECT_NE(error.find("104 problems"), std::string::npos) << error;
+    EXPECT_NE(error.find("109 problems"), std::string::npos) << error;
     EXPECT_NE(error.find("wall.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Knight.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Skeleton_Minion.glb"), std::string::npos) << error;

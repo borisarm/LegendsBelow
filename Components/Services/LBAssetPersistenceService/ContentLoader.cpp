@@ -16,6 +16,15 @@ namespace LB::Content {
     namespace {
         using Json = nlohmann::json;
 
+        // An item's tier from its key's "_tN" suffix (1 without one)
+        std::int32_t TierOfKey(std::string_view key) {
+            const auto mark = key.rfind("_t");
+            std::int32_t tier = 0;
+            if (mark == std::string_view::npos || mark + 2 >= key.size()) return 1;
+            const auto [end, ec] = std::from_chars(key.data() + mark + 2, key.data() + key.size(), tier);
+            return ec == std::errc{} && end == key.data() + key.size() && tier >= 1 ? tier : 1;
+        }
+
         template<typename E>
         struct EnumName {
             std::string_view name;
@@ -348,6 +357,7 @@ namespace LB::Content {
         WeaponDefinition ReadWeapon(EntryReader& reader) {
             WeaponDefinition weapon{};
             reader.ReadString("id", weapon.key, true);
+            weapon.tier = TierOfKey(weapon.key);
             reader.ReadString("name", weapon.name, true);
             reader.ReadEnum("category", weapon.category, WeaponTypes, true);
             reader.ReadEnum("slot", weapon.slot, EquipmentSlots, false);
@@ -381,6 +391,7 @@ namespace LB::Content {
         ArmorDefinition ReadArmor(EntryReader& reader) {
             ArmorDefinition armor{};
             reader.ReadString("id", armor.key, true);
+            armor.tier = TierOfKey(armor.key);
             reader.ReadString("name", armor.name, true);
             reader.ReadEnum("slot", armor.slot, EquipmentSlots, true);
             reader.ReadEnum("category", armor.category, ArmorCategories, true);
@@ -668,6 +679,51 @@ namespace LB::Content {
             return enemy;
         }
 
+        // objectives.json: one object of settings
+        ObjectiveSettings ReadObjectives(const String& text, std::vector<String>& errors) {
+            ObjectiveSettings settings;
+            const Json json = Json::parse(text, nullptr, /*allow_exceptions*/ false);
+            if (json.is_discarded() || !json.is_object()) {
+                errors.push_back("objectives.json: expected one JSON object");
+                return settings;
+            }
+            EntryReader reader(json, "objectives.json", errors);
+            reader.ReadInt("rewardGoldPerDepth", settings.rewardGoldPerDepth, true);
+            reader.ReadInt("rewardExperiencePerDepth", settings.rewardExperiencePerDepth, true);
+            reader.ReadFloat("championHitPointsMultiplier", settings.championHitPointsMultiplier, true);
+            reader.ReadInt("championDamageBonus", settings.championDamageBonus, true);
+            reader.ReadFloat("championExperienceMultiplier", settings.championExperienceMultiplier, true);
+            reader.ReadStringArray("championNames", settings.championNames);
+            reader.ReadStringArray("championTitles", settings.championTitles);
+            reader.ReadString("captiveName", settings.captiveName, true);
+            reader.ReadString("captiveModel", settings.captiveModel, true);
+            reader.ReadString("cageModel", settings.cageModel, true);
+            reader.ReadInt("bountyKills", settings.bountyKills, true);
+            reader.ReadInt("bountyGoldPerDepth", settings.bountyGoldPerDepth, true);
+            if (settings.championNames.empty() || settings.championTitles.empty()) reader.Error("'championNames' and 'championTitles' need at least one each");
+            if (settings.championHitPointsMultiplier < 1.0f || settings.championExperienceMultiplier < 1.0f) reader.Error("the champion's multipliers must be at least 1");
+            if (settings.bountyKills <= 0) reader.Error("'bountyKills' must be positive");
+            if (!json.contains("relics") || !json["relics"].is_array() || json["relics"].empty()) {
+                reader.Error("'relics' must be a non-empty array");
+            }
+            else {
+                std::size_t index = 0;
+                for (const auto& entry : json["relics"]) {
+                    ++index;
+                    if (!entry.is_object()) {
+                        reader.Error(std::format("relic {} must be an object", index));
+                        continue;
+                    }
+                    EntryReader relicReader(entry, std::format("objectives.json: relic {}", index), errors);
+                    RelicDefinition relic;
+                    relicReader.ReadString("name", relic.name, true);
+                    relicReader.ReadString("model", relic.model, true);
+                    settings.relics.push_back(std::move(relic));
+                }
+            }
+            return settings;
+        }
+
         AllyDefinition ReadAlly(EntryReader& reader) {
             AllyDefinition ally{};
             reader.ReadString("id", ally.key, true);
@@ -792,6 +848,8 @@ namespace LB::Content {
             reader.ReadString("id", consumable.key, true);
             reader.ReadString("name", consumable.name, true);
             reader.ReadDice("healing", consumable.healing, false);
+            reader.ReadFloat("healingPerLevel", consumable.healingPerLevel, false);
+            if (consumable.healingPerLevel < 0.0f) reader.Error("'healingPerLevel' must not be negative");
             reader.ReadInt("maxStack", consumable.maxStack, false);
             reader.ReadString("ammoType", consumable.ammoType, false);
             reader.ReadBool("isKey", consumable.isKey);
@@ -993,10 +1051,10 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[11];
-        constexpr const char* files[11] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
-                                            "statuses.json", "rarities.json", "affixes.json", "allies.json" };
-        for (int i = 0; i < 11; ++i) {
+        String texts[12];
+        constexpr const char* files[12] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
+                                            "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json" };
+        for (int i = 0; i < 12; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -1005,13 +1063,14 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10], texts[11]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                                     const String& classesJson, const String& enemiesJson,
                                                     const String& consumablesJson, const String& lootJson, const String& statusesJson,
-                                                    const String& raritiesJson, const String& affixesJson, const String& alliesJson) {
+                                                    const String& raritiesJson, const String& affixesJson, const String& alliesJson,
+                                                    const String& objectivesJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -1025,6 +1084,7 @@ namespace LB::Content {
         auto rarities = ReadArray<RarityDefinition>(raritiesJson, "rarities.json", ReadRarity, result.errors);
         auto affixes = ReadArray<AffixDefinition>(affixesJson, "affixes.json", ReadAffix, result.errors);
         auto allies = ReadArray<AllyDefinition>(alliesJson, "allies.json", ReadAlly, result.errors);
+        auto objectives = objectivesJson.empty() ? ObjectiveSettings{} : ReadObjectives(objectivesJson, result.errors);
         if (!rarities.empty() && std::ranges::none_of(rarities, [](const RarityDefinition& r) { return r.weight > 0.0f; })) {
             result.errors.push_back("rarities.json: at least one rarity needs a positive 'weight'");
         }
@@ -1055,6 +1115,7 @@ namespace LB::Content {
         rarities_ = std::move(rarities);
         affixes_ = std::move(affixes);
         allies_ = std::move(allies);
+        objectives_ = std::move(objectives);
         return result;
     }
 

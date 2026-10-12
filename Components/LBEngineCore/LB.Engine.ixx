@@ -25,6 +25,8 @@ export import :GameEvents;
 export import :Allies;
 export import :Ceremony;
 export import :Features;
+export import :Objectives;
+export import :EngineTunables;
 export import :Legacy;
 export import :Torches;
 export import :Minimap;

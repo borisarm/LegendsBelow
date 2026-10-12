@@ -264,6 +264,13 @@ namespace LB::Engine {
                 if (!file->empty() && !assets_.characterModels.contains(*file)) assets_.characterModels[*file] = load(*file);
             }
         }
+        // The floors' objectives: the relics, the captive, and their cage
+        const auto& objectives = content_->GetObjectives();
+        std::vector<std::string> objectiveModels{ objectives.captiveModel, objectives.cageModel };
+        for (const auto& relic : objectives.relics) objectiveModels.push_back(relic.model);
+        for (const auto& file : objectiveModels) {
+            if (!file.empty() && !assets_.characterModels.contains(file)) assets_.characterModels[file] = load(file);
+        }
         // The tiers' floors and walls, props, and traps (KayKit Dungeon Pack 1.1)
         for (const auto file : FloorDecor::Models) {
             if (!assets_.characterModels.contains(file)) assets_.characterModels[std::string(file)] = load(file);

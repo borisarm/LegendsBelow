@@ -3,6 +3,7 @@
     "id": "consumable_potion_healing_minor",
     "name": "Minor Healing Potion",
     "healing": "2d4+2",
+    "healingPerLevel": 1.5,
     "maxStack": 10,
     "model": "potionSmall_red.glb",
     "value": 12

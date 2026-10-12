@@ -124,6 +124,7 @@ export namespace LB::Content {
         std::int32_t affixSlots{0};
         String ammoType;                              // ranged weapons only
         std::int32_t value{0};                        // gold a merchant asks for it (it buys at a fraction)
+        std::int32_t tier{1};                         // its "_tN" key suffix: the dungeon tier it drops from (design-armour-system.md 6.1)
         float range{0.0f};                            // tiles a shot flies (bows, crossbows, wands); 0: melee
         float projectileSpeed{0.0f};                  // tiles per second of the arrow or bolt
 
@@ -156,6 +157,7 @@ export namespace LB::Content {
         float castPenalty{0.0f};
         std::int32_t affixSlots{0};
         std::int32_t value{0};                        // gold a merchant asks for it (it buys at a fraction)
+        std::int32_t tier{1};                         // its "_tN" key suffix: the dungeon tier it drops from (design-armour-system.md 6.1)
 
         [[nodiscard]] bool IsUsableBy(CharacterClass characterClass) const {
             return std::ranges::find(allowedClasses, characterClass) != allowedClasses.end();
@@ -342,6 +344,35 @@ export namespace LB::Content {
     /// A companion who fights beside the hero (Assets/Data/allies.json): hired from the merchant,
     /// growing with the hero's level (design-character-system.md 7, companions)
     /// </summary>
+    /// <summary>
+    /// A relic a floor's objective asks for (objectives.json "relics")
+    /// </summary>
+    struct RelicDefinition {
+        String name;                                  // "the Lost Tome"
+        String model;                                 // what lies on the floor
+    };
+
+    /// <summary>
+    /// The floors' secondary objectives and the merchant's bounties (objectives.json,
+    /// design-dungeon-and-world.md 8.2): a named champion, a relic, a captive, or every room
+    /// cleared, and their rewards
+    /// </summary>
+    struct ObjectiveSettings {
+        std::int32_t rewardGoldPerDepth{15};          // an objective's gold, times the depth
+        std::int32_t rewardExperiencePerDepth{40};    // and experience
+        float championHitPointsMultiplier{2.5f};      // a champion: its kind's hit points times this...
+        std::int32_t championDamageBonus{2};          // ...its blows this much harder...
+        float championExperienceMultiplier{3.0f};     // ...and worth this much more
+        std::vector<String> championNames;            // "Grishnak"
+        std::vector<String> championTitles;           // "the Cruel"
+        std::vector<RelicDefinition> relics;
+        String captiveName;                           // "a lost scout"
+        String captiveModel;
+        String cageModel;                             // a side of the captive's cage
+        std::int32_t bountyKills{12};                 // a bounty asks for this many of a kind
+        std::int32_t bountyGoldPerDepth{20};          // and pays this, times the depth it is posted for
+    };
+
     struct AllyDefinition {
         ContentId id{0};
         String key;                                   // e.g. "ally_barbarian"
@@ -383,6 +414,7 @@ export namespace LB::Content {
         String key;                                   // e.g. "consumable_potion_healing_minor"
         String name;
         LB::Dice healing{};                           // hit points restored (0d0: none)
+        float healingPerLevel{0.0f};                  // and this many more for each of the drinker's levels
         std::int32_t maxStack{10};
         String model;                                 // how it lies on the floor
         String ammoType;                              // ammunition for weapons of this ammoType ("Arrow", "Bolt"); empty: not ammunition
@@ -507,13 +539,14 @@ export namespace LB::Content {
     public:
         /// <summary>
         /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json,
-        /// loot.json, statuses.json, rarities.json, affixes.json, and allies.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// loot.json, statuses.json, rarities.json, affixes.json, allies.json, and objectives.json from a directory (UTF-8 path). On any error the database is left empty and
         /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
 
         /// <summary>
-        /// Load from JSON text (one array per content type). Used by tests and tools; source
+        /// Load from JSON text (one array per content type; objectives.json is one object, its
+        /// defaults when left empty). Used by tests and tools; source
         /// names appear in error messages. With an empty class array, class rules are not checked;
         /// otherwise every character class must be defined and items/spells must agree with them.
         /// </summary>
@@ -521,7 +554,7 @@ export namespace LB::Content {
                                        const String& classesJson = "[]", const String& enemiesJson = "[]",
                                        const String& consumablesJson = "[]", const String& lootJson = "[]",
                                        const String& statusesJson = "[]", const String& raritiesJson = "[]", const String& affixesJson = "[]",
-                                       const String& alliesJson = "[]");
+                                       const String& alliesJson = "[]", const String& objectivesJson = "");
 
         void Clear() {
             spells_.clear();
@@ -535,6 +568,7 @@ export namespace LB::Content {
             rarities_.clear();
             affixes_.clear();
             allies_.clear();
+            objectives_ = {};
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
@@ -555,6 +589,7 @@ export namespace LB::Content {
         [[nodiscard]] const RarityDefinition* FindRarity(std::string_view key) const { return FindByKey(rarities_, key); }
         [[nodiscard]] const AffixDefinition* FindAffix(std::string_view key) const { return FindByKey(affixes_, key); }
         [[nodiscard]] const std::vector<AllyDefinition>& GetAllies() const noexcept { return allies_; }
+        [[nodiscard]] const ObjectiveSettings& GetObjectives() const noexcept { return objectives_; }
         [[nodiscard]] const AllyDefinition* FindAlly(std::string_view key) const { return FindByKey(allies_, key); }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
@@ -622,6 +657,7 @@ export namespace LB::Content {
         std::vector<RarityDefinition> rarities_;
         std::vector<AffixDefinition> affixes_;
         std::vector<AllyDefinition> allies_;
+        ObjectiveSettings objectives_;
     };
 
 } // namespace LB::Content

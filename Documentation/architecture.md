@@ -147,7 +147,7 @@ The shell → engine → renderer split from `modularized-game-architecture.md` 
 - [x] Dungeon variety: a look per tier (crypts, caves, ruins), props that bodies walk around, spike traps (`:Decor`)
 - [x] Character growth: the Warrior's stamina abilities, the Rogue's level-3 and level-5 abilities, a path at level 5
 - [x] Group tactics (tanks lead, shooters keep behind), telegraphed boss attacks, a boss per tier (the Golem Warlord)
-- [x] A balance check: `BalanceTests` plays each class through the first and second tiers (Release builds), growing as a player would
+- [x] A balance check: `BalanceTests` plays each class through the first three tiers (Release builds), growing as a player would; `PerformanceTests` holds a step to a frame-time budget
 - Construct the remaining Services (inventory, progression, dungeon) and inject repositories over `GetContent()`
 - [x] Gamepad input through GameInput: `LB.InputSystem:GameInputBackend` (`GameInputBackend.cpp`) reads the most recently used gamepad; the engine enables it only with a real window and polls once per simulation step while focused
 - Game state machine (main menu, town, dungeon, pause)
@@ -161,6 +161,7 @@ The shell → engine → renderer split from `modularized-game-architecture.md` 
 - [x] Each tier its inhabitants (`GameEngine::Rosters`: the caves' and ruins' creatures, the Frost Golem), remappable controls, the key light's shadow map (`:ShadowMap`), knockback, each tier's air, animated gates, walls, and chest lids
 - [x] Item levels, attribute and hit point affixes (`CharacterService::SetGear`), legendary powers, item icons
 - [x] Save slots and the legacy: records across runs, boons for new heroes (`:Legacy`, the profile)
+- [x] Floor objectives and the merchant's bounties (`:Objectives`, objectives.json); each tier its gear (`ForTier`); coverage in CI (OpenCppCoverage); the tunables in `:EngineTunables`, the character screen in `CharacterScreens.cpp`
 
 ### 4.2 Repositories
 

@@ -14,6 +14,8 @@
     <ClCompile Include="Allies.ixx" />
     <ClCompile Include="Ceremony.ixx" />
     <ClCompile Include="Features.ixx" />
+    <ClCompile Include="Objectives.ixx" />
+    <ClCompile Include="EngineTunables.ixx" />
     <ClCompile Include="Legacy.ixx" />
     <ClCompile Include="World.ixx" />
     <ClCompile Include="DungeonFloor.cpp" />
@@ -36,6 +38,7 @@
     <ClCompile Include="WorldView.cpp" />
     <ClCompile Include="CharacterScreen.ixx" />
     <ClCompile Include="PlayerProgress.cpp" />
+    <ClCompile Include="CharacterScreens.cpp" />
     <ClCompile Include="GameEngine.ixx" />
     <ClCompile Include="StepTimer.ixx" />
   </ItemGroup>

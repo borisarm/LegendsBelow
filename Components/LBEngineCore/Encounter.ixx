@@ -86,6 +86,21 @@ export namespace LB::Engine {
         [[nodiscard]] static WaveScaling ScalingFor(std::int32_t wave) noexcept { return Waves::ScalingFor(wave); }
 
         /// <summary>
+        /// Make an enemy a floor's champion: named, tougher, harder hitting, worth more
+        /// </summary>
+        bool Promote(std::uint32_t id, std::string title, float hitPointsMultiplier, std::int32_t damageBonus, float experienceMultiplier) {
+            auto* enemy = Find(id);
+            if (!enemy || enemy->IsDead()) return false;
+            enemy->champion = true;
+            enemy->title = std::move(title);
+            enemy->maxHitPoints = static_cast<std::int32_t>(std::lround(static_cast<float>(enemy->maxHitPoints) * hitPointsMultiplier));
+            enemy->hitPoints = enemy->maxHitPoints;
+            enemy->bonusDamage += damageBonus;
+            enemy->experience = static_cast<std::int32_t>(std::lround(static_cast<float>(enemy->experience) * experienceMultiplier));
+            return true;
+        }
+
+        /// <summary>
         /// How long a knockback carries its body (it covers its distance in this time)
         /// </summary>
         static constexpr float KnockSeconds = 0.18f;

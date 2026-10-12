@@ -703,6 +703,7 @@ export namespace LB::Systems::Rendering {
         SceneLighting lighting_{};
         std::vector<std::vector<ModelInstance>> opaqueInstances_;   // per model, rebuilt each frame
         std::vector<std::vector<ModelInstance>> fadedInstances_;
+        std::vector<ModelInstance> shadowCasters_;          // one model's copies near the shadow pass's focus (reused)
         std::vector<std::shared_ptr<const ModelData>> models_;   // ModelId - 1
         std::vector<std::filesystem::path> modelPaths_;          // canonical source of each model
         std::vector<std::shared_ptr<const AnimationClip>> animations_;   // AnimationId - 1
