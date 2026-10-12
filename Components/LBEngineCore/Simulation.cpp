@@ -82,6 +82,7 @@ namespace LB::Engine {
             FeelCombat();
         }
         session_->shakeSeconds = std::max(0.0f, session_->shakeSeconds - static_cast<float>(elapsedSeconds));
+        session_->savedNoticeSeconds = std::max(0.0f, session_->savedNoticeSeconds - static_cast<float>(elapsedSeconds));
         if (!menu_.IsOpen()) session_->fanfare.Update(static_cast<float>(elapsedSeconds));   // the banner plays on (not under a menu)
 
         if (session_->playerId) {

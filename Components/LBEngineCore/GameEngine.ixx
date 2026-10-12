@@ -79,6 +79,9 @@ export namespace LB::Engine {
         bool hitStop{false};
         // A fallen hero sees the run's summary and chooses to rise again; off: they get up at once (tests, tools)
         bool deathScreen{false};
+        // Save the run on its own (a new game, each floor down, quitting, closing, suspending) so
+        // Continue picks it up; off: only Save Game and the quick save write saves (tests)
+        bool autoSave{false};
     };
 
     /// <summary>
@@ -141,6 +144,19 @@ export namespace LB::Engine {
 
         // Save slot used by quick save/load (F5/F9)
         static constexpr std::int32_t QuickSaveSlot = 0;
+        static constexpr std::int32_t AutoSaveSlot = 1;
+        static constexpr float SavedNoticeSeconds = 2.0f;   // "Saved" shows this long after an autosave
+
+        /// <summary>
+        /// Save the run in the autosave slot (EngineOptions::autoSave): not behind the title screen,
+        /// not while the hero is down. Returns whether it saved.
+        /// </summary>
+        bool AutoSave();
+
+        /// <summary>
+        /// The newest save, autosave or quick save (what Continue and Load Game load); none: no save yet
+        /// </summary>
+        [[nodiscard]] std::optional<std::int32_t> LatestSaveSlot() const;
 
         // Placeholder test arena (without EngineOptions::dungeon): centered on the origin
         static constexpr float ArenaHalfWidth = 10.0f;
@@ -320,6 +336,7 @@ export namespace LB::Engine {
         }
 
         void OnSuspending() {
+            AutoSave();   // the console may not resume the game
             audioSystem_.Suspend();
         }
 
@@ -1287,6 +1304,8 @@ export namespace LB::Engine {
             float shakeDuration{0.0f};
             float shakeStrength{0.0f};               // tiles at its start
             RunStats stats;
+            bool playing{false};                     // a run being played (not the one behind the title screen)
+            float savedNoticeSeconds{0.0f};
             Fanfare fanfare;                         // a level or a path, across the screen
             PathChoice pathChoice;                   // the path cards (over the character screen)
 

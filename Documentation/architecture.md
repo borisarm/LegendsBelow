@@ -156,6 +156,7 @@ The shell → engine → renderer split from `modularized-game-architecture.md` 
 - [x] Allies (`:Allies`): companions hired from the merchant who fight beside the hero, targeted by enemies, healed by the Cleric
 - [x] Feel: ground shadows (`DrawShadow`), hit-stop and camera shake, a death screen with the run's summary, each tier's ambience and footsteps
 - [x] Level and path banners and the path cards (`:Ceremony`); dropping items
+- [x] Autosave (a new game, each floor, quitting, closing, suspending); Continue loads the newest save
 
 ### 4.2 Repositories
 

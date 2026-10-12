@@ -52,6 +52,7 @@ export namespace LB::Engine {
             bool down{false};
         };
         std::vector<AllyBar> allies;
+        float savedNotice{0.0f};              // "Saved" (top left) fading out: 1 just saved, 0 gone
         std::vector<EnemyBar> enemyBars;
         std::string banner;                   // "WAVE 2", "DEPTH 3" (top center); empty: none
         std::vector<SpellSlot> spellBar;      // bottom right; empty: none
@@ -179,6 +180,12 @@ export namespace LB::Engine {
                 bar(x, y, width, 7, *hud.castFraction, display(0.70f, 0.55f, 1.0f));
                 const auto size = renderer.MeasureText(hud.castName, 1.6f);
                 label(hud.castName, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), y + 10, 1.6f, display(0.85f, 0.80f, 1.0f));
+            }
+
+            // An autosave just happened
+            if (hud.savedNotice > 0.0f) {
+                const auto y = 16 + static_cast<std::int32_t>(hud.allies.size()) * 34;
+                label("Saved", 24, y, 1.6f, Color{ std::pow(0.95f, 2.2f), std::pow(0.80f, 2.2f), std::pow(0.40f, 2.2f), std::min(1.0f, hud.savedNotice * 2.0f) });
             }
 
             // Companions: a name and a health bar each (top left; grey while down)

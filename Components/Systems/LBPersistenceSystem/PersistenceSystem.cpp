@@ -25,7 +25,7 @@ namespace LB::Systems::Persistence {
         }
 
         String CurrentTimestampUtc() {
-            const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
+            const auto now = std::chrono::floor<std::chrono::milliseconds>(std::chrono::system_clock::now());   // "...T10:15:30.125Z": saves a moment apart still sort
             return std::format("{:%Y-%m-%dT%H:%M:%SZ}", now);
         }
 

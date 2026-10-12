@@ -481,6 +481,7 @@ namespace LB::Engine {
             hud.order = target ? std::format("Order: {} at {}", spell, target->definition->name) : std::format("Order: {}", spell);
         }
 
+        hud.savedNotice = session_->savedNoticeSeconds / SavedNoticeSeconds;
         for (const auto& ally : session_->allies.Allies()) {
             hud.allies.push_back({ ally.definition->name, static_cast<float>(ally.hitPoints) / static_cast<float>(std::max(1, ally.maxHitPoints)), ally.IsDown() });
         }

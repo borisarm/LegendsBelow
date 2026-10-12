@@ -79,6 +79,7 @@ namespace LB::Engine {
     bool GameEngine::StartRun() {
         audioSystem_.StopAll();
         session_ = std::make_unique<Session>();
+        session_->playing = !menu_.IsOpen();   // a run started from a menu is behind it until play begins
         SubscribeToEvents();
         {
             const auto& clips = assets_.playerClips;
@@ -108,6 +109,7 @@ namespace LB::Engine {
 
     void GameEngine::Shutdown() {
         if (initialized_) {
+            AutoSave();   // closing the game keeps the run for Continue
             SaveVolumePreferences();
 
             inputSystem_.Shutdown();
@@ -129,7 +131,7 @@ namespace LB::Engine {
         if (!initialized_) return false;
 
         Systems::Persistence::SaveSlotInfo metadata{};
-        metadata.saveName = slotIndex == QuickSaveSlot ? "Quick Save" : std::format("Save {}", slotIndex);
+        metadata.saveName = slotIndex == QuickSaveSlot ? "Quick Save" : slotIndex == AutoSaveSlot ? "Autosave" : std::format("Save {}", slotIndex);
         metadata.playtimeSeconds = static_cast<std::int32_t>(session_->gameTimeSeconds);
 
         Systems::Persistence::SaveData data;
@@ -142,6 +144,27 @@ namespace LB::Engine {
         }
 
         return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
+    }
+
+    bool GameEngine::AutoSave() {
+        if (!options_.autoSave || !initialized_ || !session_->playing || !session_->playerId || !IsPlayerAlive()) return false;
+        if (!SaveGame(AutoSaveSlot)) return false;
+        session_->savedNoticeSeconds = SavedNoticeSeconds;
+        return true;
+    }
+
+    std::optional<std::int32_t> GameEngine::LatestSaveSlot() const {
+        std::optional<std::int32_t> latest;
+        std::string newest;
+        for (const auto slot : { QuickSaveSlot, AutoSaveSlot }) {
+            const auto info = persistenceSystem_.GetSaveSlotInfo(slot);
+            if (!info || !info->exists) continue;
+            if (!latest || info->timestamp >= newest) {   // ISO 8601: newer sorts later
+                latest = slot;
+                newest = info->timestamp;
+            }
+        }
+        return latest;
     }
 
     bool GameEngine::LoadGame(std::int32_t slotIndex) {
@@ -181,6 +204,7 @@ namespace LB::Engine {
         if (session_->playerId) {
             ReadProgress(result.data);   // saves from before progression keep the current one
         }
+        session_->playing = true;
         return true;
     }
 

@@ -368,9 +368,21 @@ TEST_F(PersistenceSystemTests, SaveGame_SetsTimestamp) {
 
     const auto info = system.GetSaveSlotInfo(0);
     ASSERT_TRUE(info.has_value());
-    // e.g. 2026-10-09T19:42:07Z
-    EXPECT_EQ(info->timestamp.size(), 20u);
+    // e.g. 2026-10-09T19:42:07.125Z (milliseconds: saves a moment apart still sort)
+    EXPECT_EQ(info->timestamp.size(), 24u);
+    EXPECT_EQ(info->timestamp[19], '.');
     EXPECT_EQ(info->timestamp.back(), 'Z');
+}
+
+TEST_F(PersistenceSystemTests, LaterSaves_SortLater) {
+    PersistenceSystem system;
+    system.Initialize(SaveDir());
+
+    system.SaveGame(0, "First");
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    system.SaveGame(1, "Second");
+
+    EXPECT_LT(system.GetSaveSlotInfo(0)->timestamp, system.GetSaveSlotInfo(1)->timestamp);
 }
 
 TEST_F(PersistenceSystemTests, SaveAndLoad_PayloadAndMetadata_RoundTrip) {

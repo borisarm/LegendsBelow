@@ -123,6 +123,7 @@ namespace LB::Engine {
         StartFloor(session_->depth + 1);
         session_->characterService.RestCharacter(*session_->playerId);   // a breather on the stairs down
         session_->combatText.Clear();
+        AutoSave();   // each floor reached is kept
     }
 
     // Walking into a room for the first time raises its enemies (scaled by depth); a room is

@@ -5,6 +5,7 @@ All notable changes to LegendsBelow. Dates are commit dates.
 ## [Unreleased]
 
 ### Added
+- **Autosave** (`EngineOptions::autoSave`, on in the game; `GameEngine::AutoSave`, `AutoSaveSlot`): the run saves itself when a new game starts, on each floor down, on quitting to the title or the desktop, when the window closes, and when the console suspends the game (not behind the title screen, not while the hero is down); "Saved" shows briefly at the top left. **Continue**, the pause menu's Load Game, and the death screen's load the newest save, autosave or quick save (`LatestSaveSlot`). Save timestamps now carry milliseconds, so saves a moment apart still sort.
 - **Dropping items**: on the character screen, X or Delete (controller X) puts the bag item under the cursor on the floor at the hero's feet, the whole stack; it is not picked up again until they have walked away from it (`GameEngine::DropItem`, `DropAction`, `GroundItem::dropped`, `Keys::Delete`). The Controls page lists it.
 - **Level ups and paths with ceremony** (`:Ceremony`):
   - A banner across the screen when the hero reaches a level (`Fanfare`, `FanfareCard`): "LEVEL 5" swells in over a dark band edged in gold, the class beneath it, and what was gained appearing line by line: hit points, mana or stamina, attribute points to spend, each ability that opens, and a path to choose. Banners wait their turn; the game goes on under them. `LevelGainedEvent` carries the gains (`hitPoints`, `mana`, `attributePoints`). It replaces the floating "LEVEL UP!", "NEW:", and "CHOOSE A PATH" texts.

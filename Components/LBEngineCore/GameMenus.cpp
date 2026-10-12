@@ -62,7 +62,7 @@ namespace LB::Engine {
     }
 
     std::vector<MenuItem> GameEngine::BuildMenuItems() const {
-        const bool saved = persistenceSystem_.SaveSlotExists(QuickSaveSlot);
+        const bool saved = LatestSaveSlot().has_value();
         const auto percent = [this](Systems::Audio::AudioChannel channel) {
             return std::format("{}%", static_cast<int>(std::lround(audioSystem_.GetChannelVolume(channel) * 100.0f)));
         };
@@ -187,10 +187,12 @@ namespace LB::Engine {
                                  : command == MenuCommand::PlayCleric ? LB::Character::CharacterClass::Cleric : LB::Character::CharacterClass::Warrior;
             StartRun();
             CloseMenu();
+            session_->playing = true;
+            AutoSave();   // Continue works from the first floor on
             break;
         case MenuCommand::Continue:
             StartRun();
-            if (LoadGame(QuickSaveSlot)) CloseMenu();
+            if (const auto slot = LatestSaveSlot(); slot && LoadGame(*slot)) CloseMenu();
             else {
                 OpenMenu(MenuPage::Title);
                 menu_.SetMessage("The saved game could not be loaded");
@@ -203,7 +205,7 @@ namespace LB::Engine {
             menu_.SetMessage(SaveGame(QuickSaveSlot) ? "Game saved" : "The game could not be saved");
             break;
         case MenuCommand::LoadGame:
-            if (LoadGame(QuickSaveSlot)) CloseMenu();
+            if (const auto slot = LatestSaveSlot(); slot && LoadGame(*slot)) CloseMenu();
             else menu_.SetMessage("The saved game could not be loaded");
             break;
         case MenuCommand::Options:
@@ -220,10 +222,12 @@ namespace LB::Engine {
             menu_.Push(MenuPage::Credits);
             break;
         case MenuCommand::QuitToTitle:
+            AutoSave();   // the run waits for Continue
             StartRun();   // a fresh floor behind the title
             OpenMenu(MenuPage::Title);
             break;
         case MenuCommand::Quit:
+            AutoSave();
             quitRequested_ = true;
             break;
         case MenuCommand::Back:
