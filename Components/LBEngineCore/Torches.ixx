@@ -36,12 +36,16 @@ export namespace LB::Engine {
         static constexpr float FlamesPerSecond = 34.0f;
         static constexpr float EmbersPerSecond = 2.5f;
         static constexpr float FireRange = 16.0f;           // tiles from the player
+        static constexpr float GutteredBrightness = 0.2f;   // guttering: this share of their light and fire...
+        static constexpr float GutterSeconds = 1.5f;        // ...reached (or back to full) over this long
 
         /// <summary>
         /// Place the torches for a world's rooms, each tied to the wall segment behind it
         /// </summary>
         void Build(const WorldMap& world, const WallSet& walls) {
             torches_.clear();
+            brightness_ = 1.0f;
+            guttered_ = false;
             const auto& layout = world.Layout();
             constexpr float cell = WorldMap::CellTiles;
             constexpr float pi = std::numbers::pi_v<float>;
@@ -85,21 +89,36 @@ export namespace LB::Engine {
         void Clear() noexcept { torches_.clear(); }
 
         /// <summary>
+        /// Gutter every torch (a boss's last phase darkens the hall) or let them burn up again;
+        /// the light fades over GutterSeconds as the fire is fed
+        /// </summary>
+        void Gutter(bool guttered) noexcept { guttered_ = guttered; }
+        [[nodiscard]] bool IsGuttered() const noexcept { return guttered_; }
+
+        /// <summary>
+        /// How bright the torches burn now: 1 in full, down to GutteredBrightness
+        /// </summary>
+        [[nodiscard]] float Brightness() const noexcept { return brightness_; }
+
+        /// <summary>
         /// Feed the fire of the torches near the player (not those on a faded wall): a steady
         /// stream of flames, and now and then an ember drifting higher
         /// </summary>
         void UpdateFire(float elapsedSeconds, WorldPoint player, const WallSet& walls, EffectsSystem& effects) {
+            const float target = guttered_ ? GutteredBrightness : 1.0f;
+            const float change = (1.0f - GutteredBrightness) * elapsedSeconds / GutterSeconds;
+            brightness_ = brightness_ < target ? std::min(target, brightness_ + change) : std::max(target, brightness_ - change);
             for (auto& torch : torches_) {
                 if (walls.Opacity(torch.wall) < 0.5f) continue;
                 if (std::hypot(torch.position.x - player.x, torch.position.y - player.y) > FireRange) continue;
                 const auto base = FlameOf(torch);
 
-                torch.flameCarry += FlamesPerSecond * elapsedSeconds;
+                torch.flameCarry += FlamesPerSecond * brightness_ * elapsedSeconds;
                 const auto flames = static_cast<std::int32_t>(torch.flameCarry);
                 torch.flameCarry -= static_cast<float>(flames);
                 effects.Emit(ParticleEffect::TorchFlame, { base.x, base.y - 0.06f, base.z }, flames);
 
-                torch.emberCarry += EmbersPerSecond * elapsedSeconds;
+                torch.emberCarry += EmbersPerSecond * brightness_ * elapsedSeconds;
                 const auto embers = static_cast<std::int32_t>(torch.emberCarry);
                 torch.emberCarry -= static_cast<float>(embers);
                 effects.Emit(ParticleEffect::TorchEmber, { base.x, base.y + 0.05f, base.z }, embers);
@@ -124,7 +143,7 @@ export namespace LB::Engine {
                 light.position = { flame.x + std::sin(torch.yaw) * 0.25f, flame.y, flame.z + std::cos(torch.yaw) * 0.25f };
                 light.color = { 1.0f, 0.55f, 0.22f, 1.0f };
                 light.radius = LightRadius;
-                light.intensity = LightIntensity * Flicker(timeSeconds, torch.phase);
+                light.intensity = LightIntensity * brightness_ * Flicker(timeSeconds, torch.phase);
                 renderer.DrawLight(light);
             }
         }
@@ -149,6 +168,8 @@ export namespace LB::Engine {
 
     private:
         std::vector<Torch> torches_;
+        float brightness_{1.0f};
+        bool guttered_{false};
     };
 
 } // namespace LB::Engine

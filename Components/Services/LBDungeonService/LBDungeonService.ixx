@@ -157,6 +157,35 @@ export namespace LB::Services::Dungeon {
         }
 
         /// <summary>
+        /// The final floor (design-dungeon-and-world.md 7.2, 7.4: a hand-made arena): a small
+        /// entrance room, a long corridor east, and a great hall (the exit room) for the last boss,
+        /// with a solid border all around
+        /// </summary>
+        [[nodiscard]] static FloorLayout FinalFloor() {
+            constexpr std::int32_t entranceSize = 4;
+            constexpr std::int32_t corridor = 5;
+            constexpr std::int32_t hallWidth = 9;
+            constexpr std::int32_t hallHeight = 8;
+            FloorLayout layout;
+            layout.width = 1 + entranceSize + corridor + hallWidth + 1;
+            layout.height = hallHeight + 2;
+            layout.cells.assign(static_cast<std::size_t>(layout.width * layout.height), 0);
+            const CellRect entrance{ 1, 1 + (hallHeight - entranceSize) / 2, entranceSize, entranceSize };
+            const CellRect hall{ 1 + entranceSize + corridor, 1, hallWidth, hallHeight };
+            layout.rooms.push_back(LayoutRoom{ RoomType::Entrance, entrance, true, { 1 } });
+            layout.rooms.push_back(LayoutRoom{ RoomType::Exit, hall, true, { 0 } });
+            for (const auto& room : layout.rooms) {
+                for (std::int32_t y = room.area.y; y < room.area.y + room.area.height; ++y) {
+                    for (std::int32_t x = room.area.x; x < room.area.x + room.area.width; ++x) layout.SetFloor(x, y);
+                }
+            }
+            for (std::int32_t x = entrance.CenterX(); x <= hall.CenterX(); ++x) layout.SetFloor(x, entrance.CenterY());
+            layout.entranceRoom = 0;
+            layout.exitRoom = 1;
+            return layout;
+        }
+
+        /// <summary>
         /// Generate a new dungeon
         /// </summary>
         [[nodiscard]] Dungeon GenerateDungeon(const LB::String& name, const DungeonGenerationParams& params) {

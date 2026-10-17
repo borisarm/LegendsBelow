@@ -63,7 +63,7 @@ TEST(TacticsTests, Bosses_OnePerTier) {
     EXPECT_EQ(GameEngine::BossForDepth(6), "enemy_golem_warlord");
     EXPECT_EQ(GameEngine::BossForDepth(9), "enemy_frost_golem");
     EXPECT_EQ(GameEngine::BossForDepth(12), "enemy_abomination");
-    EXPECT_EQ(GameEngine::BossForDepth(15), "enemy_necromancer");   // and around again
+    EXPECT_EQ(GameEngine::BossForDepth(GameEngine::FinalDepth), "enemy_first_archivist");   // the final floor's
 }
 
 TEST(TacticsTests, Slam_ShowsItsRingThenStrikesThoseInside) {

@@ -207,17 +207,22 @@ export namespace LB::Engine {
         } };
 
         [[nodiscard]] static constexpr const Roster& RosterForDepth(std::int32_t depth) noexcept {
-            return Rosters[static_cast<std::size_t>(std::max(0, depth - 1) / BossFloorInterval) % Rosters.size()];
+            return Rosters[std::min(static_cast<std::size_t>(std::max(0, depth - 1) / BossFloorInterval), Rosters.size() - 1)];
         }
 
         /// <summary>
         /// The boss at the end of a depth's tier
         /// </summary>
         [[nodiscard]] static constexpr std::string_view BossForDepth(std::int32_t depth) noexcept {
-            return BossEnemies[static_cast<std::size_t>(std::max(0, depth - 1) / BossFloorInterval) % BossEnemies.size()];
+            return depth == FinalDepth ? FinalBoss : BossEnemies[std::min(static_cast<std::size_t>(std::max(0, depth - 1) / BossFloorInterval), BossEnemies.size() - 1)];
         }
         // A boss guards the exit at the end of each tier of floors (design-dungeon-and-world.md 7.1-7.2)
         static constexpr std::int32_t BossFloorInterval = 3;
+        // Below the last tier's resting place, the final floor (design-dungeon-and-world.md 7.4): an
+        // entrance, a corridor, and a great hall where the last boss waits
+        static constexpr std::int32_t FinalDepth = 14;
+        static constexpr std::string_view FinalBoss = "enemy_first_archivist";
+        static constexpr std::string_view FinalFloorName = "THE RED LIBRARY";
         // The floor after a boss is a resting place (design-dungeon-and-world.md 7.3): no enemies, a
         // shrine that restores the hero once, and a merchant
         static constexpr std::string_view MerchantModel = "Engineer.glb";

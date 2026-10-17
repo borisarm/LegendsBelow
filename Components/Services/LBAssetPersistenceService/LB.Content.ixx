@@ -247,6 +247,20 @@ export namespace LB::Content {
     };
 
     /// <summary>
+    /// A telegraphed attack (design-combat-system.md 9.2, boss patterns): a ring on the ground for
+    /// windupSeconds, around the attacker or at the player's spot, then everyone inside is struck
+    /// </summary>
+    struct TelegraphDefinition {
+        float radius{0.0f};                           // tiles; 0: none
+        float windupSeconds{1.0f};
+        float cooldownSeconds{8.0f};
+        float triggerRange{3.0f};                     // starts one at a player this close (and in sight)
+        bool atTarget{false};                         // at the player's spot (else around itself)
+        LB::Dice damage{};
+        DamageType damageType{DamageType::Bludgeoning};
+    };
+
+    /// <summary>
     /// Enemy stat block (Assets/Data/enemies.json, design-combat-system.md): how tough it is, its
     /// basic attack, how it moves, and the models it is drawn with
     /// </summary>
@@ -291,10 +305,13 @@ export namespace LB::Content {
         bool staggerImmune{false};                    // hits do not make it reel
         bool boss{false};                             // a floor's boss: its health bar tops the screen
         String summon;                                // enemy key it raises while fighting (empty: none)
+        std::vector<String> summons;                  // or several, raised in turn (instead of summon)
+        std::int32_t summonFromPhase{1};              // the phase it starts raising in
         std::int32_t summonCount{2};                  // raised at a time
         std::int32_t maxSummons{4};                   // of its raised enemies alive at once
         float summonCooldownSeconds{8.0f};
         float phaseTwoHealthFraction{0.0f};           // below this share of its health: raises and attacks twice as often (0: one phase)
+        float phaseThreeHealthFraction{0.0f};         // below this share: its last phase (the torches gutter, phaseThreeSlam opens; 0: none)
 
         // A telegraphed attack (design-combat-system.md 9.2, boss patterns): a ring on the ground
         // for slamWindupSeconds, around itself or at the player's spot, then everyone inside is struck
@@ -305,6 +322,7 @@ export namespace LB::Content {
         bool slamAtTarget{false};                     // at the player's spot (else around itself)
         LB::Dice slamDamage{};
         DamageType slamDamageType{DamageType::Bludgeoning};
+        std::optional<TelegraphDefinition> phaseThreeSlam;   // a second telegraphed attack in its last phase
 
         // Group tactics (design-combat-system.md 9.1): its group's other fighters do not pass a
         // tank until it closes in, and its shooters keep behind the front line
@@ -330,10 +348,26 @@ export namespace LB::Content {
         String mainHandModel;                         // optional, held at the right hand slot
         String offHandModel;                          // optional, held at the left hand slot
         float modelScale{0.5f};
+        std::array<float, 3> tint{ 1.0f, 1.0f, 1.0f };   // multiplies its model's colors (red, green, blue)
 
         [[nodiscard]] bool IsRanged() const noexcept { return projectileSpeed > 0.0f || !spell.empty(); }
         [[nodiscard]] bool IsCaster() const noexcept { return !spell.empty(); }
         [[nodiscard]] bool HasSlam() const noexcept { return slamRadius > 0.0f; }
+        [[nodiscard]] bool IsSummoner() const noexcept { return !summon.empty() || !summons.empty(); }
+
+        /// <summary>
+        /// The enemy key of its turn-th raising (summons in turn, else summon; empty: none)
+        /// </summary>
+        [[nodiscard]] const String& SummonFor(std::size_t turn) const noexcept {
+            return summons.empty() ? summon : summons[turn % summons.size()];
+        }
+
+        /// <summary>
+        /// Its first telegraphed attack (the slam fields) as a TelegraphDefinition
+        /// </summary>
+        [[nodiscard]] TelegraphDefinition Slam() const noexcept {
+            return { slamRadius, slamWindupSeconds, slamCooldownSeconds, slamTriggerRange, slamAtTarget, slamDamage, slamDamageType };
+        }
 
         [[nodiscard]] float GetResistance(DamageType type) const {
             auto it = resistances.find(type);

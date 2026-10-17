@@ -28,10 +28,11 @@ export namespace LB::Engine {
     } };
 
     /// <summary>
-    /// The tier of a depth (three floors each, a boss at the end), cycling through the themes
+    /// The tier of a depth (three floors each, a boss at the end); below the last tier (its
+    /// resting place and the final floor) it stays the last
     /// </summary>
     [[nodiscard]] inline std::size_t ThemeIndexForDepth(std::int32_t depth) noexcept {
-        return static_cast<std::size_t>(std::max(0, depth - 1) / 3) % FloorThemes.size();
+        return std::min(static_cast<std::size_t>(std::max(0, depth - 1) / 3), FloorThemes.size() - 1);
     }
 
     [[nodiscard]] inline const FloorTheme& ThemeForDepth(std::int32_t depth) noexcept {

@@ -17,7 +17,8 @@ TEST(DecorTests, Themes_ChangeWithEachTier) {
     EXPECT_EQ(ThemeForDepth(4).name, "Caves");
     EXPECT_EQ(ThemeForDepth(7).name, "Ruins");
     EXPECT_EQ(ThemeForDepth(10).name, "Archive");
-    EXPECT_EQ(ThemeForDepth(13).name, "Crypts");   // and around again
+    EXPECT_EQ(ThemeForDepth(13).name, "Archive");   // the last tier's resting place and the final floor
+    EXPECT_EQ(ThemeForDepth(GameEngine::FinalDepth).name, "Archive");
 }
 
 TEST(DecorTests, Props_StandInRoomsAndBlockBodies) {

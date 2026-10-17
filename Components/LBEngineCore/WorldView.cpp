@@ -362,7 +362,7 @@ namespace LB::Engine {
             const auto& type = *enemy.definition;
             auto tint = HitTint(shade, enemy.hitFlashSeconds);
             if (enemy.statuses.MovementMultiplier() < 1.0f || enemy.statuses.PreventsActions()) tint = { tint.r * 0.65f, tint.g * 0.82f, tint.b, tint.a };   // icy
-            tint.a = Encounter::Opacity(enemy);
+            tint = { tint.r * type.tint[0], tint.g * type.tint[1], tint.b * type.tint[2], Encounter::Opacity(enemy) };
             const Systems::Rendering::Vector3 position{ enemy.position.x, 0.0f, enemy.position.y };
             // A champion stands taller, warmer, in a golden light
             const float scale = type.modelScale * (enemy.champion ? ChampionScale : 1.0f);
@@ -471,7 +471,7 @@ namespace LB::Engine {
         for (const auto& enemy : session_->encounter.GetEnemies()) {
             const bool engaged = enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking || enemy.state == EnemyState::Staggered;
             if ((enemy.definition->boss || enemy.champion) && !enemy.IsDead() && engaged) {
-                hud.boss = HudModel::Boss{ enemy.champion ? enemy.title : enemy.definition->name, static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints), enemy.phaseTwo };
+                hud.boss = HudModel::Boss{ enemy.champion ? enemy.title : enemy.definition->name, static_cast<float>(enemy.hitPoints) / static_cast<float>(enemy.maxHitPoints), enemy.Phase() };
                 continue;   // its bar is across the top
             }
             if (!enemy.IsTargetable() || enemy.hitPoints >= enemy.maxHitPoints) continue;
@@ -518,7 +518,10 @@ namespace LB::Engine {
         for (const auto& ally : session_->allies.Allies()) {
             hud.allies.push_back({ ally.definition->name, static_cast<float>(ally.hitPoints) / static_cast<float>(std::max(1, ally.maxHitPoints)), ally.IsDown() });
         }
-        if (session_->depth > 0) hud.banner = session_->restFloor ? std::format("DEPTH {} - RESTING PLACE", session_->depth) : std::format("DEPTH {}", session_->depth);
+        if (session_->depth > 0) {
+            hud.banner = session_->restFloor ? std::format("DEPTH {} - RESTING PLACE", session_->depth)
+                       : IsFinalFloor() ? std::format("DEPTH {} - {}", session_->depth, FinalFloorName) : std::format("DEPTH {}", session_->depth);
+        }
         else if (session_->encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_->encounter.GetWave());
 
         Hud::Draw(renderingSystem_, hud);
@@ -531,16 +534,16 @@ namespace LB::Engine {
         constexpr std::int32_t points = 40;
         for (const auto& enemy : session_->encounter.GetEnemies()) {
             if (enemy.slamSeconds <= 0.0f || enemy.IsDead()) continue;
-            const auto& type = *enemy.definition;
-            const float progress = std::clamp(1.0f - enemy.slamSeconds / type.slamWindupSeconds, 0.0f, 1.0f);
+            const auto slam = enemy.ActiveSlam();
+            const float progress = std::clamp(1.0f - enemy.slamSeconds / slam.windupSeconds, 0.0f, 1.0f);
             const float pulse = 0.75f + 0.25f * std::sin(static_cast<float>(session_->gameTimeSeconds) * 18.0f);
             for (std::int32_t i = 0; i < points; ++i) {
                 const float angle = 2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / points;
                 const float c = std::cos(angle), s = std::sin(angle);
                 renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{
-                    { enemy.slamCenter.x + c * type.slamRadius, 0.08f, enemy.slamCenter.y + s * type.slamRadius }, 0.32f, { 1.0f, 0.15f, 0.06f, 3.2f * pulse }, true });
+                    { enemy.slamCenter.x + c * slam.radius, 0.08f, enemy.slamCenter.y + s * slam.radius }, 0.32f, { 1.0f, 0.15f, 0.06f, 3.2f * pulse }, true });
                 if (i % 2 == 0) {
-                    const float r = type.slamRadius * progress;
+                    const float r = slam.radius * progress;
                     renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{
                         { enemy.slamCenter.x + c * r, 0.06f, enemy.slamCenter.y + s * r }, 0.22f, { 1.0f, 0.4f, 0.1f, 2.4f }, true });
                 }

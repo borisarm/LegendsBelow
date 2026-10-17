@@ -96,9 +96,10 @@ namespace LB::Engine {
 
     // Each step: move the particles, then feed the streams. Fire, loot sparkles and the mist of
     // an open trapdoor keep going while paused; dust from rising skeletons and the player's feet
-    // only while the game runs.
+    // only while the game runs. A boss in its last phase gutters the torches until it falls.
     void GameEngine::UpdateEffects(float elapsedSeconds, bool running) {
         session_->effects.Update(elapsedSeconds);
+        session_->torches.Gutter(std::ranges::any_of(session_->encounter.GetEnemies(), [](const Enemy& enemy) { return enemy.phaseThree && !enemy.IsDead(); }));
         session_->torches.UpdateFire(elapsedSeconds, session_->playerPosition, session_->walls, session_->effects);
 
         for (const auto& item : session_->groundItems) {

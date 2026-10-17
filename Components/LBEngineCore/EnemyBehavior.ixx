@@ -162,6 +162,7 @@ export namespace LB::Engine {
 
             enemy.recoverySeconds = std::max(0.0f, enemy.recoverySeconds - dt);
             enemy.slamCooldown = std::max(0.0f, enemy.slamCooldown - dt);
+            enemy.lastSlamCooldown = std::max(0.0f, enemy.lastSlamCooldown - dt);
             enemy.lungeCooldown = std::max(0.0f, enemy.lungeCooldown - dt);
             if (!player.alive) {
                 enemy.slamSeconds = 0.0f;
@@ -181,19 +182,25 @@ export namespace LB::Engine {
                 enemy.slamSeconds -= dt;
                 if (enemy.slamSeconds > 0.0f) return EnemyAction::None;
                 enemy.slamSeconds = 0.0f;
-                enemy.slamCooldown = type.slamCooldownSeconds * (enemy.phaseTwo ? 0.6f : 1.0f);
+                if (enemy.lastSlam) enemy.lastSlamCooldown = enemy.ActiveSlam().cooldownSeconds;
+                else enemy.slamCooldown = type.slamCooldownSeconds * (enemy.phaseTwo ? 0.6f : 1.0f);
                 enemy.recoverySeconds = std::max(enemy.recoverySeconds, 0.6f);
                 return EnemyAction::Slam;
             }
-            if (type.HasSlam() && enemy.slamCooldown <= 0.0f && distance <= type.slamTriggerRange && inSight) {
-                enemy.slamSeconds = type.slamWindupSeconds;
-                enemy.slamCenter = type.slamAtTarget ? player.position : enemy.position;
+            // Its phase-three attack first when it is ready, else its slam
+            const auto start = [&](bool last) {
+                const auto telegraph = last ? *type.phaseThreeSlam : type.Slam();
+                if (telegraph.radius <= 0.0f || (last ? enemy.lastSlamCooldown : enemy.slamCooldown) > 0.0f || distance > telegraph.triggerRange || !inSight) return false;
+                enemy.lastSlam = last;
+                enemy.slamSeconds = telegraph.windupSeconds;
+                enemy.slamCenter = telegraph.atTarget ? player.position : enemy.position;
                 // The attack clip slowed so its blow falls as the wind-up ends
                 const auto own = ClipsOf(enemy).attacks.find(type.key);
                 const ClipInfo clip = own != ClipsOf(enemy).attacks.end() ? own->second : ClipInfo{ ClipsOf(enemy).attack, ClipsOf(enemy).attackSeconds };
-                enemy.animator.Play(clip.id, false, clip.seconds * type.attackImpactFraction / type.slamWindupSeconds, true, 0.1f);
-                return EnemyAction::None;
-            }
+                enemy.animator.Play(clip.id, false, clip.seconds * type.attackImpactFraction / telegraph.windupSeconds, true, 0.1f);
+                return true;
+            };
+            if ((enemy.phaseThree && type.phaseThreeSlam && start(true)) || start(false)) return EnemyAction::None;
 
             // Slowed or rooted: slower, or not moving at all
             const float speed = type.movementSpeed * enemy.statuses.MovementMultiplier();

@@ -77,9 +77,13 @@ export namespace LB::Engine {
         std::uint32_t group{0};             // its room's or wave's group: they notice the player together (0: alone)
         std::uint32_t summoner{0};          // the enemy that raised it (it crumbles with it); 0: none
         float summonSeconds{0.0f};          // until it raises enemies again (summoners)
-        bool phaseTwo{false};               // a boss below its phase-two health
+        std::size_t summonTurn{0};          // raisings so far (which of EnemyDefinition::summons comes next)
+        bool phaseTwo{false};               // a boss below its phase-two health (and still in its third)
+        bool phaseThree{false};             // a boss below its phase-three health
         float slamSeconds{0.0f};            // > 0: winding up a telegraphed attack, landing when it runs out
         float slamCooldown{0.0f};           // until it may start another
+        float lastSlamCooldown{0.0f};       // until it may start its phase-three one
+        bool lastSlam{false};               // the one winding up is its phase-three one
         WorldPoint slamCenter{};            // where the ring is
         bool champion{false};               // a floor's named elite (its objective)
         std::string title;                  // its name ("Grishnak the Cruel")
@@ -90,6 +94,14 @@ export namespace LB::Engine {
         WorldPoint lungeDirection{};
 
         [[nodiscard]] bool IsDead() const noexcept { return state == EnemyState::Dead; }
+
+        // Its phase: 1, 2 below its phase-two health, 3 below its phase-three health
+        [[nodiscard]] std::int32_t Phase() const noexcept { return phaseThree ? 3 : phaseTwo ? 2 : 1; }
+
+        // The telegraphed attack winding up (or last wound up): its phase-three one, or its slam
+        [[nodiscard]] Content::TelegraphDefinition ActiveSlam() const noexcept {
+            return lastSlam && definition->phaseThreeSlam ? *definition->phaseThreeSlam : definition->Slam();
+        }
 
         // Can be attacked: on its feet and done spawning
         [[nodiscard]] bool IsTargetable() const noexcept {

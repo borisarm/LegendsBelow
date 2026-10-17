@@ -633,10 +633,13 @@ namespace LB::Content {
             if (enemy.lifeSteal < 0.0f || enemy.lifeSteal > 1.0f) reader.Error("'lifeSteal' must be in [0, 1]");
             reader.ReadBool("boss", enemy.boss);
             reader.ReadString("summon", enemy.summon, false);
+            reader.ReadStringArray("summons", enemy.summons);
+            reader.ReadInt("summonFromPhase", enemy.summonFromPhase, false);
             reader.ReadInt("summonCount", enemy.summonCount, false);
             reader.ReadInt("maxSummons", enemy.maxSummons, false);
             reader.ReadFloat("summonCooldownSeconds", enemy.summonCooldownSeconds, false);
             reader.ReadFloat("phaseTwoHealthFraction", enemy.phaseTwoHealthFraction, false);
+            reader.ReadFloat("phaseThreeHealthFraction", enemy.phaseThreeHealthFraction, false);
             reader.ReadFloat("slamRadius", enemy.slamRadius, false);
             reader.ReadFloat("slamWindupSeconds", enemy.slamWindupSeconds, false);
             reader.ReadFloat("slamCooldownSeconds", enemy.slamCooldownSeconds, false);
@@ -645,19 +648,46 @@ namespace LB::Content {
             reader.ReadDice("slamDamage", enemy.slamDamage, false);
             reader.ReadEnum("slamDamageType", enemy.slamDamageType, DamageTypes, false);
             reader.ReadBool("tank", enemy.tank);
+            if (const auto* slam = reader.Nested("phaseThreeSlam", false, false)) {
+                EntryReader nested(*slam, reader.Context() + ": phaseThreeSlam", reader.Errors());
+                TelegraphDefinition telegraph{};
+                nested.ReadFloat("radius", telegraph.radius, true);
+                nested.ReadFloat("windupSeconds", telegraph.windupSeconds, true);
+                nested.ReadFloat("cooldownSeconds", telegraph.cooldownSeconds, true);
+                nested.ReadFloat("triggerRange", telegraph.triggerRange, true);
+                nested.ReadBool("atTarget", telegraph.atTarget);
+                nested.ReadDice("damage", telegraph.damage, true);
+                nested.ReadEnum("damageType", telegraph.damageType, DamageTypes, true);
+                if (telegraph.radius <= 0.0f || telegraph.windupSeconds <= 0.0f || telegraph.cooldownSeconds <= 0.0f) {
+                    nested.Error("'radius', 'windupSeconds', and 'cooldownSeconds' must be positive");
+                }
+                enemy.phaseThreeSlam = telegraph;
+            }
             if (enemy.slamRadius < 0.0f) reader.Error("'slamRadius' must not be negative");
             if (enemy.slamRadius > 0.0f && enemy.slamWindupSeconds <= 0.0f) reader.Error("'slamWindupSeconds' must be positive");
             if (enemy.rig != "Medium" && enemy.rig != "Large") reader.Error(std::format("'rig' must be Medium or Large, not '{}'", enemy.rig));
-            if (!enemy.summon.empty() && (enemy.summonCount < 1 || enemy.maxSummons < 1 || enemy.summonCooldownSeconds <= 0.0f)) {
+            if (enemy.IsSummoner() && (enemy.summonCount < 1 || enemy.maxSummons < 1 || enemy.summonCooldownSeconds <= 0.0f)) {
                 reader.Error("a summoner needs a positive 'summonCount', 'maxSummons', and 'summonCooldownSeconds'");
             }
             if (enemy.phaseTwoHealthFraction < 0.0f || enemy.phaseTwoHealthFraction >= 1.0f) reader.Error("'phaseTwoHealthFraction' must be in [0, 1)");
+            if (enemy.phaseThreeHealthFraction < 0.0f || (enemy.phaseThreeHealthFraction > 0.0f && enemy.phaseThreeHealthFraction >= enemy.phaseTwoHealthFraction)) {
+                reader.Error("'phaseThreeHealthFraction' must be below 'phaseTwoHealthFraction' (0: no third phase)");
+            }
+            if (enemy.summonFromPhase < 1 || enemy.summonFromPhase > 3) reader.Error("'summonFromPhase' must be 1, 2, or 3");
 
             reader.ReadString("lootTable", enemy.lootTable, false);
             reader.ReadString("model", enemy.model, true);
             reader.ReadString("mainHandModel", enemy.mainHandModel, false);
             reader.ReadString("offHandModel", enemy.offHandModel, false);
             reader.ReadFloat("modelScale", enemy.modelScale, false);
+            if (const auto* tint = reader.Nested("tint", false, true)) {
+                if (tint->size() != 3 || !std::ranges::all_of(*tint, [](const Json& c) { return c.is_number() && c.get<float>() >= 0.0f; })) {
+                    reader.Error("'tint' must be three numbers (red, green, blue), none negative");
+                }
+                else {
+                    for (std::size_t i = 0; i < 3; ++i) enemy.tint[i] = (*tint)[i].get<float>();
+                }
+            }
 
             if (enemy.level < 1) reader.Error("'level' must be at least 1");
             if (enemy.hitPoints < 1) reader.Error("'hitPoints' must be at least 1");
@@ -1002,10 +1032,12 @@ namespace LB::Content {
                 }
             }
             for (const auto& enemy : enemies) {
-                if (!enemy.summon.empty()) {
-                    const auto summoned = std::ranges::find(enemies, enemy.summon, &EnemyDefinition::key);
-                    if (summoned == enemies.end()) errors.push_back(std::format("enemies.json: {}: unknown summon '{}'", enemy.key, enemy.summon));
-                    else if (!summoned->summon.empty()) errors.push_back(std::format("enemies.json: {}: its summon '{}' summons too", enemy.key, enemy.summon));
+                auto raised = enemy.summons;
+                if (!enemy.summon.empty()) raised.push_back(enemy.summon);
+                for (const auto& key : raised) {
+                    const auto summoned = std::ranges::find(enemies, key, &EnemyDefinition::key);
+                    if (summoned == enemies.end()) errors.push_back(std::format("enemies.json: {}: unknown summon '{}'", enemy.key, key));
+                    else if (summoned->IsSummoner()) errors.push_back(std::format("enemies.json: {}: its summon '{}' summons too", enemy.key, key));
                 }
                 if (!enemy.IsCaster()) continue;
                 const auto* spell = findSpell(enemy.spell);

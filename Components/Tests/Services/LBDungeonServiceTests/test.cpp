@@ -456,6 +456,28 @@ namespace {
     }
 }
 
+TEST(FloorGenerationTests, FinalFloor_AnEntranceAndAGreatHall) {
+    const auto layout = DungeonService::FinalFloor();
+
+    ASSERT_EQ(layout.rooms.size(), 2u);
+    const auto& entrance = layout.rooms[static_cast<std::size_t>(layout.entranceRoom)];
+    const auto& hall = layout.rooms[static_cast<std::size_t>(layout.exitRoom)];
+    EXPECT_EQ(entrance.type, RoomType::Entrance);
+    EXPECT_EQ(hall.type, RoomType::Exit);
+    EXPECT_GE(hall.area.width * hall.area.height, 2 * 6 * 6);   // twice the largest generated room
+    EXPECT_FALSE(Overlap(entrance.area, hall.area));
+    EXPECT_EQ(entrance.connections, std::vector<std::int32_t>{ layout.exitRoom });
+    EXPECT_EQ(ReachableFloorCells(layout, layout.entranceRoom), layout.FloorCellCount());
+    for (std::int32_t x = 0; x < layout.width; ++x) {
+        EXPECT_FALSE(layout.IsFloor(x, 0));
+        EXPECT_FALSE(layout.IsFloor(x, layout.height - 1));
+    }
+    for (std::int32_t y = 0; y < layout.height; ++y) {
+        EXPECT_FALSE(layout.IsFloor(0, y));
+        EXPECT_FALSE(layout.IsFloor(layout.width - 1, y));
+    }
+}
+
 TEST(FloorGenerationTests, SameSeed_SameFloor_OtherSeed_Different) {
     DungeonService service;
     const FloorGenerationParams params{};

@@ -339,6 +339,7 @@ export namespace LB::Engine {
         /// The torches on the room walls of the current floor
         /// </summary>
         [[nodiscard]] const std::vector<Torch>& GetTorches() const noexcept { return session_->torches.Torches(); }
+        [[nodiscard]] float GetTorchBrightness() const noexcept { return session_->torches.Brightness(); }   // 1: burning in full
         [[nodiscard]] const WallSet& GetWalls() const noexcept { return session_->walls; }
 
         /// <summary>
@@ -396,6 +397,18 @@ export namespace LB::Engine {
         /// objective, the bounty, experience, and loot; false when there is none to slay
         /// </summary>
         bool DefeatEnemy(std::uint32_t id);
+
+        /// <summary>
+        /// Bring an enemy down to a share of its health with a blow its defenses do not touch
+        /// (tools and tests: a boss's phases); false when there is none, or it is that low already
+        /// </summary>
+        bool WoundEnemy(std::uint32_t id, float healthFraction) {
+            const auto* enemy = session_->encounter.FindEnemy(id);
+            if (!enemy || !enemy->IsTargetable()) return false;
+            const auto left = std::max(1, static_cast<std::int32_t>(static_cast<float>(enemy->maxHitPoints) * healthFraction));
+            if (left >= enemy->hitPoints) return false;
+            return session_->encounter.DamageEnemy(id, enemy->hitPoints - left, LB::Combat::DamageType::None).has_value();
+        }
 
         /// <summary>
         /// This floor's objective (design-dungeon-and-world.md 8.2) and the merchant's bounty
@@ -595,6 +608,11 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] bool IsRestFloor() const noexcept { return session_->restFloor; }
         [[nodiscard]] static bool IsRestDepth(std::int32_t depth) noexcept { return depth > 1 && depth % BossFloorInterval == 1; }
+
+        /// <summary>
+        /// This floor is the final one (FinalDepth): the great hall of the last boss
+        /// </summary>
+        [[nodiscard]] bool IsFinalFloor() const noexcept { return session_->depth == FinalDepth && session_->dungeonMode; }
 
         /// <summary>
         /// Go straight to a floor of the dungeon (tools and tests; the game descends by the trapdoor)

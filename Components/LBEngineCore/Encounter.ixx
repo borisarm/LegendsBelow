@@ -216,14 +216,14 @@ export namespace LB::Engine {
                     break;
                 case EnemyAction::Slam: {
                     // Everyone inside the ring is struck (through armour, like a spell)
-                    const auto& type = *enemy.definition;
-                    bursts_.push_back({ enemy.slamCenter, type.slamRadius, type.slamDamageType });
+                    const auto slam = enemy.ActiveSlam();
+                    bursts_.push_back({ enemy.slamCenter, slam.radius, slam.damageType });
                     const auto strike = [&](const PlayerTarget& body) {
-                        if (!body.alive || Distance(body.position, enemy.slamCenter) > type.slamRadius + body.radius) return;
-                        auto dice = type.slamDamage;
+                        if (!body.alive || Distance(body.position, enemy.slamCenter) > slam.radius + body.radius) return;
+                        auto dice = slam.damage;
                         dice.bonus += enemy.bonusDamage;
                         const auto damage = combat_.RollDice(dice);
-                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, Services::Combat::CombatService::ResolveSpellHit(damage, type.slamDamageType, body.defense),
+                        events.push_back({ CombatEventKind::EnemyAttack, enemy.id, Services::Combat::CombatService::ResolveSpellHit(damage, slam.damageType, body.defense),
                                            false, nullptr, body.ally });
                     };
                     strike(player);
@@ -616,9 +616,9 @@ export namespace LB::Engine {
             }
         }
 
-        // Summoners raise enemies around them while fighting (twice as often in their second
-        // phase); a boss turns to its second phase below its phase-two health; what a summoner
-        // raised crumbles when it falls
+        // Summoners raise enemies around them while fighting (from their summonFromPhase on, twice
+        // as often from their second phase; several kinds in turn); a boss turns to its second
+        // and third phases below their health; what a summoner raised crumbles when it falls
         void UpdateSummoners(float elapsedSeconds, const PlayerTarget& player) {
             struct Raise { const Content::EnemyDefinition* type; WorldPoint at; std::int32_t wave; std::uint32_t group; std::uint32_t summoner; };
             std::vector<Raise> raises;
@@ -630,9 +630,14 @@ export namespace LB::Engine {
                     enemy.summonSeconds = 0.0f;   // it raises at once
                     phaseChanges_.push_back(enemy.id);
                 }
-                const auto* summoned = type.summon.empty() || !content_ ? nullptr : content_->FindEnemy(type.summon);
+                if (enemy.phaseTwo && !enemy.phaseThree && type.phaseThreeHealthFraction > 0.0f
+                    && enemy.hitPoints <= static_cast<float>(enemy.maxHitPoints) * type.phaseThreeHealthFraction) {
+                    enemy.phaseThree = true;
+                    enemy.lastSlamCooldown = 0.0f;   // its last attack comes at once
+                    phaseChanges_.push_back(enemy.id);
+                }
                 const bool fighting = enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking || enemy.state == EnemyState::Staggered;
-                if (!summoned || !fighting || !player.alive) continue;
+                if (!type.IsSummoner() || !content_ || enemy.Phase() < type.summonFromPhase || !fighting || !player.alive) continue;
                 enemy.summonSeconds -= elapsedSeconds;
                 if (enemy.summonSeconds > 0.0f) continue;
                 enemy.summonSeconds = type.summonCooldownSeconds * (enemy.phaseTwo ? 0.5f : 1.0f);
@@ -640,6 +645,8 @@ export namespace LB::Engine {
                 const auto alive = std::ranges::count_if(enemies_, [&](const Enemy& e) { return e.summoner == enemy.id && !e.IsDead(); });
                 const auto count = std::min<std::int64_t>(type.summonCount, type.maxSummons - alive);
                 for (std::int64_t i = 0; i < count; ++i) {
+                    const auto* summoned = content_->FindEnemy(type.SummonFor(enemy.summonTurn++));
+                    if (!summoned) continue;
                     const float angle = std::uniform_real_distribution<float>(0.0f, 2.0f * std::numbers::pi_v<float>)(rng_);
                     WorldPoint at{ enemy.position.x + std::sin(angle) * 1.6f, enemy.position.y + std::cos(angle) * 1.6f };
                     if (world_ && !world_->CircleFits(at, CharacterRadius)) at = enemy.position;

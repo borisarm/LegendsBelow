@@ -66,7 +66,8 @@ namespace LB::Engine {
 
     void GameEngine::StartFloor(std::int32_t depth) {
         session_->depth = depth;
-        session_->world = WorldMap(dungeonService_.GenerateFloor(ParamsFor(depth), FloorSeed(session_->baseSeed, depth)), {});
+        session_->world = WorldMap(depth == FinalDepth ? Services::Dungeon::DungeonService::FinalFloor()
+                                                       : dungeonService_.GenerateFloor(ParamsFor(depth), FloorSeed(session_->baseSeed, depth)), {});
         const auto& layout = session_->world.Layout();
 
         session_->rooms.assign(layout.rooms.size(), {});
@@ -192,8 +193,12 @@ namespace LB::Engine {
                 raise(brute, session_->depth >= 3 ? 1 : 0);
                 break;
             case RoomType::Exit:
-                // The end of a tier: the boss guards the way down (it opens when the room is clear)
-                if (session_->depth % BossFloorInterval == 0 && boss) {
+                // The final floor: the last boss alone in its hall (its echoes come later); the end
+                // of a tier: the boss guards the way down (it opens when the room is clear)
+                if (session_->depth == FinalDepth && boss) {
+                    raise(boss, 1);
+                }
+                else if (session_->depth % BossFloorInterval == 0 && boss) {
                     raise(boss, 1);
                     raise(light, 2);
                 }
@@ -759,7 +764,7 @@ namespace LB::Engine {
     // The floor's objective, from its own seed; a relic or a captive somewhere free in its room
     void GameEngine::SetUpObjective(std::int32_t depth) {
         auto& objective = session_->objective;
-        objective = ChooseObjective(session_->world, FloorSeed(session_->baseSeed, depth), content_->GetObjectives(), session_->restFloor);
+        objective = ChooseObjective(session_->world, FloorSeed(session_->baseSeed, depth), content_->GetObjectives(), session_->restFloor || depth == FinalDepth);
         if (objective.kind != ObjectiveKind::Retrieve && objective.kind != ObjectiveKind::Rescue) return;
         const auto center = session_->world.RoomCenter(objective.room);
         for (const auto [dx, dy] : { std::pair{ 1.3f, 1.3f }, std::pair{ -1.3f, 1.3f }, std::pair{ 1.3f, -1.3f }, std::pair{ -1.3f, -1.3f }, std::pair{ 0.0f, 0.0f } }) {
@@ -890,7 +895,7 @@ namespace LB::Engine {
     // tier's (by the floor's seed: the same floor, the same book)
     void GameEngine::PlaceLoreBook(std::int32_t depth) {
         session_->book.reset();
-        if (session_->restFloor || !session_->dungeonMode) return;
+        if (session_->restFloor || !session_->dungeonMode || depth == FinalDepth) return;   // the final floor: no book
         const auto tier = static_cast<std::int32_t>(ThemeIndexForDepth(depth)) + 1;
         std::vector<const Content::LoreDefinition*> entries;
         for (const auto& lore : content_->GetLore()) {

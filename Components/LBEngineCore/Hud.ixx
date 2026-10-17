@@ -62,7 +62,7 @@ export namespace LB::Engine {
         struct Boss {
             std::string name;
             float fraction{1.0f};
-            bool phaseTwo{false};
+            std::int32_t phase{1};            // 2: enraged, 3: its last phase
         };
         std::optional<Boss> boss;
         std::string hint;                     // the tactical pause's help (bottom center)
@@ -214,8 +214,8 @@ export namespace LB::Engine {
             if (hud.boss) {
                 constexpr std::int32_t width = 360;
                 const std::int32_t x = screenWidth / 2 - width / 2;
-                bar(x, 66, width, 12, hud.boss->fraction, hud.boss->phaseTwo ? display(0.75f, 0.20f, 0.85f) : display(0.80f, 0.14f, 0.12f));
-                const auto name = hud.boss->phaseTwo ? hud.boss->name + " - ENRAGED" : hud.boss->name;
+                bar(x, 66, width, 12, hud.boss->fraction, hud.boss->phase >= 2 ? display(0.75f, 0.20f, 0.85f) : display(0.80f, 0.14f, 0.12f));
+                const auto name = hud.boss->phase >= 3 ? hud.boss->name + " - UNBOUND" : hud.boss->phase == 2 ? hud.boss->name + " - ENRAGED" : hud.boss->name;
                 const auto size = renderer.MeasureText(name, 2.0f);
                 label(name, screenWidth / 2 - static_cast<std::int32_t>(size.width / 2.0f), 44, 2.0f, display(0.95f, 0.75f, 0.30f));
             }

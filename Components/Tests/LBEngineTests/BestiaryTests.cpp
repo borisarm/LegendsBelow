@@ -9,7 +9,7 @@ TEST(BestiaryTests, EachTier_ItsOwnInhabitants) {
     EXPECT_EQ(GameEngine::RosterForDepth(5).brute, "enemy_orc_brute");
     EXPECT_EQ(GameEngine::RosterForDepth(8).caster, "enemy_tiefling");
     EXPECT_EQ(GameEngine::RosterForDepth(11).caster, "enemy_lorekeeper");      // the archive
-    EXPECT_EQ(GameEngine::RosterForDepth(14).light, "enemy_skeleton_minion");   // and around again
+    EXPECT_EQ(GameEngine::RosterForDepth(14).light, "enemy_shadow_blade");      // the archive's below the last tier too
 
     // Every name of every roster is in the shipped content
     GameEngine engine;

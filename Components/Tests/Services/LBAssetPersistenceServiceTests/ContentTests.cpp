@@ -626,7 +626,7 @@ namespace {
 }
 
 TEST_F(ShippedContentTests, Enemies_SkeletonMinionAndWarrior) {
-    ASSERT_EQ(content_.GetEnemies().size(), 20u);   // the crypts' skeletons and golem, the caves', ruins', and archive's creatures, four bosses
+    ASSERT_EQ(content_.GetEnemies().size(), 21u);   // the crypts' skeletons and golem, the caves', ruins', and archive's creatures, five bosses
 
     const auto* minion = content_.FindEnemy("enemy_skeleton_minion");
     ASSERT_NE(minion, nullptr);
@@ -995,6 +995,56 @@ TEST_F(ShippedContentTests, GolemAndNecromancer) {
     EXPECT_TRUE(boss->IsCaster());
     EXPECT_EQ(boss->summon, "enemy_skeleton_minion");
     EXPECT_GT(boss->phaseTwoHealthFraction, 0.0f);
+}
+
+TEST_F(ShippedContentTests, FirstArchivist_ThreePhasesEchoesAndALastAttack) {
+    const auto* boss = content_.FindEnemy("enemy_first_archivist");
+    ASSERT_NE(boss, nullptr);
+    EXPECT_TRUE(boss->boss);
+    EXPECT_TRUE(boss->IsCaster());
+    EXPECT_GT(boss->phaseThreeHealthFraction, 0.0f);
+    EXPECT_LT(boss->phaseThreeHealthFraction, boss->phaseTwoHealthFraction);
+    EXPECT_TRUE(boss->IsSummoner());
+    EXPECT_EQ(boss->summons.size(), 3u);                   // one of each earlier tier
+    EXPECT_EQ(boss->summonFromPhase, 2);
+    EXPECT_EQ(boss->SummonFor(0), boss->summons[0]);
+    EXPECT_EQ(boss->SummonFor(3), boss->summons[0]);       // in turn
+    ASSERT_TRUE(boss->phaseThreeSlam.has_value());
+    EXPECT_FALSE(boss->phaseThreeSlam->atTarget);          // around itself
+    EXPECT_EQ(boss->phaseThreeSlam->damage.count, 4);
+    EXPECT_TRUE(boss->Slam().atTarget);                    // its first: under the hero
+    EXPECT_LT(boss->tint[1], 1.0f);                        // drawn red
+}
+
+TEST(EnemyValidationTests, PhasesSummonsSlamsAndTint_Validated) {
+    {
+        ContentDatabase content;
+        auto enemy = EnemyWith("phaseTwoHealthFraction", "0.5");
+        enemy.insert(enemy.size() - 1, R"(,"phaseThreeHealthFraction":0.6)");
+        auto result = LoadEnemies(content, Array(enemy));
+        EXPECT_TRUE(AnyErrorContains(result, "'phaseThreeHealthFraction' must be below 'phaseTwoHealthFraction'")) << ErrorsOf(result);
+    }
+    {
+        ContentDatabase content;
+        auto result = LoadEnemies(content, Array(EnemyWith("summons", R"(["enemy_a","enemy_missing"])")));
+        EXPECT_TRUE(AnyErrorContains(result, "unknown summon 'enemy_missing'")) << ErrorsOf(result);
+    }
+    {
+        ContentDatabase content;
+        auto result = LoadEnemies(content, Array(EnemyWith("phaseThreeSlam", R"({"radius":0,"windupSeconds":1,"cooldownSeconds":5,"triggerRange":3,"damage":"1d6","damageType":"Fire"})")));
+        EXPECT_TRUE(AnyErrorContains(result, "phaseThreeSlam: 'radius', 'windupSeconds', and 'cooldownSeconds' must be positive")) << ErrorsOf(result);
+    }
+    {
+        ContentDatabase content;
+        auto result = LoadEnemies(content, Array(EnemyWith("tint", "[1.0, 0.5]")));
+        EXPECT_TRUE(AnyErrorContains(result, "'tint' must be three numbers")) << ErrorsOf(result);
+    }
+    {
+        ContentDatabase content;
+        auto result = LoadEnemies(content, Array(EnemyWith("tint", "[1.0, 0.5, 0.25]")));
+        ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
+        EXPECT_FLOAT_EQ(content.FindEnemy("enemy_a")->tint[2], 0.25f);
+    }
 }
 
 TEST(EnemyValidationTests, BadRigAndUnknownSummon_Rejected) {

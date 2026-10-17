@@ -226,6 +226,19 @@ Example:
   - Includes a merchant, shrine, or storage access.
   - Provides a safe save point and loadout management.
 
+### 7.4 The End of the Below
+
+The run ends below the last tier (the Archive, floors 10-12) and its resting place (floor 13):
+
+- **The final floor (14), the Red Library**: a hand-made arena, not a generated floor: a small entrance room, a long corridor, and a great hall (the exit room). No objective, no lore book; the last tier's look.
+- **The First Archivist**, alone in the hall when the hero walks in: the founder of the Archivists (see the Archive's lore), a caster who keeps its distance, in three phases:
+  1. Arcane bolts, and a ring under the hero's feet.
+  2. Below two thirds of its health, enraged (attacks and raisings quicken): it raises echoes of the earlier tiers' guardians in turn (a skeleton warrior, an orc raider, a vampire), up to four at once; they crumble when it falls.
+  3. Below a third, unbound: the hall's torches gutter to a fifth of their light until it falls, and a second, wider ring around itself opens, to drive off whoever stands close.
+- **Victory** (to come): its fall ends the run, with a way up, a summary, and New Game+ (design-loot-and-progression.md 7.3).
+
+Tunables: `FinalDepth`, `FinalBoss` (EngineTunables); the boss's phases, echoes (`summons`, `summonFromPhase`), and last attack (`phaseThreeSlam`) in enemies.json.
+
 ---
 
 ## 8. Objectives and Events
