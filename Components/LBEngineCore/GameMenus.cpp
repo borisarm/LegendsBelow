@@ -137,6 +137,7 @@ namespace LB::Engine {
             };
         case MenuPage::Victory:
             return {
+                { "Descend Again", MenuCommand::DescendAgain, true, std::format("New Game+{}", session_->cycle + 1) },
                 { "Linger in the Hall", MenuCommand::Linger, true, "the way up stays open" },
                 { "Quit to Title", MenuCommand::QuitToTitle },
             };
@@ -290,6 +291,10 @@ namespace LB::Engine {
             break;
         case MenuCommand::Linger:
             CloseMenu();
+            break;
+        case MenuCommand::DescendAgain:
+            CloseMenu();
+            DescendAgain();
             break;
         case MenuCommand::Credits:
             menu_.Push(MenuPage::Credits);

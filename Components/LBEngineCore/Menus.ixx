@@ -40,6 +40,7 @@ export namespace LB::Engine {
         Controls,
         RiseAgain,      // a fallen hero gets up at the floor's entrance
         Linger,         // stay in the hall after the victory
+        DescendAgain,   // New Game+: the same hero down a stronger Below
         OpenSaveSlots,
         OpenLoadSlots,
         SaveToSlot,     // the item's slot

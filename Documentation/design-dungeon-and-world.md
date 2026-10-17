@@ -235,7 +235,7 @@ The run ends below the last tier (the Archive, floors 10-12) and its resting pla
   1. Arcane bolts, and a ring under the hero's feet.
   2. Below two thirds of its health, enraged (attacks and raisings quicken): it raises echoes of the earlier tiers' guardians in turn (a skeleton warrior, an orc raider, a vampire), up to four at once; they crumble when it falls.
   3. Below a third, unbound: the hall's torches gutter to a fifth of their light until it falls, and a second, wider ring around itself opens, to drive off whoever stands close.
-- **Victory**: its fall silences the Below (a banner with the codex's last page, "The Red Book", found only this way) and opens a way up, a column of light where a trapdoor would be. Stepping into it opens the victory page: the run's summary (time, enemies and bosses slain, gold, falls, pages of the codex) and what next (linger in the hall, quit to the title; New Game+, design-loot-and-progression.md 7.3, to come).
+- **Victory**: its fall silences the Below (a banner with the codex's last page, "The Red Book", found only this way) and opens a way up, a column of light where a trapdoor would be. Stepping into it opens the victory page: the run's summary (time, enemies and bosses slain, gold, falls, pages of the codex) and what next: Descend Again (New Game+, design-loot-and-progression.md 7.3), linger in the hall, or quit to the title.
 - **The legacy** (design-loot-and-progression.md 7.1) keeps the victories and the quickest, and a first victory unlocks **Laurels**: new heroes' heirlooms are rare, not uncommon.
 
 Tunables: `FinalDepth`, `FinalBoss` (EngineTunables); the boss's phases, echoes (`summons`, `summonFromPhase`), and last attack (`phaseThreeSlam`) in enemies.json.

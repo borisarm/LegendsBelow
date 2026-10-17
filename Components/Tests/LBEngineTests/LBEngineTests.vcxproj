@@ -122,6 +122,7 @@
     <ClCompile Include="SpellTests.cpp" />
     <ClCompile Include="BossTests.cpp" />
     <ClCompile Include="FinalBossTests.cpp" />
+    <ClCompile Include="NewGamePlusTests.cpp" />
     <ClCompile Include="OrderTests.cpp" />
     <ClCompile Include="ClassTests.cpp" />
     <ClCompile Include="ItemTests.cpp" />

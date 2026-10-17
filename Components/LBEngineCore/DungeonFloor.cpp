@@ -124,7 +124,7 @@ namespace LB::Engine {
                     const float angle = 0.7f + static_cast<float>(pile) * 1.9f;
                     GroundItem gold{};
                     gold.id = session_->nextGroundItemId++;
-                    gold.quantity = session_->lootRoller.RollDice(LB::Dice{ 2, 6, 2 + depth });
+                    gold.quantity = session_->lootRoller.RollDice(LB::Dice{ 2, 6, 2 + ChallengeDepth() });
                     gold.position = { center.x + std::cos(angle) * 1.4f, center.y + std::sin(angle) * 1.4f };
                     if (session_->world.CircleFits(gold.position, 0.2f)) session_->groundItems.push_back(gold);
                 }
@@ -143,6 +143,22 @@ namespace LB::Engine {
         session_->effects.Clear();
         session_->minimap.Reset(session_->world);
         session_->minimap.Reveal(session_->world, session_->playerPosition);
+    }
+
+    void GameEngine::DescendAgain() {
+        if (!session_->dungeonMode || !session_->playerId) return;
+        ++session_->cycle;
+        session_->baseSeed = FloorSeed(session_->baseSeed, 1000 + session_->cycle);   // a new Below: other floors
+        session_->bounty = {};
+        session_->onWayUp = false;
+        PlaySound(GameSound::Descend);
+        StartFloor(1);
+        session_->characterService.RestCharacter(*session_->playerId);
+        session_->allies.RestoreAll();
+        session_->combatText.Clear();
+        session_->fanfare.ShowFirst(FanfareCard{ "THE BELOW STIRS", std::format("New Game+{}: the depths grow stronger", session_->cycle),
+                                                 { "Enemies are tougher, and their finds richer" }, { 0.85f, 0.35f, 0.30f } });
+        AutoSave();
     }
 
     void GameEngine::Descend() {
@@ -172,7 +188,7 @@ namespace LB::Engine {
             const auto* boss = content_->FindEnemy(BossForDepth(session_->depth));
             const auto raise = [&](const Content::EnemyDefinition* kind, std::int32_t count) {
                 if (!kind || count <= 0) return;
-                for (const auto id : session_->encounter.SpawnInRoom(*kind, count, here, session_->playerPosition, session_->depth)) room.enemies.push_back(id);
+                for (const auto id : session_->encounter.SpawnInRoom(*kind, count, here, session_->playerPosition, ChallengeDepth())) room.enemies.push_back(id);
             };
             switch (type) {
             case RoomType::Combat:
@@ -252,12 +268,12 @@ namespace LB::Engine {
         for (const auto at : step.rose) PlaySound(GameSound::Spikes, at);
         for (const auto id : step.othersStruck) {
             if (const auto* ally = session_->allies.Find(id)) {
-                const auto raw = session_->lootRoller.RollDice(LB::Dice{ 1, 6, session_->depth / 2 });
+                const auto raw = session_->lootRoller.RollDice(LB::Dice{ 1, 6, ChallengeDepth() / 2 });
                 session_->allies.Damage(id, Services::Combat::CombatService::ResolveSpellHit(raw, LB::Combat::DamageType::Piercing, ally->Defense()).finalDamage);
             }
         }
         if (!step.playerStruck) return;
-        const auto damage = session_->lootRoller.RollDice(LB::Dice{ 1, 6, session_->depth / 2 });
+        const auto damage = session_->lootRoller.RollDice(LB::Dice{ 1, 6, ChallengeDepth() / 2 });
         CombatEvent event{ CombatEventKind::EnemyAttack, 0, Services::Combat::CombatService::ResolveSpellHit(damage, LB::Combat::DamageType::Piercing, GetPlayerDefense()), false };
         session_->characterService.DamageCharacter(*session_->playerId, event.result.finalDamage);
         session_->playerCombat.hitFlashSeconds = Encounter::HitFlashSeconds;
@@ -396,6 +412,7 @@ namespace LB::Engine {
         }
         data["floor.seed"] = std::format("{}", session_->baseSeed);
         data["floor.depth"] = std::format("{}", session_->depth);
+        data["floor.cycle"] = std::format("{}", session_->cycle);
         data["floor.cleared"] = JoinIndices(cleared);
         data["floor.chests"] = JoinIndices(chests);
         // Gates opened, the key's fall, the candles' states ("lit bits" per puzzle)
@@ -432,6 +449,9 @@ namespace LB::Engine {
         if (std::from_chars(depthText->data(), depthText->data() + depthText->size(), depth).ec != std::errc{} || depth < 1) return;
 
         session_->baseSeed = seed;
+        std::int32_t cycle = 0;   // saves from before New Game+ have none
+        if (const auto cycleText = field("floor.cycle")) std::from_chars(cycleText->data(), cycleText->data() + cycleText->size(), cycle);
+        session_->cycle = std::max(0, cycle);
         StartFloor(depth);
         for (const auto index : ParseIndices(field("floor.cleared").value_or(""))) {
             if (index < 0 || static_cast<std::size_t>(index) >= session_->rooms.size()) continue;
@@ -836,8 +856,8 @@ namespace LB::Engine {
         if (objective.done || objective.kind == ObjectiveKind::None) return;
         objective.done = true;
         const auto& settings = content_->GetObjectives();
-        const auto gold = settings.rewardGoldPerDepth * session_->depth;
-        const auto experience = settings.rewardExperiencePerDepth * session_->depth;
+        const auto gold = settings.rewardGoldPerDepth * ChallengeDepth();
+        const auto experience = settings.rewardExperiencePerDepth * ChallengeDepth();
         session_->gold += gold;
         GrantExperience(experience);
         DropLoot(ChestLootTable, session_->playerPosition);
@@ -853,7 +873,7 @@ namespace LB::Engine {
         const auto* kind = content_->FindEnemy(kinds[FloorSeed(session_->baseSeed, depth) % kinds.size()]);
         if (!kind) return;
         const auto& settings = content_->GetObjectives();
-        session_->bounty = Bounty{ kind->key, Plural(kind->name), settings.bountyKills, 0, settings.bountyGoldPerDepth * (depth + 1) };
+        session_->bounty = Bounty{ kind->key, Plural(kind->name), settings.bountyKills, 0, settings.bountyGoldPerDepth * (ChallengeDepth() + 1) };
         session_->fanfare.Show(FanfareCard{ "A BOUNTY", std::format("Slay {} {} below", settings.bountyKills, session_->bounty.plural),
                                             { std::format("The merchant pays {} gold", session_->bounty.gold) }, { 0.85f, 0.75f, 0.55f } });
     }

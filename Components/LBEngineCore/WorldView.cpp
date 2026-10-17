@@ -521,6 +521,7 @@ namespace LB::Engine {
         if (session_->depth > 0) {
             hud.banner = session_->restFloor ? std::format("DEPTH {} - RESTING PLACE", session_->depth)
                        : IsFinalFloor() ? std::format("DEPTH {} - {}", session_->depth, FinalFloorName) : std::format("DEPTH {}", session_->depth);
+            if (session_->cycle > 0) hud.banner += std::format(" - NEW GAME+{}", session_->cycle);
         }
         else if (session_->encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_->encounter.GetWave());
 

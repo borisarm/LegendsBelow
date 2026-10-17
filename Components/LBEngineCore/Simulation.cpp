@@ -1120,7 +1120,7 @@ namespace LB::Engine {
                                 const float t = static_cast<float>(s) / 6.0f;
                                 session_->effects.Emit(ParticleEffect::HitSparks, { from.x + (to.x - from.x) * t, from.y + 0.2f * std::sin(t * 9.0f), from.z + (to.z - from.z) * t }, 3, 0.6f);
                             }
-                            if (auto hit = session_->encounter.DamageEnemy(nearby[k].second, power.powerDamage + session_->depth / 2, LB::Combat::DamageType::Lightning)) more.push_back(*hit);
+                            if (auto hit = session_->encounter.DamageEnemy(nearby[k].second, power.powerDamage + ChallengeDepth() / 2, LB::Combat::DamageType::Lightning)) more.push_back(*hit);
                         }
                     }
                 }

@@ -197,6 +197,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 #endif
 
         // Playtests: "--class rogue --depth 3 --level 4" starts a run there, past the title
+        // ("--cycle 1": in New Game+)
         {
             std::wistringstream arguments(lpCmdLine ? lpCmdLine : L"");
             std::wstring name, value;
@@ -204,6 +205,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
             {
                 if (name == L"--depth") options.startDepth = std::max(1, _wtoi(value.c_str()));
                 else if (name == L"--level") options.startLevel = std::clamp(_wtoi(value.c_str()), 1, 20);
+                else if (name == L"--cycle") options.startCycle = std::max(0, _wtoi(value.c_str()));
                 else if (name == L"--class")
                 {
                     for (auto& c : value) c = static_cast<wchar_t>(towlower(c));

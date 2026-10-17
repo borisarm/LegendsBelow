@@ -224,6 +224,8 @@ TEST(FinalBossTests, Victory_SteppingIntoTheWayUpOpensThePage_LingeringClosesIt)
     EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text.ends_with("has silenced the Below"); }));
     EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "Bosses defeated: 1"; }));
 
+    TapKey(engine, Keys::Down);   // past Descend Again
+    RunSteps(engine, 1);
     ASSERT_EQ(engine.GetMenu().Selected()->command, MenuCommand::Linger);
     TapKey(engine, Keys::Enter);
     RunSteps(engine, 2);

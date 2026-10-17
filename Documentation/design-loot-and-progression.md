@@ -198,3 +198,5 @@ Optional mode once main progression is completed:
 - Enemies scaled up in HP, damage, and AI behavior.
 - Better baseline loot quality.
 - Additional modifiers or mutators.
+
+As built: after a victory (design-dungeon-and-world.md 7.4) the victory page offers **Descend Again**. The same hero (level, path, gear, bag, gold, companions) goes down from the first floor of a new Below (other layouts), one cycle stronger. Each cycle a floor counts FinalDepth (14) deeper for its enemies' strength (the wave scaling: hit points, damage, experience), its traps, and its finds (rarity weights, item levels, the deepest tier's gear, gold, objective and bounty rewards); its look, its inhabitants, and how many fill a room go by its depth. Mutators are not built.

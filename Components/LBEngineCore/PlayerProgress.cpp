@@ -121,7 +121,7 @@ namespace LB::Engine {
     // common, its affixes (design-loot-and-progression.md 3-4)
     ItemRef GameEngine::RollDrop(ItemRef item, std::int32_t depthBonus) {
         if (item.kind != ItemKind::Weapon && item.kind != ItemKind::Armor) return item;
-        const auto depth = (session_->depth > 0 ? session_->depth : std::max(1, session_->encounter.GetWave())) + depthBonus;
+        const auto depth = (session_->depth > 0 ? ChallengeDepth() : std::max(1, session_->encounter.GetWave())) + depthBonus;
         item = ForTier(item, TierForDepth(depth));   // the deeper tiers drop their own gear
         const auto* rarity = session_->lootRoller.RollRarity(*content_, depth);
         if (!rarity || rarity->affixes <= 0) return item;

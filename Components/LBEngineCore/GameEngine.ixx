@@ -90,6 +90,7 @@ export namespace LB::Engine {
         // floor, and the hero's level (the experience it takes, the points spent as levels give them)
         std::int32_t startDepth{1};
         std::int32_t startLevel{1};
+        std::int32_t startCycle{0};   // New Game+ (0: the first descent; "--cycle 1")
         // The title offers Quit; off on a console (its games are left from its own menu, never quit)
         bool canQuit{true};
     };
@@ -624,6 +625,24 @@ export namespace LB::Engine {
         /// would be, and stepping into it opens the victory page
         /// </summary>
         [[nodiscard]] bool IsWayUpOpen() const;
+
+        /// <summary>
+        /// New Game+ (design-loot-and-progression.md 7.3): how many times the hero has gone down
+        /// again after a victory (0: the first descent)
+        /// </summary>
+        [[nodiscard]] std::int32_t GetCycle() const noexcept { return session_->cycle; }
+
+        /// <summary>
+        /// How deep this floor counts for its enemies' strength and its finds: its depth, and
+        /// FinalDepth more for each New Game+ cycle (floors, looks, and inhabitants go by the depth)
+        /// </summary>
+        [[nodiscard]] std::int32_t ChallengeDepth() const noexcept { return session_->depth + FinalDepth * session_->cycle; }
+
+        /// <summary>
+        /// New Game+: the same hero (level, path, gear, bag, gold, companions) goes down again from
+        /// the first floor of a new Below, one cycle stronger (the victory page's Descend Again)
+        /// </summary>
+        void DescendAgain();
         [[nodiscard]] WorldPoint GetWayUp() const { return session_->world.RoomCenter(session_->world.Layout().exitRoom); }
 
         /// <summary>
@@ -1337,6 +1356,7 @@ export namespace LB::Engine {
             float shakeStrength{0.0f};               // tiles at its start
             RunStats stats;
             bool onWayUp{false};                     // standing in the way up (the victory page opens on stepping in)
+            std::int32_t cycle{0};                   // New Game+ cycles (0: the first descent)
             bool playing{false};                     // a run being played (not the one behind the title screen)
             float savedNoticeSeconds{0.0f};
             Fanfare fanfare;                         // a level or a path, across the screen

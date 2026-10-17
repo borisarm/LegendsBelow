@@ -107,6 +107,7 @@ namespace LB::Engine {
             GrantExperience(session_->characterService.GetExperienceForLevel(options_.startLevel));
         }
         if (session_->dungeonMode && session_->playerId) {
+            session_->cycle = std::max(0, options_.startCycle);
             StartFloor(std::max(1, options_.startDepth));
         }
         StartEncounter();
@@ -142,7 +143,8 @@ namespace LB::Engine {
             const auto* classData = PlayerClassDefinition();
             metadata.characterName = classData ? classData->name : std::string{};
             metadata.characterLevel = player->GetLevel();
-            metadata.location = session_->dungeonMode ? std::format("depth {}", session_->depth) : std::string("the arena");
+            metadata.location = !session_->dungeonMode ? std::string("the arena")
+                              : session_->cycle > 0 ? std::format("depth {}, New Game+{}", session_->depth, session_->cycle) : std::format("depth {}", session_->depth);
         }
         metadata.saveName = slotIndex == QuickSaveSlot ? "Quick Save" : slotIndex == AutoSaveSlot ? "Autosave" : std::format("Slot {}", slotIndex - SaveSlots.front() + 1);
         metadata.playtimeSeconds = static_cast<std::int32_t>(session_->gameTimeSeconds);
