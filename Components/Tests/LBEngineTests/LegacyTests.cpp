@@ -131,3 +131,47 @@ TEST(LegacyTests, AnHeirloom_ForAVeteranOfTheDepths) {
     EXPECT_EQ(engine.GetPlayerWeaponItem().kind, ItemKind::Rolled);   // the class's weapon, uncommon
     EXPECT_EQ(engine.GetPlayerWeapon()->key, GameEngine::StartingWeapon);
 }
+
+TEST(LegacyTests, AVictory_IsRecorded_TheLastPageFound_AndLaurelsUnlocked) {
+    TempSaveDir dir;
+    {
+        GameEngine engine;
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, Options(dir)));
+        NewGame(engine);
+        engine.EnterFloor(GameEngine::FinalDepth);
+        engine.EnterFloorPosition(engine.GetWorld().RoomCenter(engine.GetWorld().Layout().exitRoom));
+        RunSteps(engine, static_cast<int>(60 * EnemyBehavior::SpawnSeconds) + 2);
+        const auto boss = std::ranges::find_if(engine.GetEncounter().GetEnemies(), [](const Enemy& e) { return e.definition->key == GameEngine::FinalBoss; });
+        ASSERT_NE(boss, engine.GetEncounter().GetEnemies().end());
+        ASSERT_TRUE(engine.DefeatEnemy(boss->id));
+        engine.Tick(OneSixtieth);
+
+        EXPECT_EQ(engine.GetLegacy().victories, 1);
+        EXPECT_GT(engine.GetLegacy().fastestVictory, 0);
+        EXPECT_TRUE(engine.GetLegacy().lore.contains(std::string(GameEngine::FinalLore)));
+        EXPECT_TRUE(engine.GetLegacy().Has(Boon::Laurels));
+    }
+    // The next hero's heirloom is rare (Laurels), and the page lists the victory
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, Options(dir)));
+    engine.Tick(OneSixtieth);
+    Choose(engine, "Legacy");
+    EXPECT_TRUE(Drawn(engine, "Victories: 1 (the quickest "));
+    EXPECT_TRUE(Drawn(engine, "Laurels: start with a rare weapon of your class"));
+    Press(engine, Keys::Escape);
+    NewGame(engine);
+    const auto* rarity = engine.ItemRarity(engine.GetPlayerWeaponItem());
+    ASSERT_NE(rarity, nullptr);
+    EXPECT_EQ(rarity->key, "rarity_rare");
+}
+
+TEST(LegacyTests, Victories_KeptInTheProfile) {
+    Legacy legacy;
+    legacy.victories = 2;
+    legacy.fastestVictory = 3600;
+    const auto back = Legacy::FromProfile(legacy.ToProfile());
+    EXPECT_EQ(back.victories, 2);
+    EXPECT_EQ(back.fastestVictory, 3600);
+    EXPECT_TRUE(back.Has(Boon::Laurels));
+    EXPECT_FALSE(Legacy{}.Has(Boon::Laurels));
+}

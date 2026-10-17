@@ -307,9 +307,25 @@ namespace LB::Engine {
         }
 
         const auto exit = static_cast<std::size_t>(layout.exitRoom);
+        if (IsFinalFloor()) {
+            // The way up: stepping into it (not standing in it) opens the victory page
+            const bool inside = IsWayUpOpen() && Encounter::Distance(GetWayUp(), session_->playerPosition) <= WayUpRadius;
+            if (inside && !session_->onWayUp) {
+                PlaySound(GameSound::ScreenOpen, session_->playerPosition);
+                OpenMenu(MenuPage::Victory);
+            }
+            session_->onWayUp = inside;
+            return;
+        }
         if (session_->rooms[exit].cleared && Encounter::Distance(session_->world.RoomCenter(layout.exitRoom), session_->playerPosition) <= InteractRadius * 0.7f) {
             Descend();
         }
+    }
+
+    bool GameEngine::IsWayUpOpen() const {
+        if (!IsFinalFloor()) return false;
+        const auto exit = static_cast<std::size_t>(session_->world.Layout().exitRoom);
+        return exit < session_->rooms.size() && session_->rooms[exit].triggered && session_->rooms[exit].cleared;
     }
 
     void GameEngine::DrawFloorProps(const Systems::Rendering::Color& tint) {
@@ -361,7 +377,14 @@ namespace LB::Engine {
                 renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ { book.at.x, 0.3f, book.at.y }, 0.4f, { 0.6f, 0.75f, 1.0f, 0.5f }, true });
             }
         }
-        draw(TrapdoorModel, session_->world.RoomCenter(layout.exitRoom), { 0.10f, 0.08f, 0.06f, 1.0f });
+        if (!IsFinalFloor()) {
+            draw(TrapdoorModel, session_->world.RoomCenter(layout.exitRoom), { 0.10f, 0.08f, 0.06f, 1.0f });
+        }
+        else if (IsWayUpOpen()) {   // the way up: a column of warm light
+            const auto at = GetWayUp();
+            renderingSystem_.DrawLight(Systems::Rendering::PointLight{ { at.x, 2.0f, at.y }, { 1.0f, 0.88f, 0.6f, 1.0f }, 7.0f, 2.2f });
+            renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ { at.x, 0.1f, at.y }, WayUpRadius * 1.6f, { 1.0f, 0.85f, 0.5f, 0.8f }, true });
+        }
     }
 
     void GameEngine::WriteFloor(Systems::Persistence::SaveData& data) const {
@@ -952,8 +975,8 @@ namespace LB::Engine {
         for (const auto& entry : lore) {
             if (entry.tier != tier) {
                 tier = entry.tier;
-                const auto& theme = FloorThemes[static_cast<std::size_t>(tier - 1) % FloorThemes.size()];
-                lines.push_back(std::format("- {} -", theme.name));
+                const auto heading = static_cast<std::size_t>(tier) > FloorThemes.size() ? FinalFloorTitle : std::string_view(FloorThemes[static_cast<std::size_t>(tier - 1)].name);
+                lines.push_back(std::format("- {} -", heading));
             }
             if (!legacy_.lore.contains(entry.key)) {
                 lines.push_back("???");

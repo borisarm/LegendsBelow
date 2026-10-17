@@ -14,5 +14,11 @@
   { "id": "lore_archive_keepers", "tier": 4, "title": "The Archivists", "text": "They swore to keep every word ever written. When the words ran out above, they came below for more." },
   { "id": "lore_archive_marginalia", "tier": 4, "title": "Marginalia", "text": "Do not read the red books. Do not read the red books. Do not" },
   { "id": "lore_archive_abomination", "tier": 4, "title": "On the Abomination", "text": "Stitched from every guardian that failed, it was meant to be the last guard. It has never failed." },
-  { "id": "lore_archive_last_page", "tier": 4, "title": "The Last Page", "text": "Whoever reads this has come further than any of us. The way goes on. So, we hope, do you." }
+  { "id": "lore_archive_last_page", "tier": 4, "title": "The Last Page", "text": "Whoever reads this has come further than any of us. The way goes on. So, we hope, do you." },
+  {
+    "id": "lore_final_red_book",
+    "tier": 5,
+    "title": "The Red Book",
+    "text": "Every word kept, and every keeper with them. The last page was left blank for whoever came this far. It is yours now: write what you like. Then, perhaps, go down again."
+  }
 ]

@@ -354,6 +354,8 @@ namespace LB::Engine {
         auto& events = session_->events;
         events.Subscribe<EnemyKilledEvent>([this](const EnemyKilledEvent& kill) {
             ++session_->stats.kills;
+            if (const auto* slain = content_->FindEnemy(kill.enemyKey); slain && slain->boss) ++session_->stats.bosses;
+            if (kill.enemyKey == FinalBoss && IsFinalFloor()) session_->events.Publish(RunWonEvent{ kill.at });
             if (session_->objective.kind == ObjectiveKind::SlayChampion && session_->objective.champion == kill.enemyId) CompleteObjective();
             CountBounty(kill.enemyKey);
             if (!session_->playing) return;
@@ -370,6 +372,7 @@ namespace LB::Engine {
             if (!kill.lootTable.empty()) DropLoot(kill.lootTable, kill.at);
         });
         events.Subscribe<LevelGainedEvent>([this](const LevelGainedEvent& gained) { session_->allies.SetLevel(gained.level); });
+        events.Subscribe<RunWonEvent>([this](const RunWonEvent& won) { WinRun(won); });
         // A level: a banner with what was gained (health, mana or stamina, points, abilities, a path)
         events.Subscribe<LevelGainedEvent>([this](const LevelGainedEvent& gained) {
             const auto* classData = PlayerClassDefinition();

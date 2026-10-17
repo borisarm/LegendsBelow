@@ -13,7 +13,8 @@ export namespace LB::Engine {
         Provisions,   // an extra healing potion
         OldCoin,      // gold to start with
         Heirloom,     // the class's weapon, rolled uncommon
-        Veteran       // more experience
+        Veteran,      // more experience
+        Laurels       // the heirloom rolled rare
     };
 
     struct BoonInfo {
@@ -23,11 +24,12 @@ export namespace LB::Engine {
         std::string_view requirement;    // what unlocks it
     };
 
-    inline constexpr std::array<BoonInfo, 4> Boons{ {
+    inline constexpr std::array<BoonInfo, 5> Boons{ {
         { Boon::Provisions, "Provisions", "start with an extra healing potion", "reach depth 3" },
         { Boon::OldCoin, "Old Coin", "start with 30 gold", "defeat a boss" },
         { Boon::Heirloom, "Heirloom", "start with an uncommon weapon of your class", "reach depth 7" },
         { Boon::Veteran, "Veteran", "gain a tenth more experience", "defeat three bosses" },
+        { Boon::Laurels, "Laurels", "start with a rare weapon of your class", "win a run" },
     } };
 
     /// <summary>
@@ -46,6 +48,8 @@ export namespace LB::Engine {
         std::int32_t bosses{0};
         std::int32_t runs{0};
         std::int32_t kills{0};
+        std::int32_t victories{0};       // runs won (the final boss fallen)
+        std::int32_t fastestVictory{0};  // seconds of game time of the quickest (0: none yet)
         std::set<std::string> lore;   // codex entries read (lore.json keys)
 
         [[nodiscard]] bool Has(Boon boon) const noexcept {
@@ -54,6 +58,7 @@ export namespace LB::Engine {
             case Boon::OldCoin: return bosses >= OldCoinBosses;
             case Boon::Heirloom: return deepest >= HeirloomDepth;
             case Boon::Veteran: return bosses >= VeteranBosses;
+            case Boon::Laurels: return victories >= 1;
             }
             return false;
         }
@@ -75,6 +80,7 @@ export namespace LB::Engine {
         [[nodiscard]] std::map<std::string, std::string> ToProfile() const {
             return { { "legacy.deepest", std::to_string(deepest) }, { "legacy.bosses", std::to_string(bosses) },
                      { "legacy.runs", std::to_string(runs) }, { "legacy.kills", std::to_string(kills) },
+                     { "legacy.victories", std::to_string(victories) }, { "legacy.fastestVictory", std::to_string(fastestVictory) },
                      { "legacy.lore", JoinLore() } };
         }
 
@@ -97,6 +103,8 @@ export namespace LB::Engine {
             legacy.bosses = read("legacy.bosses");
             legacy.runs = read("legacy.runs");
             legacy.kills = read("legacy.kills");
+            legacy.victories = read("legacy.victories");
+            legacy.fastestVictory = read("legacy.fastestVictory");
             if (const auto it = profile.find("legacy.lore"); it != profile.end()) {
                 std::string key;
                 for (const char c : it->second + ',') {

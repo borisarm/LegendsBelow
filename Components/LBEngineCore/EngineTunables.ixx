@@ -223,6 +223,9 @@ export namespace LB::Engine {
         static constexpr std::int32_t FinalDepth = 14;
         static constexpr std::string_view FinalBoss = "enemy_first_archivist";
         static constexpr std::string_view FinalFloorName = "THE RED LIBRARY";
+        static constexpr std::string_view FinalFloorTitle = "The Red Library";   // the codex's heading of its page
+        static constexpr std::string_view FinalLore = "lore_final_red_book";       // the codex's last page, found by winning
+        static constexpr float WayUpRadius = 0.9f;                                  // tiles: stepping into the light leaves the Below
         // The floor after a boss is a resting place (design-dungeon-and-world.md 7.3): no enemies, a
         // shrine that restores the hero once, and a merchant
         static constexpr std::string_view MerchantModel = "Engineer.glb";

@@ -135,6 +135,11 @@ namespace LB::Engine {
                 { "Load Last Save", MenuCommand::LoadGame, saved },
                 { "Quit to Title", MenuCommand::QuitToTitle },
             };
+        case MenuPage::Victory:
+            return {
+                { "Linger in the Hall", MenuCommand::Linger, true, "the way up stays open" },
+                { "Quit to Title", MenuCommand::QuitToTitle },
+            };
         case MenuPage::ChooseClass:
             return {
                 { "Warrior", MenuCommand::PlayWarrior, true, "sword and bow" },
@@ -283,6 +288,9 @@ namespace LB::Engine {
             RespawnPlayer();
             CloseMenu();
             break;
+        case MenuCommand::Linger:
+            CloseMenu();
+            break;
         case MenuCommand::Credits:
             menu_.Push(MenuPage::Credits);
             break;
@@ -314,7 +322,8 @@ namespace LB::Engine {
                       : menu_.Page() == MenuPage::Credits ? "CREDITS" : menu_.Page() == MenuPage::ChooseClass ? "CHOOSE YOUR HERO"
                       : menu_.Page() == MenuPage::Controls ? "CONTROLS" : menu_.Page() == MenuPage::Fallen ? "YOU HAVE FALLEN"
                       : menu_.Page() == MenuPage::SaveSlots ? "SAVE GAME" : menu_.Page() == MenuPage::LoadSlots ? "LOAD GAME"
-                      : menu_.Page() == MenuPage::Legacy ? "LEGACY" : menu_.Page() == MenuPage::Codex ? "CODEX" : "";
+                      : menu_.Page() == MenuPage::Legacy ? "LEGACY" : menu_.Page() == MenuPage::Codex ? "CODEX"
+                      : menu_.Page() == MenuPage::Victory ? "VICTORY" : "";
         model.items = menu_.Items();
         model.cursor = menu_.Cursor();
         model.message = menu_.Message();
@@ -330,6 +339,7 @@ namespace LB::Engine {
             model.listening = listening_;
         }
         if (menu_.Page() == MenuPage::Fallen) model.lines = FallenSummary();
+        if (menu_.Page() == MenuPage::Victory) model.lines = VictorySummary();
         if (menu_.Page() == MenuPage::Legacy) model.lines = LegacyLines();
         if (menu_.Page() == MenuPage::Codex) {
             model.lines = CodexLines();
@@ -441,6 +451,45 @@ namespace LB::Engine {
         };
     }
 
+    // The victory page's summary of the run (design-dungeon-and-world.md 7.4)
+    std::vector<std::string> GameEngine::VictorySummary() const {
+        const auto* player = PlayerCharacter();
+        const auto* classData = content_->FindClass(session_->playerClass);
+        const auto& stats = session_->stats;
+        const auto seconds = static_cast<std::int64_t>(session_->gameTimeSeconds);
+        const auto& lore = content_->GetLore();
+        const auto pages = std::ranges::count_if(lore, [&](const Content::LoreDefinition& entry) { return legacy_.lore.contains(entry.key); });
+        return {
+            std::format("{}, level {}, has silenced the Below", classData ? classData->name : std::string("The hero"), player ? player->GetLevel() : 1),
+            "",
+            std::format("Time below: {}:{:02}", seconds / 60, seconds % 60),
+            std::format("Enemies slain: {}", stats.kills),
+            std::format("Bosses defeated: {}", stats.bosses),
+            std::format("Gold found: {}", stats.goldFound),
+            std::format("Falls: {}", stats.falls),
+            std::format("Pages of the codex: {} of {}", pages, lore.size()),
+        };
+    }
+
+    // The final boss fell: a banner, the codex's last page, and the legacy's records (a run played
+    // from the title; not the one behind it)
+    void GameEngine::WinRun(const RunWonEvent& won) {
+        const auto* page = content_->FindLore(FinalLore);
+        session_->fanfare.ShowFirst(FanfareCard{ "THE BELOW IS SILENT", "The First Archivist has fallen",
+                                                 page ? WrapText(page->text, 52) : std::vector<std::string>{ "A way up opens in the hall" }, { 1.0f, 0.85f, 0.45f } });
+        if (session_->playing) {
+            auto next = legacy_;
+            ++next.victories;
+            const auto seconds = std::max(1, static_cast<std::int32_t>(session_->gameTimeSeconds));
+            next.fastestVictory = next.fastestVictory == 0 ? seconds : std::min(next.fastestVictory, seconds);
+            next.lore.insert(std::string(FinalLore));
+            UpdateLegacy(next);
+        }
+        PlaySound(GameSound::LevelUp, won.at);
+        Jolt(0.0f, 0.6f, 0.3f);
+        AutoSave();   // the win is kept
+    }
+
     std::string GameEngine::SlotSummary(std::int32_t slot) const {
         const auto info = persistenceSystem_.GetSaveSlotInfo(slot);
         if (!info || !info->exists) return {};
@@ -482,11 +531,12 @@ namespace LB::Engine {
         if (legacy_.Has(Boon::Provisions)) GiveItem(HealingPotion);
         if (legacy_.Has(Boon::OldCoin)) session_->gold += Legacy::OldCoinGold;
         if (legacy_.Has(Boon::Heirloom)) {
+            // Laurels: a winner's heirs start with it rare
             const auto weapon = GetPlayerWeaponItem();
-            const auto* uncommon = content_->FindRarity("rarity_uncommon");
-            auto affixes = session_->lootRoller.RollAffixes(*content_, true, 1);
-            if (weapon.IsValid() && uncommon && !affixes.empty()) {
-                const auto heirloom = session_->rolls.Add(RolledItem{ session_->rolls.BaseOf(weapon), uncommon, std::move(affixes), {}, 1 }, *content_);
+            const auto* rarity = content_->FindRarity(legacy_.Has(Boon::Laurels) ? "rarity_rare" : "rarity_uncommon");
+            auto affixes = session_->lootRoller.RollAffixes(*content_, true, rarity ? std::max(1, rarity->affixes) : 1);
+            if (weapon.IsValid() && rarity && !affixes.empty()) {
+                const auto heirloom = session_->rolls.Add(RolledItem{ session_->rolls.BaseOf(weapon), rarity, std::move(affixes), {}, 1 }, *content_);
                 GiveItemRef(heirloom);
                 EquipItemRef(heirloom);   // the plain one goes to the bag
             }
@@ -499,6 +549,8 @@ namespace LB::Engine {
             std::format("Bosses defeated: {}", legacy_.bosses),
             std::format("Enemies slain: {}", legacy_.kills),
             std::format("Heroes sent below: {}", legacy_.runs),
+            legacy_.victories > 0 ? std::format("Victories: {} (the quickest {}:{:02})", legacy_.victories, legacy_.fastestVictory / 60, legacy_.fastestVictory % 60)
+                                  : std::string("Victories: none yet"),
             "",
         };
         for (const auto& boon : Boons) {

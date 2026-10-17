@@ -23,7 +23,8 @@ export namespace LB::Engine {
         SaveSlots,   // Save Game: the slots to save into
         LoadSlots,   // Load Game: the saves to load (autosave, quick save, the slots)
         Legacy,      // the records of every run, and the boons they unlock
-        Codex        // the pages of lore found (lore.json), kept across runs
+        Codex,       // the pages of lore found (lore.json), kept across runs
+        Victory      // the final boss fallen and the way up taken: the run, and what next
     };
 
     /// <summary>
@@ -38,6 +39,7 @@ export namespace LB::Engine {
         Options,
         Controls,
         RiseAgain,      // a fallen hero gets up at the floor's entrance
+        Linger,         // stay in the hall after the victory
         OpenSaveSlots,
         OpenLoadSlots,
         SaveToSlot,     // the item's slot

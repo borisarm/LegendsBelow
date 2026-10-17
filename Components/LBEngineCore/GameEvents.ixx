@@ -36,4 +36,12 @@ export namespace LB::Engine {
         std::string name;
     };
 
+    /// <summary>
+    /// The final boss fell (design-dungeon-and-world.md 7.4): the run is won (the victory, the
+    /// legacy, the codex's last page react)
+    /// </summary>
+    struct RunWonEvent {
+        WorldPoint at{};   // where it fell
+    };
+
 } // namespace LB::Engine

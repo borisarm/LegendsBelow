@@ -1,6 +1,6 @@
 // FinalBossTests.cpp - LB.Engine tests: the final floor (the Red Library) and its boss, the First
 // Archivist (three phases, echoes of the earlier tiers, a second telegraphed attack, the torches
-// guttering in its last phase)
+// guttering in its last phase), and the victory (the way up, the victory page, the codex's last page)
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -188,4 +188,63 @@ TEST(FinalBossTests, Archivist_IsDrawnRed) {
     const auto draws = DrawsOf(engine, "Lorekeeper");
     ASSERT_EQ(draws.size(), 1u);
     EXPECT_LT(draws[0].tint.g, draws[0].tint.r * 0.6f);
+}
+
+TEST(FinalBossTests, Victory_ItsFallOpensTheWayUpNotATrapdoor) {
+    GameEngine engine;
+    InitializeFinalFloor(engine);
+    const auto boss = EnterTheHall(engine);
+    EXPECT_FALSE(engine.IsWayUpOpen());
+
+    ASSERT_TRUE(engine.DefeatEnemy(boss));
+    RunSteps(engine, 2);   // the hall counts as cleared at the next step
+
+    EXPECT_TRUE(engine.IsWayUpOpen());
+    ASSERT_NE(engine.GetFanfare().Current(), nullptr);
+    EXPECT_EQ(engine.GetFanfare().Current()->title, "THE BELOW IS SILENT");   // before any legacy banner
+    EXPECT_EQ(engine.GetRunStats().bosses, 1);
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Victory);   // the hero stood in the hall's middle: the way up
+    EXPECT_EQ(engine.GetDepth(), GameEngine::FinalDepth);    // no way down
+}
+
+TEST(FinalBossTests, Victory_SteppingIntoTheWayUpOpensThePage_LingeringClosesIt) {
+    GameEngine engine;
+    InitializeFinalFloor(engine);
+    const auto boss = EnterTheHall(engine);
+    const auto aside = WorldPoint{ engine.GetWayUp().x - 3.0f, engine.GetWayUp().y };
+    engine.EnterFloorPosition(aside);
+    ASSERT_TRUE(engine.DefeatEnemy(boss));
+    RunSteps(engine, 2);
+    EXPECT_FALSE(engine.GetMenu().IsOpen());
+
+    engine.EnterFloorPosition(engine.GetWayUp());
+    RunSteps(engine, 2);
+    ASSERT_EQ(engine.GetMenu().Page(), MenuPage::Victory);
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "VICTORY"; }));
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text.ends_with("has silenced the Below"); }));
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "Bosses defeated: 1"; }));
+
+    ASSERT_EQ(engine.GetMenu().Selected()->command, MenuCommand::Linger);
+    TapKey(engine, Keys::Enter);
+    RunSteps(engine, 2);
+    EXPECT_FALSE(engine.GetMenu().IsOpen());   // standing in it does not open it again
+    RunSteps(engine, 30);
+    EXPECT_FALSE(engine.GetMenu().IsOpen());
+
+    engine.EnterFloorPosition(aside);
+    RunSteps(engine, 2);
+    engine.EnterFloorPosition(engine.GetWayUp());
+    RunSteps(engine, 2);
+    EXPECT_EQ(engine.GetMenu().Page(), MenuPage::Victory);   // stepping in again does
+}
+
+TEST(FinalBossTests, Codex_TheLastPageHasItsOwnHeading) {
+    GameEngine engine;
+    InitializeFinalFloor(engine);
+    const auto* page = engine.GetContent()->FindLore(GameEngine::FinalLore);
+    ASSERT_NE(page, nullptr);
+    EXPECT_GT(static_cast<std::size_t>(page->tier), FloorThemes.size());   // no floor holds it
+
+    const auto lines = engine.CodexLines();
+    EXPECT_NE(std::ranges::find(lines, std::format("- {} -", GameEngine::FinalFloorTitle)), lines.end());
 }

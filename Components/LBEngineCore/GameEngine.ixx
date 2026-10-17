@@ -421,6 +421,11 @@ export namespace LB::Engine {
         /// reading it (as F does beside it): its entry joins the codex, kept with the legacy
         /// </summary>
         [[nodiscard]] const std::optional<LoreBook>& GetLoreBook() const noexcept { return session_->book; }
+
+        /// <summary>
+        /// The codex page's lines: how much is found, then each tier's pages (the unread as "???")
+        /// </summary>
+        [[nodiscard]] std::vector<std::string> CodexLines() const;
         bool ReadLoreBook();
 
         /// <summary>
@@ -615,6 +620,13 @@ export namespace LB::Engine {
         [[nodiscard]] bool IsFinalFloor() const noexcept { return session_->depth == FinalDepth && session_->dungeonMode; }
 
         /// <summary>
+        /// The final boss has fallen on this floor: a way up shines in the hall where the trapdoor
+        /// would be, and stepping into it opens the victory page
+        /// </summary>
+        [[nodiscard]] bool IsWayUpOpen() const;
+        [[nodiscard]] WorldPoint GetWayUp() const { return session_->world.RoomCenter(session_->world.Layout().exitRoom); }
+
+        /// <summary>
         /// Go straight to a floor of the dungeon (tools and tests; the game descends by the trapdoor)
         /// </summary>
         void EnterFloor(std::int32_t depth) {
@@ -666,6 +678,14 @@ export namespace LB::Engine {
         [[nodiscard]] std::int32_t ItemLevel(ItemRef item) const noexcept {
             const auto* rolled = session_->rolls.Find(item);
             return rolled ? rolled->level : 0;
+        }
+
+        /// <summary>
+        /// A rolled item's rarity; null for anything else
+        /// </summary>
+        [[nodiscard]] const Content::RarityDefinition* ItemRarity(ItemRef item) const noexcept {
+            const auto* rolled = session_->rolls.Find(item);
+            return rolled ? rolled->rarity : nullptr;
         }
 
         /// <summary>
@@ -768,12 +788,13 @@ export namespace LB::Engine {
         [[nodiscard]] EventBus& GetEvents() noexcept { return session_->events; }
 
         /// <summary>
-        /// What a run has seen so far: the deepest floor, enemies slain, gold found, times fallen
-        /// (the death screen's summary; not kept in saves)
+        /// What a run has seen so far: the deepest floor, enemies and bosses slain, gold found, times
+        /// fallen (the death and victory screens' summaries; not kept in saves)
         /// </summary>
         struct RunStats {
             std::int32_t deepest{1};
             std::int32_t kills{0};
+            std::int32_t bosses{0};
             std::int32_t goldFound{0};
             std::int32_t falls{0};
         };
@@ -1030,7 +1051,6 @@ export namespace LB::Engine {
         void CountBounty(const std::string& enemyKey);
         void DrawObjective(const Systems::Rendering::Color& tint);
         void PlaceLoreBook(std::int32_t depth);
-        [[nodiscard]] std::vector<std::string> CodexLines() const;
         void DrawFeatures(const Systems::Rendering::Color& tint);
         void UpdatePathChoice();
         void DrawFanfare();
@@ -1041,6 +1061,8 @@ export namespace LB::Engine {
         void KnockPlayer(WorldPoint from, float tiles);
         void DrawShadows();
         [[nodiscard]] std::vector<std::string> FallenSummary() const;
+        [[nodiscard]] std::vector<std::string> VictorySummary() const;
+        void WinRun(const RunWonEvent& won);
         void UpdateAllies(float elapsedSeconds);
         void UpdateAllyOrders();
         void SyncAllyGear(std::uint32_t ally);
@@ -1314,6 +1336,7 @@ export namespace LB::Engine {
             float shakeDuration{0.0f};
             float shakeStrength{0.0f};               // tiles at its start
             RunStats stats;
+            bool onWayUp{false};                     // standing in the way up (the victory page opens on stepping in)
             bool playing{false};                     // a run being played (not the one behind the title screen)
             float savedNoticeSeconds{0.0f};
             Fanfare fanfare;                         // a level or a path, across the screen

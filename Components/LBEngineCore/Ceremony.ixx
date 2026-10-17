@@ -36,6 +36,14 @@ export namespace LB::Engine {
             else Start(std::move(card));
         }
 
+        /// <summary>
+        /// Show a banner at once, before those waiting (one up starts again after it)
+        /// </summary>
+        void ShowFirst(FanfareCard card) {
+            if (current_) waiting_.insert(waiting_.begin(), std::move(*current_));
+            Start(std::move(card));
+        }
+
         void Update(float elapsedSeconds) {
             if (!current_) return;
             ageSeconds_ += elapsedSeconds;

@@ -109,7 +109,8 @@ namespace LB::Engine {
         if (session_->dungeonMode && session_->world.Layout().exitRoom >= 0 && static_cast<std::size_t>(session_->world.Layout().exitRoom) < session_->rooms.size()
             && session_->rooms[static_cast<std::size_t>(session_->world.Layout().exitRoom)].cleared) {
             const auto exit = session_->world.RoomCenter(session_->world.Layout().exitRoom);
-            session_->effects.Stream(ParticleEffect::TrapdoorMist, { exit.x, 0.05f, exit.y }, 10.0f, elapsedSeconds);
+            if (!IsFinalFloor()) session_->effects.Stream(ParticleEffect::TrapdoorMist, { exit.x, 0.05f, exit.y }, 10.0f, elapsedSeconds);
+            else if (IsWayUpOpen()) session_->effects.Stream(ParticleEffect::LevelUp, { exit.x, 0.05f, exit.y }, 14.0f, elapsedSeconds);   // the way up
         }
 
         // The tier's air (it drifts on through the tactical pause, as the fire does)
