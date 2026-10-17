@@ -75,6 +75,17 @@ export namespace LB::Engine {
         /// <summary>
         /// Remove every enemy and stop the waves
         /// </summary>
+        /// <summary>
+        /// What every enemy raised from now on gains besides its wave's scaling: attack bonus,
+        /// armour class, and a share more hit points (New Game+, design-loot-and-progression.md
+        /// 7.3; nothing on a first descent)
+        /// </summary>
+        void SetVeterans(std::int32_t attackBonus, std::int32_t armorClass, float extraHitPoints = 0.0f) noexcept {
+            veteranAttack_ = attackBonus;
+            veteranArmorClass_ = armorClass;
+            veteranHitPoints_ = extraHitPoints;
+        }
+
         void Reset() {
             enemies_.clear();
             projectiles_.Clear();
@@ -169,9 +180,11 @@ export namespace LB::Engine {
             enemy.definition = &type;
             enemy.position = at;
             enemy.facingYaw = facingYaw;
-            enemy.maxHitPoints = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(type.hitPoints) * scaling.hitPoints)));
+            enemy.maxHitPoints = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(type.hitPoints) * scaling.hitPoints * (1.0f + veteranHitPoints_))));
             enemy.hitPoints = enemy.maxHitPoints;
             enemy.bonusDamage = scaling.damage;
+            enemy.bonusAttack = veteranAttack_;
+            enemy.bonusArmorClass = veteranArmorClass_;
             enemy.experience = static_cast<std::int32_t>(std::lround(static_cast<float>(type.experience) * scaling.experience));
             enemy.wave = wave;
             enemy.group = group;
@@ -396,7 +409,7 @@ export namespace LB::Engine {
     private:
         static Services::Combat::DefenseProfile DefenseOf(const Enemy& enemy) {
             const auto& type = *enemy.definition;
-            return { type.armorClass, type.physicalArmor, type.resistances };
+            return { type.armorClass + enemy.bonusArmorClass, type.physicalArmor, type.resistances };
         }
 
         // Apply a resolved attack (or spell) to an enemy: a hit that does not kill staggers it
@@ -690,11 +703,14 @@ export namespace LB::Engine {
 
         static Services::Combat::WeaponAttackProfile AttackOf(const Enemy& enemy) {
             const auto& type = *enemy.definition;
-            return { type.attackBonus, type.damageDice, type.damageBonus + enemy.bonusDamage, type.damageType, type.critRangeMin, type.critMultiplier };
+            return { type.attackBonus + enemy.bonusAttack, type.damageDice, type.damageBonus + enemy.bonusDamage, type.damageType, type.critRangeMin, type.critMultiplier };
         }
 
         Services::Combat::CombatService combat_;
         std::mt19937 rng_;
+        std::int32_t veteranAttack_{0};
+        std::int32_t veteranArmorClass_{0};
+        float veteranHitPoints_{0.0f};
         EnemyBehavior behavior_;
         ProjectileSet projectiles_;
         std::vector<WorldPoint> shots_;

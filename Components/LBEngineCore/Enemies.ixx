@@ -67,6 +67,8 @@ export namespace LB::Engine {
         std::int32_t hitPoints{1};
         std::int32_t maxHitPoints{1};       // the type's hit points scaled for the wave
         std::int32_t bonusDamage{0};        // added to the type's damage for the wave
+        std::int32_t bonusAttack{0};        // added to the type's attack bonus (New Game+)
+        std::int32_t bonusArmorClass{0};    // added to the type's armour class (New Game+)
         std::int32_t experience{0};         // awarded for the kill, scaled for the wave
         bool impactDone{false};             // the current attack's hit has been resolved
         float recoverySeconds{0.0f};        // until the next attack may start

@@ -736,17 +736,24 @@ TEST(CharacterServiceRulesTests, LevelUp_MaxHitPointsFromTable) {
     EXPECT_EQ(warrior.GetMaxManaPoints(), 3 + 2);  // Warrior: table MP only
 }
 
-TEST(CharacterServiceRulesTests, BeyondMaxLevel_NoMoreTableGains) {
+TEST(CharacterServiceRulesTests, AtMaxLevel_ExperienceRaisesNoFurther) {
     CharacterService service = MakeTestService();
     auto id = *service.CreateCharacter(CharacterCreationRequest("Veteran", CharacterClass::Mage, Attributes{10, 10, 10, 10, 10, 10}));
 
     service.AwardExperience(id, 1'000'000);
-
     const auto& mage = Get(service, id);
-    ASSERT_GT(mage.GetLevel(), ClassProgression::MaxLevel);
+    ASSERT_EQ(mage.GetLevel(), ClassProgression::MaxLevel);
+    const auto hitPoints = mage.GetMaxHitPoints();
+    const auto result = service.AwardExperience(id, 1'000'000);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_FALSE(result->levelIncreased);
+    EXPECT_EQ(Get(service, id).GetLevel(), ClassProgression::MaxLevel);
+    EXPECT_EQ(Get(service, id).GetMaxHitPoints(), hitPoints);
     const auto& rules = *service.GetClassRules(CharacterClass::Mage);
     EXPECT_EQ(mage.GetMaxHitPoints(),
               rules.progression.TotalsAt(ClassProgression::MaxLevel).maxHitPoints + mage.GetAttributes().GetConstitutionModifier() * mage.GetLevel());
+    EXPECT_TRUE(service.RestoreProgress(id, mage.GetLevel(), mage.GetExperience(), mage.GetAttributes(), mage.GetUnspentAttributePoints()));   // saves load again
 }
 
 TEST(CharacterServiceRulesTests, WeaponAdjustment_SwordByClass) {

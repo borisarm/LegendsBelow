@@ -53,4 +53,42 @@ TEST(PerformanceTests, ACrowdedFloor_StepsWithinItsBudget) {
     EXPECT_LT(slowest, SlowestStepMilliseconds);
 }
 
+TEST(PerformanceTests, TheFinalFight_StepsWithinItsBudget) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .modelDirectory = ShippedModelDirectory(),
+        .randomSeed = CombatSeed, .dungeon = true }));
+    engine.GrantExperience(300000);   // the level cap: a hero who lasts the fight
+    engine.EnterFloor(GameEngine::FinalDepth);
+    engine.Tick(OneSixtieth);
+    engine.HireAlly("ally_barbarian");
+    engine.HireAlly("ally_acolyte");
+
+    // Into the hall; the Archivist in its last phase (its echoes rising, the torches guttering)
+    engine.EnterFloorPosition(engine.GetWayUp());
+    RunSteps(engine, static_cast<int>(60 * EnemyBehavior::SpawnSeconds) + 2);
+    const auto& enemies = engine.GetEncounter().GetEnemies();
+    const auto boss = std::ranges::find_if(enemies, [](const Enemy& e) { return e.definition->key == GameEngine::FinalBoss; });
+    ASSERT_NE(boss, enemies.end());
+    const auto id = boss->id;
+    ASSERT_TRUE(engine.WoundEnemy(id, 0.3f));
+    for (int i = 0; i < 8; ++i) engine.SpawnEnemy(GameEngine::RosterForDepth(GameEngine::FinalDepth).light, { engine.GetWayUp().x + static_cast<float>(i % 4) - 1.5f, engine.GetWayUp().y + 3.0f });
+
+    using Clock = std::chrono::steady_clock;
+    constexpr int Steps = 60 * 10;
+    double total = 0.0;
+    double slowest = 0.0;
+    for (int i = 0; i < Steps; ++i) {
+        const auto start = Clock::now();
+        engine.Tick(OneSixtieth);
+        const double milliseconds = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        total += milliseconds;
+        slowest = std::max(slowest, milliseconds);
+    }
+    const double average = total / Steps;
+    std::printf("[ PERF     ] the final fight: %.3f ms a step on average, %.3f ms the slowest (%zu enemies, %zu particles queued)\n", average, slowest,
+                engine.GetEncounter().GetEnemies().size(), engine.GetRendering().GetQueuedParticles().size());
+    EXPECT_LT(average, StepBudgetMilliseconds);
+    EXPECT_LT(slowest, SlowestStepMilliseconds);
+}
+
 #endif // NDEBUG

@@ -873,11 +873,11 @@ export namespace LB::Services::Character {
             return static_cast<std::int32_t>(100 * std::pow(level - 1, 2.0));
         }
 
+        // The level cap (design-loot-and-progression.md 6.1): experience past it raises nothing
         std::int32_t calculateLevelForExperience(std::int32_t experience) const {
             std::int32_t level = 1;
-            while (calculateExperienceForLevel(level + 1) <= experience) {
+            while (level < ClassProgression::MaxLevel && calculateExperienceForLevel(level + 1) <= experience) {
                 level++;
-                if (level >= 100) break; // Cap at level 100
             }
             return level;
         }

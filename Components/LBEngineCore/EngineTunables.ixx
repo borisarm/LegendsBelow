@@ -225,7 +225,15 @@ export namespace LB::Engine {
         static constexpr std::string_view FinalFloorName = "THE RED LIBRARY";
         static constexpr std::string_view FinalFloorTitle = "The Red Library";   // the codex's heading of its page
         static constexpr std::string_view FinalLore = "lore_final_red_book";       // the codex's last page, found by winning
-        static constexpr float WayUpRadius = 0.9f;                                  // tiles: stepping into the light leaves the Below
+        static constexpr float WayUpRadius = 0.9f;
+        // New Game+ (design-loot-and-progression.md 7.3): each cycle, besides a floor counting
+        // FinalDepth deeper, its enemies gain this much attack bonus and armour class, and this
+        // share more hit points (depth scales hit points and damage only: a first tier's skeletons
+        // could neither touch nor last against a hero at the cap; the balance bot cleared New
+        // Game+1's first tier without a death until they did)
+        static constexpr std::int32_t NewGamePlusAttackBonus = 6;
+        static constexpr std::int32_t NewGamePlusArmorClass = 3;
+        static constexpr float NewGamePlusHitPoints = 0.5f;                                  // tiles: stepping into the light leaves the Below
         // The floor after a boss is a resting place (design-dungeon-and-world.md 7.3): no enemies, a
         // shrine that restores the hero once, and a merchant
         static constexpr std::string_view MerchantModel = "Engineer.glb";

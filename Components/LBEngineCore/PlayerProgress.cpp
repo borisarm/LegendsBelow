@@ -335,7 +335,10 @@ namespace LB::Engine {
     // A kill is published; progression (experience, loot) handles it when the step's events go out
     void GameEngine::OnEnemyKilled(const Enemy& enemy) {
         if (!session_->playerId) return;
-        session_->events.Publish(EnemyKilledEvent{ enemy.id, enemy.definition->key, enemy.position, enemy.experience, enemy.definition->lootTable });
+        // What a summoner raised is worth nothing (no farming its raisings)
+        const bool raised = enemy.summoner != 0;
+        session_->events.Publish(EnemyKilledEvent{ enemy.id, enemy.definition->key, enemy.position, raised ? 0 : enemy.experience,
+                                                   raised ? std::string{} : enemy.definition->lootTable });
     }
 
     void GameEngine::GrantExperience(std::int32_t experience) {

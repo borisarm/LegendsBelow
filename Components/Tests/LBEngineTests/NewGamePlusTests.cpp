@@ -60,6 +60,9 @@ TEST(NewGamePlusTests, Enemies_AreStrongerInACycle) {
     EXPECT_EQ(weak->definition->key, strong->definition->key);
     EXPECT_GT(strong->maxHitPoints, weak->maxHitPoints * 2);
     EXPECT_GT(strong->bonusDamage, weak->bonusDamage);
+    EXPECT_EQ(weak->bonusAttack, 0);   // veterans: they hit truer and are harder to hit
+    EXPECT_EQ(strong->bonusAttack, GameEngine::NewGamePlusAttackBonus);
+    EXPECT_EQ(strong->bonusArmorClass, GameEngine::NewGamePlusArmorClass);
 }
 
 TEST(NewGamePlusTests, Finds_AreDeeperInACycle) {

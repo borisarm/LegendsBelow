@@ -1011,7 +1011,7 @@ TEST_F(ShippedContentTests, FirstArchivist_ThreePhasesEchoesAndALastAttack) {
     EXPECT_EQ(boss->SummonFor(3), boss->summons[0]);       // in turn
     ASSERT_TRUE(boss->phaseThreeSlam.has_value());
     EXPECT_FALSE(boss->phaseThreeSlam->atTarget);          // around itself
-    EXPECT_EQ(boss->phaseThreeSlam->damage.count, 4);
+    EXPECT_GT(boss->phaseThreeSlam->damage.count, boss->slamDamage.count);   // its last ring hits harder
     EXPECT_TRUE(boss->Slam().atTarget);                    // its first: under the hero
     EXPECT_LT(boss->tint[1], 1.0f);                        // drawn red
 }

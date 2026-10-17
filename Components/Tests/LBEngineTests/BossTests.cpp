@@ -113,3 +113,27 @@ TEST(BossTests, Golem_UsesTheLargeRigsClips) {
     const auto& rendering = engine.GetRendering();
     EXPECT_TRUE(clip == *rendering.FindAnimation("Large/Idle_A") || clip == *rendering.FindAnimation("Large/Walking_A"));
 }
+
+TEST(BossTests, Summons_AreWorthNothing) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.GrantExperience(30000);   // a hero who lasts until the dead rise
+    const auto boss = *engine.SpawnEnemy(GameEngine::BossEnemy, { 5.0f, 0.0f });
+    const auto* necromancer = engine.GetContent()->FindEnemy(GameEngine::BossEnemy);
+    std::optional<std::uint32_t> raised;
+    for (int i = 0; i < static_cast<int>(60 * necromancer->summonCooldownSeconds * 2.0f) && !raised; ++i) {
+        engine.Tick(OneSixtieth);
+        for (const auto& enemy : engine.GetEncounter().GetEnemies()) {
+            if (enemy.summoner == boss && enemy.IsTargetable()) raised = enemy.id;
+        }
+    }
+    ASSERT_TRUE(raised.has_value());
+    const auto experience = PlayerExperience(engine);
+    const auto items = engine.GetGroundItems().size();
+
+    ASSERT_TRUE(engine.DefeatEnemy(*raised));
+    engine.Tick(OneSixtieth);
+
+    EXPECT_EQ(PlayerExperience(engine), experience);   // no farming a summoner
+    EXPECT_EQ(engine.GetGroundItems().size(), items);
+}

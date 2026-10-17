@@ -76,6 +76,8 @@ namespace LB::Engine {
         entrance.cleared = true;
 
         session_->encounter.Reset();
+        session_->encounter.SetVeterans(NewGamePlusAttackBonus * session_->cycle, NewGamePlusArmorClass * session_->cycle,
+                                        NewGamePlusHitPoints * static_cast<float>(session_->cycle));
         session_->groundItems.clear();
 
         // A resting place: every room is quiet; the merchant and the shrine stand in the entrance

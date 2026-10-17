@@ -233,10 +233,12 @@ The run ends below the last tier (the Archive, floors 10-12) and its resting pla
 - **The final floor (14), the Red Library**: a hand-made arena, not a generated floor: a small entrance room, a long corridor, and a great hall (the exit room). No objective, no lore book; the last tier's look.
 - **The First Archivist**, alone in the hall when the hero walks in: the founder of the Archivists (see the Archive's lore), a caster who keeps its distance, in three phases:
   1. Arcane bolts, and a ring under the hero's feet.
-  2. Below two thirds of its health, enraged (attacks and raisings quicken): it raises echoes of the earlier tiers' guardians in turn (a skeleton warrior, an orc raider, a vampire), up to four at once; they crumble when it falls.
+  2. Below two thirds of its health, enraged (attacks and raisings quicken): it raises echoes of the earlier tiers' guardians in turn (a skeleton warrior, an orc raider, a vampire), up to three at once; they crumble when it falls, and like everything a summoner raises they are worth no experience and drop nothing (no farming them).
   3. Below a third, unbound: the hall's torches gutter to a fifth of their light until it falls, and a second, wider ring around itself opens, to drive off whoever stands close.
 - **Victory**: its fall silences the Below (a banner with the codex's last page, "The Red Book", found only this way) and opens a way up, a column of light where a trapdoor would be. Stepping into it opens the victory page: the run's summary (time, enemies and bosses slain, gold, falls, pages of the codex) and what next: Descend Again (New Game+, design-loot-and-progression.md 7.3), linger in the hall, or quit to the title.
 - **The legacy** (design-loot-and-progression.md 7.1) keeps the victories and the quickest, and a first victory unlocks **Laurels**: new heroes' heirlooms are rare, not uncommon.
+
+As everywhere, a hero who falls rises at the entrance and the hall starts over, so the fight is won in one life. The balance bot wins it in one to six minutes at level 20 (`BalanceTests`).
 
 Tunables: `FinalDepth`, `FinalBoss` (EngineTunables); the boss's phases, echoes (`summons`, `summonFromPhase`), and last attack (`phaseThreeSlam`) in enemies.json.
 

@@ -1,7 +1,8 @@
 // BalanceTests.cpp - LB.Engine tests: a simple bot plays each class headless through the first
 // tier (three floors and its boss), the second (the caves' creatures and the Golem Warlord), the
 // third (the ruins' creatures and the Frost Golem), and the fourth (the archive's and the
-// Abomination) and must reach the resting place below each; it
+// Abomination) and must reach the resting place below each; then through the final floor to the
+// victory, and down again through New Game+'s first tier; it
 // reports deaths, potions, and time for balancing. It
 // grows as a player would (attribute points, a path, better finds, a companion and potions from
 // the merchant, the locked gate's treasure). A run is minutes of game time, so these are built
@@ -58,8 +59,9 @@ namespace {
         void Step() {
             ++steps_;
             potionWait_ = std::max(0, potionWait_ - 1);
-            if (engine_.GetDepth() != depth_) {   // a new floor: a new map
+            if (engine_.GetDepth() != depth_ || engine_.GetCycle() != cycle_) {   // a new floor: a new map
                 depth_ = engine_.GetDepth();
+                cycle_ = engine_.GetCycle();
                 world_ = engine_.GetWorld();
                 goalSet_ = false;
                 openGates_ = 0;
@@ -295,7 +297,7 @@ namespace {
         // to six; the merchant's place until done
         std::optional<WorldPoint> Shopping() {
             const auto merchant = engine_.GetMerchantPosition();
-            if (!merchant || shopped_ == depth_) return std::nullopt;
+            if (!merchant || shopped_ == Floor()) return std::nullopt;
             if (Encounter::Distance(engine_.GetPlayerPosition(), *merchant) > 1.2f) return *merchant;
             const auto buy = [&](auto wanted) {
                 for (bool bought = true; bought;) {
@@ -310,9 +312,12 @@ namespace {
             buy([&](const GameEngine::StockEntry& entry) {
                 return entry.item == engine_.MakeItem(GameEngine::HealingPotion) && engine_.CountItem(GameEngine::HealingPotion) < 6;
             });
-            shopped_ = depth_;
+            shopped_ = Floor();
             return std::nullopt;
         }
+
+        // This floor, told apart from the same depth in another cycle
+        [[nodiscard]] std::int32_t Floor() const noexcept { return cycle_ * 100 + depth_; }
 
         // Along the floor's flow field (built again when the goal moves)
         void GoTo(WorldPoint goal) {
@@ -336,6 +341,7 @@ namespace {
         std::string melee_;
         CharacterClass class_;
         std::int32_t depth_{1};
+        std::int32_t cycle_{0};
         std::int32_t shopped_{0};
         std::int32_t openGates_{0};
         std::int32_t gates_{0};
@@ -381,7 +387,7 @@ namespace {
 
     // Every class clears the first tier, its boss included, in time. The bot charges in and sets up
     // no sneak attacks, so it dies more than a player would: the cap catches a class that got much
-    // harder (at the last pass: Warrior 0, Mage 4, Rogue 29, Cleric 2 deaths, level 5 or 6; 5 to
+    // harder (at the last pass: Warrior 0, Mage 4, Rogue 29, Cleric 8 deaths, level 5 or 6; 5 to
     // 14 minutes; over six seeds the Warrior, Mage, and Cleric died 2 to 13 times)
     constexpr std::int32_t RestingPlace = GameEngine::BossFloorInterval + 1;
     constexpr float BudgetMinutes = 20.0f;
@@ -421,7 +427,7 @@ TEST(BalanceTests, Cleric_ClearsTheFirstTier) {
 namespace {
     constexpr std::int32_t SecondRestingPlace = 2 * GameEngine::BossFloorInterval + 1;
     constexpr float SecondBudgetMinutes = 30.0f;
-    // At the last pass: Warrior 0, Mage 11, Rogue 30, Cleric 3 deaths, level 10, 10 to 21
+    // At the last pass: Warrior 0, Mage 11, Rogue 30, Cleric 8 deaths, level 10, 10 to 23
     // minutes; over six seeds the Warrior, Mage, and Cleric died 3 to 24 times, the Rogue 17 to 32
     constexpr std::int32_t MostSecondTierDeaths = 30;
     constexpr std::int32_t MostRogueSecondTierDeaths = 40;
@@ -455,8 +461,8 @@ TEST(BalanceTests, Cleric_ClearsTheSecondTier) {
 namespace {
     constexpr std::int32_t ThirdRestingPlace = 3 * GameEngine::BossFloorInterval + 1;
     constexpr float ThirdBudgetMinutes = 45.0f;
-    // At the last pass: Warrior 0, Mage 18, Rogue 36, Cleric 3 deaths, level 14 or 15 (the third
-    // item tier's levels), 17 to 33 minutes
+    // At the last pass: Warrior 0, Mage 18, Rogue 34, Cleric 8 deaths, level 14 or 15 (the third
+    // item tier's levels), 17 to 36 minutes
     constexpr std::int32_t MostThirdTierDeaths = 45;
 }
 
@@ -484,37 +490,115 @@ TEST(BalanceTests, Cleric_ClearsTheThirdTier) {
     EXPECT_LE(report.deaths, MostThirdTierDeaths);
 }
 
-// The fourth tier: the archive's creatures and the Abomination, toward the level cap
+// The fourth tier (the archive's creatures and the Abomination, toward the level cap), the final
+// floor (the First Archivist: the victory), and New Game+'s first tier, in one run: the bot takes
+// Descend Again on the victory page (design-dungeon-and-world.md 7.4, design-loot-and-progression.md 7.3)
 namespace {
     constexpr std::int32_t FourthRestingPlace = 4 * GameEngine::BossFloorInterval + 1;
     constexpr float FourthBudgetMinutes = 60.0f;
-    // At the last pass: Warrior 0, Mage 36, Rogue 42, Cleric 3 deaths, level 19 or 20 (the cap),
-    // 24 to 47 minutes
+    // At the last pass: Warrior 0, Mage 36, Rogue 38, Cleric 8 deaths, level 19 or 20 (the cap),
+    // 24 to 49 minutes
     constexpr std::int32_t MostFourthTierDeaths = 60;
+    // From the fourth resting place to the victory. The hall's boss starts over whenever the hero
+    // falls, so it must be won in one life. At the last pass: Warrior 1.2, Mage 1.0, Cleric 1.5
+    // minutes without a death; Rogue 6.2 minutes, 7 deaths (with the Archivist at 300 or 260
+    // hit points instead of 220 it never won: it fell with the boss at a fifth of its health)
+    constexpr float FinalFloorBudgetMinutes = 15.0f;
+    constexpr std::int32_t MostFinalFloorDeaths = 15;
+    // From the victory to New Game+1's first resting place. At the last pass: Warrior 0, Mage 1,
+    // Rogue 1, Cleric 3 deaths; 2.9 to 5.1 minutes, the Cleric 14.2 (its blows land least on the
+    // veterans' armour)
+    constexpr float NewGamePlusBudgetMinutes = 30.0f;
+    constexpr std::int32_t MostNewGamePlusDeaths = 30;
+
+    /// <summary>
+    /// Where a run stood at a milestone: game minutes and deaths so far, the hero's level
+    /// </summary>
+    struct Milestone {
+        bool reached{false};
+        float minutes{0.0f};
+        std::int32_t deaths{0};
+        std::int32_t level{1};
+    };
+
+    struct CampaignReport {
+        Milestone fourthRest;    // the fourth tier's resting place
+        Milestone victory;       // the victory page
+        Milestone newGamePlus;   // New Game+1's first resting place
+    };
+
+    // Play a class from the first floor to the victory and through New Game+'s first tier
+    CampaignReport PlayToTheEndAndBeyond(CharacterClass characterClass) {
+        GameEngine engine;
+        EXPECT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = CombatSeed,
+            .dungeon = true, .playerClass = characterClass })) << engine.GetInitializationError();
+        Bot bot(engine, characterClass);
+        CampaignReport report;
+        std::int32_t deaths = 0;
+        bool alive = true;
+        const auto budget = static_cast<std::int64_t>((FourthBudgetMinutes + FinalFloorBudgetMinutes + NewGamePlusBudgetMinutes) * 60.0f * 60.0f);
+        std::int64_t step = 0;
+        const auto mark = [&](Milestone& milestone) {
+            milestone = Milestone{ true, static_cast<float>(step) / 3600.0f, deaths, PlayerLevel(engine) };
+        };
+        for (; step < budget && !report.newGamePlus.reached; ++step) {
+            if (engine.GetMenu().Page() == MenuPage::Victory) {
+                if (!report.victory.reached) mark(report.victory);
+                bot.Release();
+                if (engine.GetMenu().Selected() && engine.GetMenu().Selected()->command == MenuCommand::DescendAgain) TapKey(engine, Keys::Enter);
+            }
+            else {
+                bot.Step();
+            }
+            engine.Tick(OneSixtieth);
+            if (alive && !engine.IsPlayerAlive()) ++deaths;
+            alive = engine.IsPlayerAlive();
+            if (!report.fourthRest.reached && engine.GetCycle() == 0 && engine.GetDepth() == FourthRestingPlace) mark(report.fourthRest);
+            if (engine.GetCycle() == 1 && engine.GetDepth() == RestingPlace) mark(report.newGamePlus);
+        }
+        bot.Release();
+        const auto print = [&](const char* what, const Milestone& milestone, const Milestone& before) {
+            if (!milestone.reached) {
+                std::printf("[ BALANCE  ] %-8s %s not reached (%d deaths, %.1f minutes in all)\n", LB::Character::ToString(characterClass), what, deaths,
+                            static_cast<float>(step) / 3600.0f);
+                return;
+            }
+            std::printf("[ BALANCE  ] %-8s %s: level %d, %d deaths, %.1f minutes (%d deaths, %.1f minutes since the last)\n", LB::Character::ToString(characterClass),
+                        what, milestone.level, milestone.deaths, milestone.minutes, milestone.deaths - before.deaths, milestone.minutes - before.minutes);
+        };
+        print("depth 13", report.fourthRest, Milestone{ true });
+        print("victory", report.victory, report.fourthRest);
+        print("NG+1 depth 4", report.newGamePlus, report.victory);
+        return report;
+    }
+
+    void ExpectTheEndAndBeyond(const CampaignReport& report) {
+        ASSERT_TRUE(report.fourthRest.reached);
+        EXPECT_LE(report.fourthRest.minutes, FourthBudgetMinutes);
+        EXPECT_LE(report.fourthRest.deaths, MostFourthTierDeaths);
+        ASSERT_TRUE(report.victory.reached);
+        EXPECT_LE(report.victory.minutes - report.fourthRest.minutes, FinalFloorBudgetMinutes);
+        EXPECT_LE(report.victory.deaths - report.fourthRest.deaths, MostFinalFloorDeaths);
+        ASSERT_TRUE(report.newGamePlus.reached);
+        EXPECT_LE(report.newGamePlus.minutes - report.victory.minutes, NewGamePlusBudgetMinutes);
+        EXPECT_LE(report.newGamePlus.deaths - report.victory.deaths, MostNewGamePlusDeaths);
+    }
 }
 
-TEST(BalanceTests, Warrior_ClearsTheFourthTier) {
-    const auto report = Play(CharacterClass::Warrior, FourthRestingPlace, FourthBudgetMinutes);
-    EXPECT_EQ(report.depth, FourthRestingPlace);
-    EXPECT_LE(report.deaths, MostFourthTierDeaths);
+TEST(BalanceTests, Warrior_WinsTheRunAndDescendsAgain) {
+    ExpectTheEndAndBeyond(PlayToTheEndAndBeyond(CharacterClass::Warrior));
 }
 
-TEST(BalanceTests, Mage_ClearsTheFourthTier) {
-    const auto report = Play(CharacterClass::Mage, FourthRestingPlace, FourthBudgetMinutes);
-    EXPECT_EQ(report.depth, FourthRestingPlace);
-    EXPECT_LE(report.deaths, MostFourthTierDeaths);
+TEST(BalanceTests, Mage_WinsTheRunAndDescendsAgain) {
+    ExpectTheEndAndBeyond(PlayToTheEndAndBeyond(CharacterClass::Mage));
 }
 
-TEST(BalanceTests, Rogue_ClearsTheFourthTier) {
-    const auto report = Play(CharacterClass::Rogue, FourthRestingPlace, FourthBudgetMinutes);
-    EXPECT_EQ(report.depth, FourthRestingPlace);
-    EXPECT_LE(report.deaths, MostFourthTierDeaths);
+TEST(BalanceTests, Rogue_WinsTheRunAndDescendsAgain) {
+    ExpectTheEndAndBeyond(PlayToTheEndAndBeyond(CharacterClass::Rogue));
 }
 
-TEST(BalanceTests, Cleric_ClearsTheFourthTier) {
-    const auto report = Play(CharacterClass::Cleric, FourthRestingPlace, FourthBudgetMinutes);
-    EXPECT_EQ(report.depth, FourthRestingPlace);
-    EXPECT_LE(report.deaths, MostFourthTierDeaths);
+TEST(BalanceTests, Cleric_WinsTheRunAndDescendsAgain) {
+    ExpectTheEndAndBeyond(PlayToTheEndAndBeyond(CharacterClass::Cleric));
 }
 
 #endif // NDEBUG
