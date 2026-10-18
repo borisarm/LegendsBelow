@@ -38,6 +38,19 @@ namespace {
         }
     }
 
+    // The run's seed: CombatSeed, or LB_BALANCE_SEED to play other floors (checking a change over
+    // several seeds without editing the tests)
+    std::uint32_t BalanceSeed() {
+        char* text = nullptr;
+        std::size_t length = 0;
+        std::uint32_t seed = CombatSeed;
+        if (_dupenv_s(&text, &length, "LB_BALANCE_SEED") == 0 && text) {
+            std::from_chars(text, text + std::strlen(text), seed);
+            std::free(text);
+        }
+        return seed;
+    }
+
     // Rooms the bot must clear (their enemies keep the way down shut)
     bool IsFightingRoom(LB::Dungeon::RoomType type) {
         using LB::Dungeon::RoomType;
@@ -360,7 +373,7 @@ namespace {
     // Play a class from the first floor until it stands on `depth` (or the time runs out)
     BotReport Play(CharacterClass characterClass, std::int32_t depth, float budgetMinutes) {
         GameEngine engine;
-        EXPECT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = CombatSeed,
+        EXPECT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = BalanceSeed(),
             .dungeon = true, .playerClass = characterClass })) << engine.GetInitializationError();
         Bot bot(engine, characterClass);
         BotReport report;
@@ -380,8 +393,8 @@ namespace {
         report.gates = bot.GatesOpened();
         report.allies = static_cast<std::int32_t>(engine.GetAllies().Allies().size());
         report.minutes = static_cast<float>(step) / 3600.0f;
-        std::printf("[ BALANCE  ] %-8s depth %d, level %d, %d deaths, %d potions, %d gates, %d allies, %.1f minutes\n",
-                    LB::Character::ToString(characterClass), report.depth, report.level, report.deaths, report.potions, report.gates, report.allies, report.minutes);
+        std::printf("[ BALANCE  ] %-8s seed %u, depth %d, level %d, %d deaths, %d potions, %d gates, %d allies, %.1f minutes\n",
+                    LB::Character::ToString(characterClass), BalanceSeed(), report.depth, report.level, report.deaths, report.potions, report.gates, report.allies, report.minutes);
         return report;
     }
 
@@ -502,12 +515,16 @@ namespace {
     // From the fourth resting place to the victory. The hall's boss starts over whenever the hero
     // falls, so it must be won in one life. At the last pass: Warrior 1.2, Mage 1.0, Cleric 1.5
     // minutes without a death; Rogue 6.2 minutes, 7 deaths (with the Archivist at 300 or 260
-    // hit points instead of 220 it never won: it fell with the boss at a fifth of its health)
+    // hit points instead of 220 it never won: it fell with the boss at a fifth of its health).
+    // Over six seeds (LB_BALANCE_SEED 1 to 5 and this one) the Warrior, Mage, and Cleric won in
+    // 1.1 to 2.0 minutes with at most a death; the Rogue's fight swung from 0 deaths in 1.5
+    // minutes to 77 in 58 (the gear the bot happened to wear). On seed 1 the Mage and Rogue stall
+    // on depth 9 before the end, as they did before the final floor was built.
     constexpr float FinalFloorBudgetMinutes = 15.0f;
     constexpr std::int32_t MostFinalFloorDeaths = 15;
     // From the victory to New Game+1's first resting place. At the last pass: Warrior 0, Mage 1,
     // Rogue 1, Cleric 3 deaths; 2.9 to 5.1 minutes, the Cleric 14.2 (its blows land least on the
-    // veterans' armour)
+    // veterans' armour; over six seeds 4 to 33 minutes, up to 13 deaths)
     constexpr float NewGamePlusBudgetMinutes = 30.0f;
     constexpr std::int32_t MostNewGamePlusDeaths = 30;
 
@@ -530,7 +547,7 @@ namespace {
     // Play a class from the first floor to the victory and through New Game+'s first tier
     CampaignReport PlayToTheEndAndBeyond(CharacterClass characterClass) {
         GameEngine engine;
-        EXPECT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = CombatSeed,
+        EXPECT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = BalanceSeed(),
             .dungeon = true, .playerClass = characterClass })) << engine.GetInitializationError();
         Bot bot(engine, characterClass);
         CampaignReport report;
@@ -559,7 +576,8 @@ namespace {
         bot.Release();
         const auto print = [&](const char* what, const Milestone& milestone, const Milestone& before) {
             if (!milestone.reached) {
-                std::printf("[ BALANCE  ] %-8s %s not reached (%d deaths, %.1f minutes in all)\n", LB::Character::ToString(characterClass), what, deaths,
+                std::printf("[ BALANCE  ] %-8s %s not reached (stopped on depth %d, cycle %d, level %d; %d deaths, %.1f minutes in all)\n",
+                            LB::Character::ToString(characterClass), what, engine.GetDepth(), engine.GetCycle(), PlayerLevel(engine), deaths,
                             static_cast<float>(step) / 3600.0f);
                 return;
             }
