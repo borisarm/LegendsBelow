@@ -62,4 +62,4 @@ The detailed rules and an error-to-fix table are in `.github/copilot-instruction
 - Projects importing module libraries must match their `SDLCheck`, `FloatingPointModel`, and `ControlFlowGuard` settings (else C5050). Test projects reference both the component and `LBModel.Core`.
 - Gameplay rules follow `Documentation/design-*.md`; cite the section in comments for non-obvious formulas, and keep tunables in data files.
 - File headers are a one-line `// File.ixx - what it is` comment; types and public members get `/// <summary>` doc comments.
-- User-visible changes are recorded in `CHANGELOG.md` under `[Unreleased]` (detailed, naming the new APIs), and `README-LegendsBelow.md` / `Documentation/architecture.md` status tables are kept current.
+- User-visible changes are recorded in `CHANGELOG.md` under `[Unreleased]` (detailed, naming the new APIs), and `README.md` / `Documentation/architecture.md` status tables are kept current.
