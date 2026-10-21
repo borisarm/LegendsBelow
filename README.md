@@ -84,6 +84,13 @@ Run the projects under `Components/Tests/` from Test Explorer, or `Scripts/Test.
 
 Details and sources: `Assets/Music/CREDITS.txt` and the license files next to each asset set.
 
+## Licensing
+
+The source code is **all rights reserved** — this repository is published to be read, not to be
+reused. Third-party assets and libraries keep their own licenses, and one music track
+("Mystical Theme", CC-BY 3.0) requires attribution wherever the game is distributed.
+See [NOTICE.md](NOTICE.md) for the full breakdown.
+
 ## Origin
 
 The project started from the Microsoft GDK DirectX 12 desktop template. `LegendsBelow/README.md` contains the original template notes.
