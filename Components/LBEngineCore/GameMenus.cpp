@@ -147,6 +147,7 @@ namespace LB::Engine {
                 { "Mage", MenuCommand::PlayMage, true, "wand and spells" },
                 { "Rogue", MenuCommand::PlayRogue, true, "dagger, bow, and stealth" },
                 { "Cleric", MenuCommand::PlayCleric, true, "mace, shield, and healing" },
+                { "Necromancer", MenuCommand::PlayNecromancer, true, "curses and stolen life" },
                 { "Back", MenuCommand::Back },
             };
         default:
@@ -227,9 +228,11 @@ namespace LB::Engine {
         case MenuCommand::PlayMage:
         case MenuCommand::PlayRogue:
         case MenuCommand::PlayCleric:
+        case MenuCommand::PlayNecromancer:
             options_.playerClass = command == MenuCommand::PlayMage ? LB::Character::CharacterClass::Mage
                                  : command == MenuCommand::PlayRogue ? LB::Character::CharacterClass::Rogue
-                                 : command == MenuCommand::PlayCleric ? LB::Character::CharacterClass::Cleric : LB::Character::CharacterClass::Warrior;
+                                 : command == MenuCommand::PlayCleric ? LB::Character::CharacterClass::Cleric
+                                 : command == MenuCommand::PlayNecromancer ? LB::Character::CharacterClass::Necromancer : LB::Character::CharacterClass::Warrior;
             StartRun();
             CloseMenu();
             session_->playing = true;

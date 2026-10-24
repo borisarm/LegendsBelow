@@ -89,5 +89,28 @@
     "categories": ["Buff"],
     "durationSeconds": 10.0,
     "damageTakenMultiplier": 0.8
+  },
+  {
+    "id": "status_weakened",
+    "displayName": "Weakened",
+    "categories": ["Debuff"],
+    "durationSeconds": 12.0,
+    "damageDealtMultiplier": 0.9
+  },
+  {
+    "id": "status_frail",
+    "displayName": "Frail",
+    "categories": ["Debuff"],
+    "durationSeconds": 12.0,
+    "damageTakenMultiplier": 1.2
+  },
+  {
+    "id": "status_doom",
+    "displayName": "Doomed",
+    "categories": ["Debuff"],
+    "durationSeconds": 15.0,
+    "tickIntervalSeconds": 15.0,
+    "damagePerTick": 90,
+    "damageType": "Shadow"
   }
 ]

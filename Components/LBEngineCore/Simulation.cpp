@@ -421,13 +421,10 @@ namespace LB::Engine {
         const auto* classData = PlayerClassDefinition();
         if (!player || !classData) return 0;
         const auto attributes = session_->characterService.GetEffectiveAttributes(*session_->playerId).value_or(player->GetAttributes());
+        // The class's spell attribute (classes.json spellAttribute, at spellAttributeScale)
         std::int32_t modifier = 0;
-        switch (player->GetClass()) {
-        case LB::Character::CharacterClass::Warrior: modifier = attributes.GetStrengthModifier(); break;   // a warrior's might
-        case LB::Character::CharacterClass::Mage: modifier = attributes.GetIntelligenceModifier(); break;
-        case LB::Character::CharacterClass::Cleric: modifier = attributes.GetWisdomModifier(); break;
-        case LB::Character::CharacterClass::Rogue: modifier = attributes.GetIntelligenceModifier() / 2; break;
-        default: break;
+        if (classData->spellAttribute) {
+            modifier = static_cast<std::int32_t>(static_cast<float>(attributes.GetModifier(attributes.Get(*classData->spellAttribute))) * classData->spellAttributeScale);
         }
         return std::max(0, classData->spellPowerBase + modifier * player->GetLevel() + EquippedBonuses().spellPower);
     }
@@ -605,7 +602,13 @@ namespace LB::Engine {
         else if (spell.IsTargetedStrike()) {
             // An instant strike (and the caster healed, when the spell heals too)
             if (target) {
-                if (auto event = session_->encounter.StrikeWithSpell(payload, target->id)) takeEvents({ *event });
+                if (auto event = session_->encounter.StrikeWithSpell(payload, target->id)) {
+                    takeEvents({ *event });
+                    // Life drained: a share of the damage dealt heals the caster
+                    if (spell.lifestealFraction > 0.0f && event->result.hit && event->result.finalDamage > 0) {
+                        HealPlayer(std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(event->result.finalDamage) * spell.lifestealFraction))));
+                    }
+                }
                 if (spell.baseHeal > 0) HealPlayer(heal);
             }
         }
@@ -714,6 +717,16 @@ namespace LB::Engine {
                 }
             }
             session_->combatText.Add("NOTHING TO REACH", over, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+            return;
+        }
+        if (spell.effect == "Curse") {
+            // The statuses on the enemy aimed at (StartCast found it)
+            const auto* target = session_->casting.target ? session_->encounter.FindEnemy(*session_->casting.target) : nullptr;
+            if (!target || !target->IsTargetable()) return;
+            for (const auto& key : spell.appliedStatusIds) session_->encounter.ApplyStatus(target->id, key);
+            const auto shadow = ElementPalette(LB::Combat::DamageType::Shadow);
+            session_->effects.Emit(ParticleEffect::SpellBurst, { target->position.x, 0.8f, target->position.y }, 20, 0.9f, &shadow);
+            session_->combatText.Add(spell.name, { target->position.x, 2.0f, target->position.y }, { 0.75f, 0.45f, 0.95f, 1.0f }, 2.0f);
             return;
         }
         if (spell.effect == "IceWall") {
@@ -924,7 +937,11 @@ namespace LB::Engine {
         }
         const auto wave = session_->encounter.GetWave();
         const auto allies = session_->allies.Targets();
-        for (const auto& event : session_->encounter.Update(elapsedSeconds, target, allies)) {
+        for (auto event : session_->encounter.Update(elapsedSeconds, target, allies)) {
+            // A cursed enemy's blows, shots, and rings are weaker (the weakening curse)
+            if (event.kind == CombatEventKind::EnemyAttack) {
+                if (const auto* attacker = session_->encounter.FindEnemy(event.enemyId)) event.result.finalDamage = attacker->statuses.Dealt(event.result.finalDamage);
+            }
             session_->combatEvents.push_back(event);
             // The player's (and allies') arrows and bolts arrive during the enemies' step
             if (event.kind == CombatEventKind::PlayerAttack) {

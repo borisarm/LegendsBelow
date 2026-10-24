@@ -252,6 +252,7 @@ namespace LB::Engine {
         assets_.models.mage = load(MageModel);
         assets_.models.rogue = load(RogueModel);
         assets_.models.cleric = load(ClericModel);
+        assets_.models.necromancer = load(NecromancerModel);
         assets_.models.playerWeapon = load(PlayerWeaponModel);
         assets_.characterModels.clear();
 
@@ -441,6 +442,7 @@ namespace LB::Engine {
             rules.primaryAttributes = definition.primaryAttributes;
             rules.attributeGrowth = definition.attributeGrowth;
             rules.armorAdjustments = definition.armorAdjustments;
+            rules.manaAttribute = definition.manaAttribute;
             session_->characterService.SetClassRules(definition.characterClass, std::move(rules));
         }
     }

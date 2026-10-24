@@ -86,13 +86,14 @@ export namespace LB::Content {
         /// traps shown within its radius, a lever or candle within its range worked from afar, a
         /// wall of ice across the way ahead for its duration
         /// </summary>
-        static constexpr std::array<std::string_view, 6> UtilityEffects{ "Blink", "Buff", "Cleanse", "RevealSecrets", "RemoteInteract", "IceWall" };
+        static constexpr std::array<std::string_view, 7> UtilityEffects{ "Blink", "Buff", "Cleanse", "RevealSecrets", "RemoteInteract", "IceWall", "Curse" };
+        [[nodiscard]] bool IsCurse() const noexcept { return effect == "Curse"; }   // statuses on the enemy aimed at
         [[nodiscard]] bool IsShadowstep() const noexcept { return teleportBehindTarget && range > 0.0f; }
 
         /// <summary>
         /// Needs an enemy to aim at (a strike, a burst at a target, a step behind one)
         /// </summary>
-        [[nodiscard]] bool NeedsTarget() const noexcept { return !IsHeal() && (IsTargetedStrike() || IsTargetedBurst() || IsShadowstep()); }
+        [[nodiscard]] bool NeedsTarget() const noexcept { return !IsHeal() && (IsTargetedStrike() || IsTargetedBurst() || IsShadowstep() || effect == "Curse"); }
 
         /// <summary>
         /// The game can cast it (buffs, summons, and the like are not built yet)
@@ -220,6 +221,9 @@ export namespace LB::Content {
         std::vector<String> spellBar;                 // spell keys on the bar (keys 1-4), castable by the class
         float manaRegenPerSecond{0.0f};               // mana recovered per second (design-spells-system.md 4.1)
         std::int32_t spellPowerBase{0};               // SP_Base (design-character-system.md 4.2)
+        std::optional<LB::AttributeType> spellAttribute;  // its modifier, each level, adds to spell power (none: nothing)
+        float spellAttributeScale{1.0f};              // ... at this share (the Rogue's half)
+        std::optional<LB::AttributeType> manaAttribute;   // its modifier, each level, adds to the mana (casters)
         String startingWeapon;                        // weapon key, equipped at the start (empty: none)
         LB::Dice sneakAttackDice{0, 6, 0};            // extra on blows against the unaware or helpless (count 0: none)
         std::vector<SpecializationDefinition> specializations;   // the paths to choose from at SpecializationLevel
@@ -619,6 +623,7 @@ export namespace LB::Content {
         DamageType damageType{DamageType::None};
         std::int32_t attackBonus{0};                  // to hit while it lasts (a blessing)
         float damageTakenMultiplier{1.0f};            // what blows do while it lasts (0.8: a fifth less)
+        float damageDealtMultiplier{1.0f};            // what the holder's own blows do (0.9: a curse's tenth less)
     };
 
     /// <summary>

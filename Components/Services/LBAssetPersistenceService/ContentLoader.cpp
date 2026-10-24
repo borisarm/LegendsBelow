@@ -44,6 +44,7 @@ namespace LB::Content {
         constexpr EnumName<CharacterClass> CharacterClasses[] = {
             {"Warrior", CharacterClass::Warrior}, {"Rogue", CharacterClass::Rogue},
             {"Mage", CharacterClass::Mage}, {"Cleric", CharacterClass::Cleric},
+            {"Necromancer", CharacterClass::Necromancer},
         };
 
         // Radiant/Necrotic are the design documents' names for the domain's Holy/Shadow
@@ -353,7 +354,8 @@ namespace LB::Content {
                 reader.Error(std::format("unknown 'effect' '{}'", spell.effect));
             }
             if (spell.effect == "Blink" && spell.blinkTiles <= 0.0f) reader.Error("a Blink needs a positive 'blinkTiles'");
-            if (spell.effect == "Buff" && spell.appliedStatusIds.empty()) reader.Error("a Buff needs 'appliedStatusIds'");
+            if ((spell.effect == "Buff" || spell.effect == "Curse") && spell.appliedStatusIds.empty()) reader.Error(std::format("a {} needs 'appliedStatusIds'", spell.effect));
+            if (spell.effect == "Curse" && spell.range <= 0.0f) reader.Error("a Curse needs a 'range'");
             if (spell.effect == "Cleanse" && spell.cleansesStatuses <= 0) reader.Error("a Cleanse needs 'cleansesStatuses'");
             if ((spell.effect == "RemoteInteract" || spell.effect == "IceWall") && spell.range <= 0.0f) reader.Error(std::format("a {} needs a 'range'", spell.effect));
             if ((spell.effect == "IceWall" || spell.effect == "RevealSecrets") && spell.durationSeconds <= 0.0f) reader.Error(std::format("a {} needs a 'durationSeconds'", spell.effect));
@@ -441,6 +443,10 @@ namespace LB::Content {
             reader.ReadStringArray("spellBar", definition.spellBar);
             reader.ReadFloat("manaRegenPerSecond", definition.manaRegenPerSecond, false);
             reader.ReadInt("spellPowerBase", definition.spellPowerBase, false);
+            reader.ReadOptionalEnum("spellAttribute", definition.spellAttribute, AttributeTypes);
+            reader.ReadFloat("spellAttributeScale", definition.spellAttributeScale, false);
+            reader.ReadOptionalEnum("manaAttribute", definition.manaAttribute, AttributeTypes);
+            if (definition.spellAttributeScale < 0.0f) reader.Error("'spellAttributeScale' must not be negative");
             reader.ReadString("startingWeapon", definition.startingWeapon, false);
             reader.ReadDice("sneakAttackDice", definition.sneakAttackDice, false);
             if (const Json* paths = reader.Nested("specializations", false, true)) {
@@ -938,6 +944,8 @@ namespace LB::Content {
             reader.ReadEnum("damageType", status.damageType, DamageTypes, false);
             reader.ReadInt("attackBonus", status.attackBonus, false);
             reader.ReadFloat("damageTakenMultiplier", status.damageTakenMultiplier, false);
+            reader.ReadFloat("damageDealtMultiplier", status.damageDealtMultiplier, false);
+            if (status.damageDealtMultiplier < 0.0f) reader.Error("'damageDealtMultiplier' must not be negative");
 
             if (status.durationSeconds <= 0.0f) reader.Error("'durationSeconds' must be positive");
             if (status.damageTakenMultiplier < 0.0f) reader.Error("'damageTakenMultiplier' must not be negative");

@@ -1326,6 +1326,7 @@ export namespace LB::Engine {
             Systems::Rendering::ModelId mage{};
             Systems::Rendering::ModelId rogue{};
             Systems::Rendering::ModelId cleric{};
+            Systems::Rendering::ModelId necromancer{};
             Systems::Rendering::ModelId playerWeapon{};
         };
 

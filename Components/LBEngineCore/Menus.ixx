@@ -58,7 +58,8 @@ export namespace LB::Engine {
         PlayWarrior,    // a new game as this class
         PlayMage,
         PlayRogue,
-        PlayCleric
+        PlayCleric,
+        PlayNecromancer
     };
 
     /// <summary>

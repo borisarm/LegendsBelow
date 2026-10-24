@@ -255,7 +255,7 @@ TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
 
     EXPECT_FALSE(ok);
     const auto& error = engine.GetInitializationError();
-    // Arena (4), the knight, the mage, the rogue, the cleric, and the loot sword (5), dungeon props (4), loot props (10),
+    // Arena (4), the knight, the mage, the rogue, the cleric, the necromancer, and the loot sword (6), dungeon props (4), loot props (10),
     // the potion and the arrow and bolt bundles (3), the merchant, the shrine and its candles (3),
     // the tiers' floors and walls, props, and traps (18),
     // the companions' bodies and great axe (3), the greater chest, gate, candles, and key (5),
@@ -266,7 +266,7 @@ TEST(GameEngineModelTests, MissingModels_StopStartupListingFiles) {
     // the book of lore (1),
     // weapons and the shield in the heroes' hands and their arrows and bolts (11),
     // enemy bodies, weapons and shots (13), animation sets (5 medium, 3 large)
-    EXPECT_NE(error.find("125 problems"), std::string::npos) << error;
+    EXPECT_NE(error.find("126 problems"), std::string::npos) << error;
     EXPECT_NE(error.find("wall.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Knight.glb"), std::string::npos) << error;
     EXPECT_NE(error.find("Skeleton_Minion.glb"), std::string::npos) << error;

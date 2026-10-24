@@ -15,7 +15,8 @@ export namespace LB::Character {
         Warrior = 1,    // Melee combat specialist
         Rogue = 2,      // Stealth and precision
         Mage = 3,       // Arcane spellcaster
-        Cleric = 4      // Divine spellcaster and healer
+        Cleric = 4,     // Divine spellcaster and healer
+        Necromancer = 5 // Shadow caster: curses and stolen life
     };
 
     /// <summary>
@@ -28,6 +29,7 @@ export namespace LB::Character {
             case CharacterClass::Rogue: return "Rogue";
             case CharacterClass::Mage: return "Mage";
             case CharacterClass::Cleric: return "Cleric";
+            case CharacterClass::Necromancer: return "Necromancer";
             default: return "Unknown";
         }
     }

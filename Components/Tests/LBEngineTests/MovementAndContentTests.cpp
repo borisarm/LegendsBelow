@@ -252,7 +252,7 @@ TEST(GameEngineContentTests, ShippedContent_Loads) {
 
     ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = *dir })) << engine.GetInitializationError();
 
-    EXPECT_EQ(engine.GetContent()->GetSpells().size(), 55u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells
+    EXPECT_EQ(engine.GetContent()->GetSpells().size(), 56u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells, the bone shard
     EXPECT_EQ(engine.GetContent()->GetWeapons().size(), 40u);
     EXPECT_EQ(engine.GetContent()->GetArmour().size(), 55u);
     EXPECT_NE(engine.GetContent()->FindWeapon("weapon_sword_rusted_shortsword_t1"), nullptr);
@@ -313,7 +313,7 @@ TEST(GameEngineClassDataTests, ShippedContent_ConfiguresPlayerFromClassData) {
     const auto& player = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
     const float expected = warrior->baseMovementSpeed + static_cast<float>(player.GetAttributes().GetDexterityModifier()) * 0.1f;
 
-    EXPECT_EQ(engine.GetContent()->GetClasses().size(), 4u);
+    EXPECT_EQ(engine.GetContent()->GetClasses().size(), 5u);
     EXPECT_FLOAT_EQ(*engine.GetCharacters().GetMovementSpeed(*engine.GetPlayerId()), expected);
 }
 

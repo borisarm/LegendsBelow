@@ -39,6 +39,7 @@ export namespace LB::Services::Character {
         std::vector<AttributeType> primaryAttributes;        // receive the automatic level-up points
         AttributeGrowth attributeGrowth;                     // points per level and attribute caps
         std::map<ArmorCategory, ArmorAdjustment> armorAdjustments;  // scales armour penalties
+        std::optional<AttributeType> manaAttribute;          // its modifier, each level, adds to max mana (casters)
     };
 
     /// <summary>
@@ -1036,13 +1037,12 @@ export namespace LB::Services::Character {
             return std::max(1, totals.maxHitPoints + attributes.GetConstitutionModifier() * level);
         }
 
-        // design-character-system.md 4.2: MaxMP = class table MP + CasterPrimaryMod * level,
-        // CasterPrimaryMod = INT_mod (Mage), WIS_mod (Cleric), 0 for others
-        static std::int32_t calculateMaxManaPoints(CharacterClass charClass, const ClassRules& rules, std::int32_t level, const Attributes& attributes) {
+        // design-character-system.md 4.2: MaxMP = class table MP + CasterPrimaryMod * level, the
+        // caster's attribute from the class's data (manaAttribute: INT for the Mage, WIS for the
+        // Cleric; none for the others)
+        static std::int32_t calculateMaxManaPoints([[maybe_unused]] CharacterClass charClass, const ClassRules& rules, std::int32_t level, const Attributes& attributes) {
             const auto totals = rules.progression.TotalsAt(level);
-            std::int32_t casterModifier = 0;
-            if (charClass == CharacterClass::Mage) casterModifier = attributes.GetIntelligenceModifier();
-            if (charClass == CharacterClass::Cleric) casterModifier = attributes.GetWisdomModifier();
+            const std::int32_t casterModifier = rules.manaAttribute ? attributes.GetModifier(attributes.Get(*rules.manaAttribute)) : 0;
             return std::max(0, totals.maxManaPoints + casterModifier * level);
         }
 

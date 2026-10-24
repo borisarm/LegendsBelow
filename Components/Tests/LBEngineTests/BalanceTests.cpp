@@ -32,7 +32,8 @@ namespace {
     LB::AttributeType MainAttribute(CharacterClass characterClass) {
         switch (characterClass) {
         case CharacterClass::Rogue: return LB::AttributeType::Dexterity;
-        case CharacterClass::Mage: return LB::AttributeType::Intelligence;
+        case CharacterClass::Mage:
+        case CharacterClass::Necromancer: return LB::AttributeType::Intelligence;
         case CharacterClass::Cleric: return LB::AttributeType::Wisdom;
         default: return LB::AttributeType::Strength;
         }
@@ -487,6 +488,12 @@ TEST(BalanceTests, Cleric_ClearsTheFirstTier) {
     EXPECT_LE(report.deaths, MostDeaths);
 }
 
+TEST(BalanceTests, Necromancer_ClearsTheFirstTier) {
+    const auto report = Play(CharacterClass::Necromancer, RestingPlace, BudgetMinutes);
+    EXPECT_EQ(report.depth, RestingPlace);
+    EXPECT_LE(report.deaths, MostDeaths);
+}
+
 // The second tier: the caves' creatures and the Golem Warlord, with what the first tier gave
 // (a companion and potions from the resting place's merchant)
 namespace {
@@ -522,6 +529,12 @@ TEST(BalanceTests, Cleric_ClearsTheSecondTier) {
     EXPECT_LE(report.deaths, MostSecondTierDeaths);
 }
 
+TEST(BalanceTests, Necromancer_ClearsTheSecondTier) {
+    const auto report = Play(CharacterClass::Necromancer, SecondRestingPlace, SecondBudgetMinutes);
+    EXPECT_EQ(report.depth, SecondRestingPlace);
+    EXPECT_LE(report.deaths, MostSecondTierDeaths);
+}
+
 // The third tier: the ruins' creatures and the Frost Golem, with what the first two gave
 namespace {
     constexpr std::int32_t ThirdRestingPlace = 3 * GameEngine::BossFloorInterval + 1;
@@ -551,6 +564,12 @@ TEST(BalanceTests, Rogue_ClearsTheThirdTier) {
 
 TEST(BalanceTests, Cleric_ClearsTheThirdTier) {
     const auto report = Play(CharacterClass::Cleric, ThirdRestingPlace, ThirdBudgetMinutes);
+    EXPECT_EQ(report.depth, ThirdRestingPlace);
+    EXPECT_LE(report.deaths, MostThirdTierDeaths);
+}
+
+TEST(BalanceTests, Necromancer_ClearsTheThirdTier) {
+    const auto report = Play(CharacterClass::Necromancer, ThirdRestingPlace, ThirdBudgetMinutes);
     EXPECT_EQ(report.depth, ThirdRestingPlace);
     EXPECT_LE(report.deaths, MostThirdTierDeaths);
 }
@@ -667,6 +686,10 @@ TEST(BalanceTests, Rogue_WinsTheRunAndDescendsAgain) {
 
 TEST(BalanceTests, Cleric_WinsTheRunAndDescendsAgain) {
     ExpectTheEndAndBeyond(PlayToTheEndAndBeyond(CharacterClass::Cleric));
+}
+
+TEST(BalanceTests, Necromancer_WinsTheRunAndDescendsAgain) {
+    ExpectTheEndAndBeyond(PlayToTheEndAndBeyond(CharacterClass::Necromancer));
 }
 
 #endif // NDEBUG

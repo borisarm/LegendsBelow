@@ -211,7 +211,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
                     for (auto& c : value) c = static_cast<wchar_t>(towlower(c));
                     using LB::Character::CharacterClass;
                     options.playerClass = value == L"mage" ? CharacterClass::Mage : value == L"rogue" ? CharacterClass::Rogue
-                                        : value == L"cleric" ? CharacterClass::Cleric : CharacterClass::Warrior;
+                                        : value == L"cleric" ? CharacterClass::Cleric : value == L"necromancer" ? CharacterClass::Necromancer : CharacterClass::Warrior;
                 }
                 else continue;
                 options.titleScreen = false;

@@ -27,8 +27,10 @@ namespace {
     // Primary attributes, 1 automatic + 1 free point per level, caps 25/18, and the approved
     // armour scales (movement, casting): 0.5 signature, 1 trained, 1.5 untrained, 2 restricted
     ClassRules WithGrowthAndArmor(ClassRules rules, AttributeType first, AttributeType second,
-                                  std::initializer_list<std::pair<ArmorCategory, ArmorAdjustment>> armour) {
+                                  std::initializer_list<std::pair<ArmorCategory, ArmorAdjustment>> armour,
+                                  std::optional<AttributeType> mana = std::nullopt) {
         rules.primaryAttributes = { first, second };
+        rules.manaAttribute = mana;   // a caster's (classes.json manaAttribute)
         rules.attributeGrowth = AttributeGrowth{ 1, 1, 25, 18 };
         for (const auto& [category, adjustment] : armour) rules.armorAdjustments[category] = adjustment;
         return rules;
@@ -44,10 +46,10 @@ namespace {
             { {ArmorCategory::Light, {0.5f, 1.0f}}, {ArmorCategory::Heavy, {2.0f, 1.0f}} }));
         service.SetClassRules(CharacterClass::Mage, WithGrowthAndArmor(MakeRules(4.0f, 6, 10, 0, 2, 4, 8, -1),
             AttributeType::Intelligence, AttributeType::Wisdom,
-            { {ArmorCategory::Light, {1.5f, 1.5f}}, {ArmorCategory::Heavy, {2.0f, 2.0f}} }));
+            { {ArmorCategory::Light, {1.5f, 1.5f}}, {ArmorCategory::Heavy, {2.0f, 2.0f}} }, AttributeType::Intelligence));
         service.SetClassRules(CharacterClass::Cleric, WithGrowthAndArmor(MakeRules(4.0f, 10, 8, 1, 1, 7, 6, -5),
             AttributeType::Wisdom, AttributeType::Constitution,
-            { {ArmorCategory::Medium, {1.0f, 0.5f}}, {ArmorCategory::Heavy, {1.0f, 1.0f}} }));
+            { {ArmorCategory::Medium, {1.0f, 0.5f}}, {ArmorCategory::Heavy, {1.0f, 1.0f}} }, AttributeType::Wisdom));
         return service;
     }
 }

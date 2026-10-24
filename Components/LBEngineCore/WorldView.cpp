@@ -143,6 +143,7 @@ namespace LB::Engine {
         case LB::Character::CharacterClass::Mage: return assets_.models.mage;
         case LB::Character::CharacterClass::Rogue: return assets_.models.rogue;
         case LB::Character::CharacterClass::Cleric: return assets_.models.cleric;
+        case LB::Character::CharacterClass::Necromancer: return assets_.models.necromancer;
         default: return assets_.models.player;
         }
     }

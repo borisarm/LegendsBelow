@@ -74,6 +74,15 @@ export namespace LB::Engine {
             for (const auto& status : active_) bonus += status.definition->attackBonus;
             return bonus;
         }
+        [[nodiscard]] float DamageDealtMultiplier() const noexcept {
+            float multiplier = 1.0f;
+            for (const auto& status : active_) multiplier *= status.definition->damageDealtMultiplier;
+            return multiplier;
+        }
+        [[nodiscard]] std::int32_t Dealt(std::int32_t damage) const noexcept {
+            if (damage <= 0) return damage;
+            return std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(damage) * DamageDealtMultiplier())));
+        }
         [[nodiscard]] float DamageTakenMultiplier() const noexcept {
             float multiplier = 1.0f;
             for (const auto& status : active_) multiplier *= status.definition->damageTakenMultiplier;

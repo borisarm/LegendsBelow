@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
-    EXPECT_EQ(content_.GetSpells().size(), 55u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells
+    EXPECT_EQ(content_.GetSpells().size(), 56u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells, the bone shard
     EXPECT_EQ(content_.GetWeapons().size(), 40u);   // 12, tier 2 and 3 of each kind (17), and tier 4 (11)
     EXPECT_EQ(content_.GetArmour().size(), 55u);   // 15, tier 2 and 3 of each kind (26), and tier 4 (14)
 }
@@ -158,7 +158,7 @@ TEST_F(ShippedContentTests, SpellRepository_OverShippedContent) {
     auto shared = std::make_shared<const ContentDatabase>(content_);
     LB::Repositories::SpellRepository repo = MakeContentSpellRepository(shared);
 
-    EXPECT_EQ(repo->GetAllSpellIds().size(), 55u);
+    EXPECT_EQ(repo->GetAllSpellIds().size(), 56u);
 
     const auto* bolt = content_.FindSpell("spell_evocation_arcane_bolt_l1");
     auto spell = repo->GetSpell(bolt->id);
@@ -330,9 +330,9 @@ TEST(ContentValidationTests, Lookups_OutOfRange_ReturnNull) {
 // Shipped Class Data Tests (classes.json)
 // ============================================================================
 
-TEST_F(ShippedContentTests, Classes_AllFourDefined) {
-    ASSERT_EQ(content_.GetClasses().size(), 4u);
-    for (auto c : { CharacterClass::Warrior, CharacterClass::Rogue, CharacterClass::Mage, CharacterClass::Cleric }) {
+TEST_F(ShippedContentTests, Classes_AllFiveDefined) {
+    ASSERT_EQ(content_.GetClasses().size(), 5u);
+    for (auto c : { CharacterClass::Warrior, CharacterClass::Rogue, CharacterClass::Mage, CharacterClass::Cleric, CharacterClass::Necromancer }) {
         EXPECT_NE(content_.FindClass(c), nullptr);
     }
     EXPECT_EQ(content_.FindClass("class_mage"), content_.FindClass(CharacterClass::Mage));
@@ -437,7 +437,7 @@ namespace {
 
     std::string AllClasses(const std::string& warriorOverride = {}) {
         return "[" + (warriorOverride.empty() ? ClassJson("Warrior") : warriorOverride) + "," + ClassJson("Rogue") + "," +
-               ClassJson("Mage") + "," + ClassJson("Cleric") + "]";
+               ClassJson("Mage") + "," + ClassJson("Cleric") + "," + ClassJson("Necromancer") + "]";
     }
 }
 
@@ -447,7 +447,7 @@ TEST(ClassValidationTests, ValidClasses_Load) {
     auto result = content.LoadFromJson("[]", "[]", "[]", AllClasses());
 
     ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
-    EXPECT_EQ(content.GetClasses().size(), 4u);
+    EXPECT_EQ(content.GetClasses().size(), 5u);
 }
 
 TEST(ClassValidationTests, MissingClass_Rejected) {
@@ -999,7 +999,7 @@ TEST_F(ShippedContentTests, Mage_HasASpellBarManaRegenAndAKit) {
     EXPECT_EQ(warrior->spellBar.size(), 3u);
     EXPECT_EQ(warrior->specializations.size(), 2u);
     EXPECT_EQ(warrior->startingWeapon, "weapon_sword_rusted_shortsword_t1");
-    EXPECT_EQ(content_.GetStatuses().size(), 12u);   // with the blessing and the ward
+    EXPECT_EQ(content_.GetStatuses().size(), 15u);   // with the blessing, the ward, and the necromancer's three curses
 }
 
 TEST_F(ShippedContentTests, GolemAndNecromancer) {
@@ -1195,4 +1195,27 @@ TEST(ContentValidationTests, Progression_BadCurveRejected) {
         ContentDatabase content;
         EXPECT_FALSE(content.LoadFromJson(Array(ValidSpell), Array(ValidWeapon), Array(ValidArmor), "[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]", "", "[]", "[]", bad).Succeeded()) << bad;
     }
+}
+
+// The Necromancer: the Shadow school's caster; its curses, drains, and the mana and spell power of INT
+TEST_F(ShippedContentTests, Necromancer_OwnsTheShadowSpells) {
+    const auto* necromancer = content_.FindClass(CharacterClass::Necromancer);
+    ASSERT_NE(necromancer, nullptr);
+    EXPECT_EQ(necromancer->spellAttribute, LB::AttributeType::Intelligence);
+    EXPECT_EQ(necromancer->manaAttribute, LB::AttributeType::Intelligence);
+    ASSERT_EQ(necromancer->spellBar.size(), 4u);
+    for (const auto& key : necromancer->spellBar) {
+        const auto* spell = content_.FindSpell(key);
+        ASSERT_NE(spell, nullptr) << key;
+        EXPECT_TRUE(spell->IsCastable()) << key;
+        EXPECT_EQ(spell->requiredClass, CharacterClass::Necromancer) << key;
+    }
+    for (const auto& spell : content_.GetSpells()) {
+        if (spell.school == LB::Combat::SpellSchool::Shadow) EXPECT_EQ(spell.requiredClass, CharacterClass::Necromancer) << spell.key;
+    }
+    EXPECT_TRUE(content_.FindSpell("spell_shadow_weakening_curse_l1")->IsCurse());
+    EXPECT_TRUE(content_.FindSpell("spell_shadow_weakening_curse_l1")->NeedsTarget());
+    EXPECT_FLOAT_EQ(content_.FindStatus("status_weakened")->damageDealtMultiplier, 0.9f);
+    EXPECT_TRUE(content_.FindWeapon(necromancer->startingWeapon)->IsUsableBy(CharacterClass::Necromancer));
+    EXPECT_FALSE(content_.FindClass(CharacterClass::Warrior)->manaAttribute.has_value());
 }

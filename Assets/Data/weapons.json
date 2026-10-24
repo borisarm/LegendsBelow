@@ -221,7 +221,7 @@
     "category": "Staff",
     "slot": "MainHand",
     "requiredLevel": 1,
-    "allowedClasses": ["Mage","Cleric"],
+    "allowedClasses": ["Mage","Cleric", "Necromancer"],
     "damageDice": "1d4",
     "damageBonus": 0,
     "damageType": ["Bludgeoning"],
@@ -242,7 +242,7 @@
     "category": "Wand",
     "slot": "MainHand",
     "requiredLevel": 1,
-    "allowedClasses": ["Mage"],
+    "allowedClasses": ["Mage", "Necromancer"],
     "damageDice": "1d3",
     "damageBonus": 0,
     "damageType": ["Arcane"],
@@ -600,7 +600,7 @@
     "allowedClasses": [
       "Mage",
       "Cleric"
-    ],
+    , "Necromancer"],
     "damageDice": "1d6",
     "damageBonus": 2,
     "damageType": [
@@ -628,7 +628,7 @@
     "allowedClasses": [
       "Mage",
       "Cleric"
-    ],
+    , "Necromancer"],
     "damageDice": "1d8",
     "damageBonus": 4,
     "damageType": [
@@ -655,7 +655,7 @@
     "requiredLevel": 6,
     "allowedClasses": [
       "Mage"
-    ],
+    , "Necromancer"],
     "damageDice": "1d4",
     "damageBonus": 2,
     "damageType": [
@@ -684,7 +684,7 @@
     "requiredLevel": 10,
     "allowedClasses": [
       "Mage"
-    ],
+    , "Necromancer"],
     "damageDice": "1d6",
     "damageBonus": 4,
     "damageType": [
@@ -962,7 +962,7 @@
     "allowedClasses": [
       "Mage",
       "Cleric"
-    ],
+    , "Necromancer"],
     "damageDice": "1d10",
     "damageBonus": 6,
     "damageType": [
@@ -989,7 +989,7 @@
     "requiredLevel": 14,
     "allowedClasses": [
       "Mage"
-    ],
+    , "Necromancer"],
     "damageDice": "1d8",
     "damageBonus": 6,
     "damageType": [

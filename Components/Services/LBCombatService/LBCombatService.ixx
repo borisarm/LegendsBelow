@@ -345,6 +345,7 @@ export namespace LB::Services::Combat {
 
             switch (casterClass) {
                 case CharacterClass::Mage:
+                case CharacterClass::Necromancer:
                     spellBonus = attributes.GetIntelligenceModifier();
                     break;
                 case CharacterClass::Cleric:
@@ -398,6 +399,7 @@ export namespace LB::Services::Combat {
 
             switch (casterClass) {
                 case CharacterClass::Mage:
+                case CharacterClass::Necromancer:
                     abilityBonus = attributes.GetIntelligenceModifier();
                     break;
                 case CharacterClass::Cleric:

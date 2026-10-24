@@ -138,6 +138,7 @@ export namespace LB::Engine {
         static constexpr std::string_view PlayerModel = "Knight.glb";
         static constexpr std::string_view MageModel = "Mage.glb";
         static constexpr std::string_view RogueModel = "Rogue_Hooded.glb";
+        static constexpr std::string_view NecromancerModel = "Necromancer.glb";   // the KayKit Skeletons necromancer, on the heroes' rig
         static constexpr std::string_view ClericModel = "Cleric.gltf";   // the knight in its gold texture (knight_texture_alt_B)
         // After a shadowstep, blows within this long are sneak attacks
         static constexpr float SneakWindowSeconds = 2.0f;

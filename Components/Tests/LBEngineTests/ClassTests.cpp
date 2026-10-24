@@ -158,7 +158,7 @@ TEST(ClassChoiceTests, AllFourClasses_AreOnTheNewGamePage) {
 
     std::vector<std::string> classes;
     for (const auto& item : engine.GetMenu().Items()) classes.push_back(item.text);
-    EXPECT_EQ(classes, (std::vector<std::string>{ "Warrior", "Mage", "Rogue", "Cleric", "Back" }));
+    EXPECT_EQ(classes, (std::vector<std::string>{ "Warrior", "Mage", "Rogue", "Cleric", "Necromancer", "Back" }));
 }
 
 // Progression by the data: the engine's ProgressionService has each class's spells by level
@@ -170,4 +170,72 @@ TEST(ClassTests, Progression_OpensTheClassSpellsByLevel) {
     const auto opened = progression.GetAbilitiesAtLevel(LB::Character::CharacterClass::Mage, engine.GetContent()->FindSpell("spell_utility_blink_l2")->requiredLevel);
     EXPECT_TRUE(std::ranges::find(opened, std::string("Blink")) != opened.end());
     EXPECT_TRUE(progression.GetAbilitiesForLevelRange(LB::Character::CharacterClass::Mage, 1, 20).size() >= engine.Spellbook().size());
+}
+
+// The Necromancer (design: the Shadow school's caster)
+namespace {
+    void InitializeNecromancer(GameEngine& engine) {
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false,
+            .randomSeed = CombatSeed, .playerClass = LB::Character::CharacterClass::Necromancer })) << engine.GetInitializationError();
+    }
+}
+
+TEST(NecromancerTests, StartsWithTheShadowBarAndAWand) {
+    GameEngine engine;
+    InitializeNecromancer(engine);
+    const auto bar = engine.GetSpellBar();
+    ASSERT_EQ(bar.size(), 4u);
+    EXPECT_EQ(bar[0]->key, "spell_shadow_bone_shard_l1");
+    EXPECT_EQ(bar[1]->key, "spell_shadow_life_drain_l2");
+    EXPECT_EQ(bar[3]->key, "spell_shadow_devour_essence_l4");   // locked until level 13
+    EXPECT_TRUE(engine.GetPlayerWeapon()->IsRanged());
+    // Mana: the table's and INT's modifier (classes.json manaAttribute)
+    const auto& hero = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get();
+    EXPECT_EQ(hero.GetMaxManaPoints(), engine.GetContent()->FindClass(LB::Character::CharacterClass::Necromancer)->progression.TotalsAt(1).maxManaPoints
+                                       + hero.GetAttributes().GetIntelligenceModifier());
+    EXPECT_GT(engine.GetPlayerSpellPower(), 0);
+}
+
+TEST(NecromancerTests, AWeakeningCurse_LandsOnItsTarget) {
+    GameEngine engine;
+    InitializeNecromancer(engine);
+    const auto id = *engine.SpawnEnemy(GameEngine::HeavyEnemy, { 4.0f, 0.0f });
+    ASSERT_TRUE(engine.SetSpell(1, "spell_shadow_weakening_curse_l1"));   // from the spellbook
+    TapKey(engine, Keys::FromChar('2'));
+    RunSteps(engine, 90);
+    ASSERT_NE(engine.GetEncounter().FindEnemy(id), nullptr);
+    EXPECT_TRUE(engine.GetEncounter().FindEnemy(id)->statuses.Has("status_weakened"));
+
+    StatusSet weakened;
+    weakened.Apply(*engine.GetContent()->FindStatus("status_weakened"));
+    EXPECT_EQ(weakened.Dealt(10), 9);   // a tenth less
+    EXPECT_EQ(weakened.Dealt(1), 1);
+}
+
+TEST(NecromancerTests, LifeDrain_HealsTheCaster) {
+    GameEngine engine;
+    InitializeNecromancer(engine);
+    engine.GrantExperience(900);   // level 4: Life Drain
+    engine.Tick(OneSixtieth);
+    engine.SpawnEnemy(GameEngine::HeavyEnemy, { 3.0f, 0.0f });
+    engine.DamagePlayer(8);
+    const auto hurt = PlayerHitPoints(engine);
+    TapKey(engine, Keys::FromChar('2'));   // Life Drain
+    for (int i = 0; i < 120 && PlayerHitPoints(engine) <= hurt; ++i) engine.Tick(OneSixtieth);
+    EXPECT_GT(PlayerHitPoints(engine), hurt);
+}
+
+// A curse of frailty: its holder takes a fifth more from each blow
+TEST(NecromancerTests, Frailty_RaisesTheDamageTaken) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    encounter.SetContent(content.engine.GetContent().get());
+    const auto plain = encounter.Spawn(*content.warrior, { 2.0f, 0.0f }, FacingWest, false);
+    const auto frail = encounter.Spawn(*content.warrior, { -2.0f, 0.0f }, FacingWest, false);
+    encounter.ApplyStatus(frail, "status_frail");
+    const auto* bolt = content.engine.GetContent()->FindSpell("spell_evocation_arcane_bolt_l1");
+    const auto a = encounter.StrikeWithSpell(SpellPayload{ bolt, 20 }, plain);
+    const auto b = encounter.StrikeWithSpell(SpellPayload{ bolt, 20 }, frail);
+    ASSERT_TRUE(a && b);
+    EXPECT_EQ(b->result.finalDamage, static_cast<std::int32_t>(std::lround(a->result.finalDamage * 1.2f)));
 }

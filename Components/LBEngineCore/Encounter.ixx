@@ -469,6 +469,7 @@ export namespace LB::Engine {
         CombatEvent Hit(Enemy& enemy, const Services::Combat::WeaponAttackResult& result, const Content::SpellDefinition* spell = nullptr) {
             CombatEvent event{ CombatEventKind::PlayerAttack, enemy.id, result, false, spell };
             if (event.result.hit) {
+                event.result.finalDamage = enemy.statuses.Taken(event.result.finalDamage);   // a curse of frailty
                 ApplyStatuses(enemy.statuses, spell);
                 enemy.hitPoints = std::max(0, enemy.hitPoints - event.result.finalDamage);
                 enemy.hitFlashSeconds = HitFlashSeconds;
