@@ -2,11 +2,11 @@
 // tier (three floors and its boss), the second (the caves' creatures and the Golem Warlord), the
 // third (the ruins' creatures and the Frost Golem), and the fourth (the archive's and the
 // Abomination) and must reach the resting place below each; then through the final floor to the
-// victory, and down again through New Game+'s first tier; it
-// reports deaths, potions, and time for balancing. It
-// grows as a player would (attribute points, a path, better finds, a companion and potions from
-// the merchant, the locked gate's treasure). A run is minutes of game time, so these are built
-// only in optimized configurations (Release; seconds there, minutes in Debug).
+// victory, and down again through New Game+'s first tier; it reports deaths, potions, and time
+// for balancing. It grows as a player would (attribute points, a path, better finds, a companion
+// and potions from the merchant, its spares sold there or dropped for room, the locked gate's
+// treasure). A run is minutes of game time, so these are built only in optimized configurations
+// (Release; seconds there, minutes in Debug).
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -236,14 +236,21 @@ namespace {
             const auto& rooms = engine_.GetRoomStates();
             const auto& features = engine_.GetFeatures();
             const auto at = engine_.GetPlayerPosition();
+            // Nearest by the walk there, not as the crow flies: two rooms nearly as near in a line,
+            // with ways leaving in opposite directions, swapped at every step and held the hero in
+            // place (seed 1's depth 9). Along the walk, each step toward the nearest brings it a cell
+            // closer and no other room closer faster, so the choice holds (ties: the first room).
             const auto nearest = [&](auto wanted) {
                 std::optional<WorldPoint> best;
-                float bestDistance = 1e9f;
+                std::size_t bestSteps = std::numeric_limits<std::size_t>::max();
                 for (std::size_t i = 0; i < layout.rooms.size() && i < rooms.size(); ++i) {
                     if (static_cast<std::int32_t>(i) == layout.exitRoom || !wanted(i)) continue;
                     const auto center = engine_.GetWorld().RoomCenter(static_cast<std::int32_t>(i));
-                    if (Encounter::Distance(at, center) < bestDistance) {
-                        bestDistance = Encounter::Distance(at, center);
+                    const bool there = world_.CellOf(at) == world_.CellOf(center);
+                    const auto path = there ? std::vector<WorldPoint>{} : world_.FindPath(at, center);
+                    if (!there && path.empty()) continue;   // no way there (yet)
+                    if (path.size() < bestSteps) {
+                        bestSteps = path.size();
                         best = center;
                     }
                 }
@@ -304,6 +311,27 @@ namespace {
                     if (!worn.IsValid() || engine_.PriceOf(item) > engine_.PriceOf(worn)) engine_.EquipItemRef(item);
                 }
             }
+            // Room for the next finds: the cheapest spare goes on the floor when one stack is left
+            // (before, the bag filled by the third tier and the bot met the last boss in its gear)
+            while (engine_.GetInventory().size() + 1 >= static_cast<std::size_t>(GameEngine::BagCapacity)) {
+                const auto spares = Spares();
+                if (spares.empty() || !engine_.DropItem(*std::ranges::min_element(spares, {}, [&](ItemRef item) { return engine_.PriceOf(item); }))) break;
+            }
+        }
+
+        // The weapons and armour in the bag (the better ones are worn already), but for the melee
+        // weapon a shooter falls back on
+        std::vector<ItemRef> Spares() const {
+            std::vector<ItemRef> spares;
+            const auto* wielded = engine_.GetPlayerWeapon();
+            for (const auto& stack : engine_.GetInventory()) {
+                const auto item = ItemRef::Unpack(stack.itemId);
+                const auto base = engine_.BaseItem(item);
+                if (base.kind != ItemKind::Weapon && base.kind != ItemKind::Armor) continue;
+                if (base.kind == ItemKind::Weapon && wielded && wielded->IsRanged() && item == ItemRef::FromKey(*engine_.GetContent(), melee_)) continue;
+                spares.push_back(item);
+            }
+            return spares;
         }
 
         // At a merchant (the resting places): a companion when the party has room, then potions up
@@ -321,6 +349,7 @@ namespace {
                     }
                 }
             };
+            for (const auto spare : Spares()) engine_.SellToMerchant(spare);   // the gold buys the rest
             buy([&](const GameEngine::StockEntry& entry) { return entry.ally && engine_.GetAllies().Allies().empty(); });
             buy([&](const GameEngine::StockEntry& entry) {
                 return entry.item == engine_.MakeItem(GameEngine::HealingPotion) && engine_.CountItem(GameEngine::HealingPotion) < 6;
@@ -400,14 +429,13 @@ namespace {
 
     // Every class clears the first tier, its boss included, in time. The bot charges in and sets up
     // no sneak attacks, so it dies more than a player would: the cap catches a class that got much
-    // harder (at the last pass: Warrior 0, Mage 4, Rogue 29, Cleric 8 deaths, level 5 or 6; 5 to
-    // 14 minutes; over six seeds the Warrior, Mage, and Cleric died 2 to 13 times)
+    // harder (at the last pass: Warrior 0, Mage 2, Rogue 29, Cleric 8 deaths, level 5 or 6; 5 to
+    // 15 minutes; over six seeds the Warrior, Mage, and Cleric died 0 to 13 times)
     constexpr std::int32_t RestingPlace = GameEngine::BossFloorInterval + 1;
     constexpr float BudgetMinutes = 20.0f;
     constexpr std::int32_t MostDeaths = 15;
     // The bot's Rogue sets up no sneak attacks (the class's strength): it dies most, and varies most
-    // with the floors' layouts (5 to 39 deaths over six seeds; on two it did not get past the
-    // Necromancer in time)
+    // with the floors' layouts (9 to 29 deaths over six seeds)
     constexpr std::int32_t MostRogueDeaths = 35;
 }
 
@@ -440,8 +468,8 @@ TEST(BalanceTests, Cleric_ClearsTheFirstTier) {
 namespace {
     constexpr std::int32_t SecondRestingPlace = 2 * GameEngine::BossFloorInterval + 1;
     constexpr float SecondBudgetMinutes = 30.0f;
-    // At the last pass: Warrior 0, Mage 11, Rogue 30, Cleric 8 deaths, level 10, 10 to 23
-    // minutes; over six seeds the Warrior, Mage, and Cleric died 3 to 24 times, the Rogue 17 to 32
+    // At the last pass: Warrior 0, Mage 8, Rogue 30, Cleric 8 deaths, level 9 or 10, 10 to 23
+    // minutes; over six seeds the Warrior, Mage, and Cleric died 0 to 14 times, the Rogue 9 to 30
     constexpr std::int32_t MostSecondTierDeaths = 30;
     constexpr std::int32_t MostRogueSecondTierDeaths = 40;
 }
@@ -474,8 +502,8 @@ TEST(BalanceTests, Cleric_ClearsTheSecondTier) {
 namespace {
     constexpr std::int32_t ThirdRestingPlace = 3 * GameEngine::BossFloorInterval + 1;
     constexpr float ThirdBudgetMinutes = 45.0f;
-    // At the last pass: Warrior 0, Mage 18, Rogue 34, Cleric 8 deaths, level 14 or 15 (the third
-    // item tier's levels), 17 to 36 minutes
+    // At the last pass: Warrior 0, Mage 15, Rogue 33, Cleric 8 deaths, level 14 or 15 (the third
+    // item tier's levels), 18 to 34 minutes; over six seeds 0 to 33 deaths
     constexpr std::int32_t MostThirdTierDeaths = 45;
 }
 
@@ -509,22 +537,20 @@ TEST(BalanceTests, Cleric_ClearsTheThirdTier) {
 namespace {
     constexpr std::int32_t FourthRestingPlace = 4 * GameEngine::BossFloorInterval + 1;
     constexpr float FourthBudgetMinutes = 60.0f;
-    // At the last pass: Warrior 0, Mage 36, Rogue 38, Cleric 8 deaths, level 19 or 20 (the cap),
-    // 24 to 49 minutes
+    // At the last pass: Warrior 0, Mage 32, Rogue 33, Cleric 8 deaths, level 19 or 20 (the cap),
+    // 24 to 45 minutes; over six seeds 0 to 33 deaths, 21 to 49 minutes
     constexpr std::int32_t MostFourthTierDeaths = 60;
     // From the fourth resting place to the victory. The hall's boss starts over whenever the hero
-    // falls, so it must be won in one life. At the last pass: Warrior 1.2, Mage 1.0, Cleric 1.5
-    // minutes without a death; Rogue 6.2 minutes, 7 deaths (with the Archivist at 300 or 260
-    // hit points instead of 220 it never won: it fell with the boss at a fifth of its health).
-    // Over six seeds (LB_BALANCE_SEED 1 to 5 and this one) the Warrior, Mage, and Cleric won in
-    // 1.1 to 2.0 minutes with at most a death; the Rogue's fight swung from 0 deaths in 1.5
-    // minutes to 77 in 58 (the gear the bot happened to wear). On seed 1 the Mage and Rogue stall
-    // on depth 9 before the end, as they did before the final floor was built.
+    // falls, so it must be won in one life. At the last pass: Warrior 1.1, Mage 1.0, Rogue 1.5,
+    // Cleric 1.2 minutes, without a death; over six seeds (LB_BALANCE_SEED 1 to 5 and this one)
+    // every class won without a death in 1.0 to 2.1 minutes. Before the bot sold or dropped its
+    // spares, its bag was full by the third tier and it met the Archivist in that tier's gear: the
+    // Rogue's fight swung from 0 deaths to 77 in 58 minutes.
     constexpr float FinalFloorBudgetMinutes = 15.0f;
     constexpr std::int32_t MostFinalFloorDeaths = 15;
-    // From the victory to New Game+1's first resting place. At the last pass: Warrior 0, Mage 1,
-    // Rogue 1, Cleric 3 deaths; 2.9 to 5.1 minutes, the Cleric 14.2 (its blows land least on the
-    // veterans' armour; over six seeds 4 to 33 minutes, up to 13 deaths)
+    // From the victory to New Game+1's first resting place. At the last pass: no deaths; 2.9 to
+    // 4.4 minutes, the Cleric 10.4 (its blows land least on the veterans' armour); over six seeds
+    // no deaths, 2.7 to 10.7 minutes
     constexpr float NewGamePlusBudgetMinutes = 30.0f;
     constexpr std::int32_t MostNewGamePlusDeaths = 30;
 
