@@ -19,6 +19,13 @@ namespace LB::Engine {
         initializationError_.clear();
 
         options_ = options;
+        startupTimings_.clear();
+        auto phaseStart = std::chrono::steady_clock::now();
+        const auto phase = [&](std::string_view name) {   // how long each part of startup took
+            const auto now = std::chrono::steady_clock::now();
+            startupTimings_.push_back({ std::string(name), std::chrono::duration<double>(now - phaseStart).count() });
+            phaseStart = now;
+        };
 
         // Content first: invalid data is a fatal authoring error (fail fast, report everything)
         if (!LoadContent(options.contentDirectory)) {
@@ -26,16 +33,28 @@ namespace LB::Engine {
         }
         LoadCredits(options.contentDirectory);
         session_->world = WorldMap::Arena(ArenaHalfWidth, ArenaHalfHeight);
+        phase("content");
 
         if (!renderingSystem_.Initialize(nativeWindow, width, height)) {
             initializationError_ = "Failed to initialize Direct3D 12. A GPU supporting Shader Model 6.0 is required.";
             return false;
         }
+        phase("device");
 
-        if (!LoadModels(options.modelDirectory) || !LoadFonts(options.fontDirectory) || !LoadSounds(options.soundDirectory) || !LoadMusic(options.musicDirectory) || !LoadMenuArt(options.uiDirectory)) {
+        const auto failed = [&] {
             renderingSystem_.Shutdown();
             return false;
-        }
+        };
+        if (!LoadModels(options.modelDirectory)) return failed();
+        phase("models");
+        if (!LoadFonts(options.fontDirectory)) return failed();
+        phase("fonts");
+        if (!LoadSounds(options.soundDirectory)) return failed();
+        phase("sounds");
+        if (!LoadMusic(options.musicDirectory)) return failed();
+        phase("music");
+        if (!LoadMenuArt(options.uiDirectory)) return failed();
+        phase("menu art");
 
         // An unusable save directory should not stop the game; fall back to memory only
         if (!persistenceSystem_.Initialize(options.saveDirectory)) {
@@ -67,6 +86,7 @@ namespace LB::Engine {
         if (!StartRun()) {
             return false;
         }
+        phase("run");
         if (options.titleScreen) {
             OpenMenu(MenuPage::Title);
         }
@@ -237,6 +257,17 @@ namespace LB::Engine {
         if (modelDirectory.empty()) return true;
 
         const auto directory = std::filesystem::path(std::u8string(modelDirectory.begin(), modelDirectory.end()));
+        // Every model file of the folder read and decoded on worker threads first: the loads below
+        // then only upload (the animation sets, in a folder of their own, are read after)
+        {
+            std::vector<std::filesystem::path> files;
+            std::error_code ec;
+            for (const auto& entry : std::filesystem::directory_iterator(directory, ec)) {
+                const auto extension = entry.path().extension();
+                if (entry.is_regular_file(ec) && (extension == ".glb" || extension == ".gltf")) files.push_back(entry.path());
+            }
+            renderingSystem_.PrefetchModels(files);
+        }
         std::vector<std::string> errors;
         const auto load = [&](std::string_view file) {
             const auto result = renderingSystem_.LoadModel(directory / file);

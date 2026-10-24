@@ -225,6 +225,15 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
             DestroyWindow(hwnd);
             return 1;
         }
+        // Profiling: LB_STARTUP_LOG=<file> writes how long each part of startup took
+        wchar_t logPath[MAX_PATH]{};
+        if (GetEnvironmentVariableW(L"LB_STARTUP_LOG", logPath, MAX_PATH) > 0) {
+            std::FILE* log = nullptr;
+            if (_wfopen_s(&log, logPath, L"w") == 0 && log) {
+                for (const auto& timing : g_engine->GetStartupTimings()) std::fprintf(log, "%s %.3f\n", timing.phase.c_str(), timing.seconds);
+                std::fclose(log);
+            }
+        }
         ShowWindow(hwnd, nCmdShow);
         // TODO: Change nCmdShow to SW_SHOWMAXIMIZED to default to fullscreen.
     }

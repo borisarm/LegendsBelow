@@ -175,7 +175,7 @@ namespace LB::Systems::Rendering::Detail {
         // Decode an image (or reuse an identical one decoded before)
         std::shared_ptr<const ModelTexture> DecodeImage(std::span<const std::byte> encoded, TextureCache& cache, std::string& error) {
             const auto key = Hash(encoded);
-            if (const auto cached = cache.find(key); cached != cache.end()) return cached->second;
+            if (auto cached = cache.Find(key)) return cached;
 
             int width = 0;
             int height = 0;
@@ -197,8 +197,7 @@ namespace LB::Systems::Rendering::Detail {
             texture->mips.push_back(std::move(top));
             BuildMipChain(*texture);
 
-            cache.emplace(key, texture);
-            return texture;
+            return cache.Insert(key, std::move(texture));   // the first kept, if another thread decoded it too
         }
 
         // Materials, with the images their base-color textures use

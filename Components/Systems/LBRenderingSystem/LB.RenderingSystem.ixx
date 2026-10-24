@@ -15,6 +15,44 @@ import std;
 /// Handles graphics rendering, sprite batching, and visual effects
 /// Built on DirectX 12 for Xbox/Windows platforms
 /// </summary>
+namespace LB::Systems::Rendering::Detail {
+    /// <summary>
+    /// Decoded images by a hash of their encoded bytes, so models using the same image file share
+    /// it; safe from several threads (models are read in parallel, RenderingSystem::PrefetchModels)
+    /// </summary>
+    class TextureCache {
+    public:
+        [[nodiscard]] std::shared_ptr<const ModelTexture> Find(std::uint64_t key) const {
+            const std::scoped_lock lock(mutex_);
+            const auto it = textures_.find(key);
+            return it != textures_.end() ? it->second : nullptr;
+        }
+
+        // Keep a decoded image; if another thread kept the same one first, that one (shared)
+        std::shared_ptr<const ModelTexture> Insert(std::uint64_t key, std::shared_ptr<const ModelTexture> texture) {
+            const std::scoped_lock lock(mutex_);
+            return textures_.try_emplace(key, std::move(texture)).first->second;
+        }
+
+        void Clear() {
+            const std::scoped_lock lock(mutex_);
+            textures_.clear();
+        }
+
+    private:
+        mutable std::mutex mutex_;
+        std::unordered_map<std::uint64_t, std::shared_ptr<const ModelTexture>> textures_;
+    };
+
+    /// <summary>
+    /// Result of reading a glTF file: the model, or why it could not be read
+    /// </summary>
+    struct GltfLoadResult {
+        ModelData model;
+        std::string error;   // empty on success
+    };
+}
+
 export namespace LB::Systems::Rendering {
     using LB::String;
     using LB::Position;
@@ -435,6 +473,13 @@ export namespace LB::Systems::Rendering {
         ModelLoadResult LoadModel(const std::filesystem::path& path);
 
         /// <summary>
+        /// Read and decode models ahead, on worker threads (the files, their meshes, skins, and
+        /// images): a later LoadModel of one of them only uploads it. Models loaded or read ahead
+        /// already are skipped. Returns how many were read.
+        /// </summary>
+        std::size_t PrefetchModels(std::span<const std::filesystem::path> paths);
+
+        /// <summary>
         /// A loaded model by handle, or null
         /// </summary>
         [[nodiscard]] const ModelData* GetModel(ModelId id) const noexcept {
@@ -723,7 +768,8 @@ export namespace LB::Systems::Rendering {
         std::vector<std::filesystem::path> modelPaths_;          // canonical source of each model
         std::vector<std::shared_ptr<const AnimationClip>> animations_;   // AnimationId - 1
         std::vector<std::pair<std::filesystem::path, std::vector<AnimationId>>> animationFiles_;
-        std::unordered_map<std::uint64_t, std::shared_ptr<const ModelTexture>> textureCache_;   // by image content
+        Detail::TextureCache textureCache_;                      // by image content
+        std::map<std::filesystem::path, Detail::GltfLoadResult> prefetched_;   // read ahead, by canonical path
         std::vector<Matrix4> skinPalette_;                       // this frame's joint matrices, world space
         std::vector<std::shared_ptr<const FontData>> fonts_;     // FontId - 1
         std::vector<std::shared_ptr<const ModelTexture>> images_;   // ImageId - 1
@@ -775,25 +821,12 @@ export namespace LB::Systems::Rendering {
 // Not exported: shared with the implementation units
 namespace LB::Systems::Rendering::Detail {
     /// <summary>
-    /// Result of reading a glTF file: the model, or why it could not be read
-    /// </summary>
-    struct GltfLoadResult {
-        ModelData model;
-        std::string error;   // empty on success
-    };
-
-    /// <summary>
     /// Result of reading the animations of a glTF file
     /// </summary>
     struct GltfAnimationsResult {
         std::vector<AnimationClip> clips;
         std::string error;   // empty on success
     };
-
-    /// <summary>
-    /// Decoded images by a hash of their encoded bytes, so models using the same image file share it
-    /// </summary>
-    using TextureCache = std::unordered_map<std::uint64_t, std::shared_ptr<const ModelTexture>>;
 
     /// <summary>
     /// Result of baking a TrueType font

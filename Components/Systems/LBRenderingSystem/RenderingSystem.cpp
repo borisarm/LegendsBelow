@@ -186,7 +186,8 @@ namespace LB::Systems::Rendering {
         modelPaths_.clear();
         animations_.clear();
         animationFiles_.clear();
-        textureCache_.clear();
+        textureCache_.Clear();
+        prefetched_.clear();
         fonts_.clear();
         fontPaths_.clear();
         initialized_ = false;
@@ -368,7 +369,15 @@ namespace LB::Systems::Rendering {
             if (modelPaths_[i] == canonical) return ModelLoadResult{ static_cast<ModelId>(i + 1), {} };
         }
 
-        auto loaded = Detail::LoadGltfModel(path, textureCache_);
+        // Read ahead (PrefetchModels), or now
+        Detail::GltfLoadResult loaded;
+        if (const auto ahead = prefetched_.find(canonical); ahead != prefetched_.end()) {
+            loaded = std::move(ahead->second);
+            prefetched_.erase(ahead);
+        }
+        else {
+            loaded = Detail::LoadGltfModel(path, textureCache_);
+        }
         if (!loaded.error.empty()) {
             return ModelLoadResult{ InvalidModelId, std::move(loaded.error) };
         }
@@ -386,6 +395,43 @@ namespace LB::Systems::Rendering {
         models_.push_back(std::move(model));
         modelPaths_.push_back(std::move(canonical));
         return ModelLoadResult{ static_cast<ModelId>(models_.size()), {} };
+    }
+
+    std::size_t RenderingSystem::PrefetchModels(std::span<const std::filesystem::path> paths) {
+        // What is still to read (not loaded, not read ahead, each once)
+        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> work;   // (path, canonical)
+        for (const auto& path : paths) {
+            std::error_code ec;
+            auto canonical = std::filesystem::weakly_canonical(path, ec);
+            if (ec) canonical = path;
+            if (std::ranges::find(modelPaths_, canonical) != modelPaths_.end() || prefetched_.contains(canonical)) continue;
+            if (std::ranges::any_of(work, [&](const auto& item) { return item.second == canonical; })) continue;
+            work.emplace_back(path, std::move(canonical));
+        }
+        if (work.empty()) return 0;
+
+        // A worker per core (the main thread waits): each takes the next file in turn
+        std::vector<Detail::GltfLoadResult> results(work.size());
+        std::atomic<std::size_t> next{0};
+        const auto workers = std::clamp<std::size_t>(std::thread::hardware_concurrency(), 1, std::min<std::size_t>(work.size(), 16));
+        {
+            std::vector<std::jthread> threads;
+            threads.reserve(workers);
+            for (std::size_t w = 0; w < workers; ++w) {
+                threads.emplace_back([&] {
+                    for (std::size_t i = next++; i < work.size(); i = next++) {
+                        try {
+                            results[i] = Detail::LoadGltfModel(work[i].first, textureCache_);
+                        }
+                        catch (const std::exception& e) {
+                            results[i].error = std::format("{}: {}", work[i].first.filename().string(), e.what());
+                        }
+                    }
+                });
+            }
+        }   // the threads join here
+        for (std::size_t i = 0; i < work.size(); ++i) prefetched_.emplace(std::move(work[i].second), std::move(results[i]));
+        return work.size();
     }
 
     ImageLoadResult RenderingSystem::LoadImage(const std::filesystem::path& path) {

@@ -1572,3 +1572,36 @@ TEST(UiImageTests, DrawImage_QueuedForTheFrame_UnknownImageIgnored) {
     system.BeginFrame();
     EXPECT_TRUE(system.GetQueuedImages().empty());
 }
+
+// Models read ahead on worker threads (PrefetchModels) load as those read one by one: the same
+// meshes, the same ids in the order loaded, images shared between models
+TEST(ModelLoadingTests, Prefetched_LoadAsReadOneByOne) {
+    const auto dir = ModelsDirectory();
+    ASSERT_FALSE(dir.empty()) << "Assets/Models not found";
+    const std::vector<std::filesystem::path> files{ dir / "wall.glb", dir / "character_knight.gltf", dir / "tileBrickA_small.glb",
+                                                    dir / "wall_cracked.gltf", dir / "barrel_large.gltf" };
+    RenderingSystem plain;
+    RenderingSystem ahead;
+    EXPECT_EQ(ahead.PrefetchModels(files), files.size());
+    EXPECT_EQ(ahead.PrefetchModels(files), 0u);   // read ahead already
+    for (const auto& file : files) {
+        const auto a = plain.LoadModel(file);
+        const auto b = ahead.LoadModel(file);
+        ASSERT_TRUE(a.Succeeded() && b.Succeeded()) << a.error << b.error;
+        EXPECT_EQ(a.id, b.id);
+        EXPECT_EQ(plain.GetModel(a.id)->TriangleCount(), ahead.GetModel(b.id)->TriangleCount()) << file;
+        EXPECT_EQ(plain.GetModel(a.id)->textures.size(), ahead.GetModel(b.id)->textures.size()) << file;
+    }
+    EXPECT_EQ(ahead.PrefetchModels(files), 0u);   // loaded: nothing to read
+    // The dungeon pieces share their atlas
+    const auto* wall = ahead.GetModel(ahead.LoadModel(files[3]).id);
+    const auto* barrel = ahead.GetModel(ahead.LoadModel(files[4]).id);
+    ASSERT_FALSE(wall->textures.empty());
+    ASSERT_FALSE(barrel->textures.empty());
+    EXPECT_EQ(wall->textures.front(), barrel->textures.front());   // one decoded image, read on two threads
+
+    // A file that cannot be read fails at its load, as it would have
+    RenderingSystem broken;
+    EXPECT_EQ(broken.PrefetchModels(std::vector<std::filesystem::path>{ dir / "does_not_exist.glb" }), 1u);
+    EXPECT_FALSE(broken.LoadModel(dir / "does_not_exist.glb").Succeeded());
+}

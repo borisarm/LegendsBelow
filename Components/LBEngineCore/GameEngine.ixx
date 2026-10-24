@@ -260,6 +260,16 @@ export namespace LB::Engine {
 
         // Properties
         [[nodiscard]] bool IsInitialized() const noexcept { return initialized_; }
+
+        /// <summary>
+        /// How long each part of the last Initialize took, in order (content, device, models,
+        /// fonts, sounds, music, menu art, run): for profiling startup
+        /// </summary>
+        struct StartupTiming {
+            std::string phase;
+            double seconds{0.0};
+        };
+        [[nodiscard]] const std::vector<StartupTiming>& GetStartupTimings() const noexcept { return startupTimings_; }
         [[nodiscard]] bool HasGpuDevice() const noexcept { return renderingSystem_.HasGpuDevice(); }
         [[nodiscard]] const StepTimer& GetTimer() const noexcept { return timer_; }
         [[nodiscard]] const Systems::Input::InputSystem& GetInput() const noexcept { return inputSystem_; }
@@ -1507,6 +1517,7 @@ export namespace LB::Engine {
         StepTimer timer_;
         bool active_{true};
         bool initialized_{false};
+        std::vector<StartupTiming> startupTimings_;
     };
 
 } // namespace LB::Engine
