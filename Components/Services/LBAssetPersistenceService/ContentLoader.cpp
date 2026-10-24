@@ -755,6 +755,34 @@ namespace LB::Content {
         }
 
         // objectives.json: one object of settings
+        // progression.json: one object, { "experience": { "base": 100, "exponent": 2.0 } }; the cap
+        // is the class tables' (ClassProgression::MaxLevel)
+        ProgressionSettings ReadProgression(const String& text, std::vector<String>& errors) {
+            ProgressionSettings settings{};
+            settings.experience.maxLevel = LB::Character::ClassProgression::MaxLevel;
+            Json root;
+            try {
+                root = Json::parse(text);
+            }
+            catch (const Json::parse_error& error) {
+                errors.push_back(std::format("progression.json: invalid JSON: {}", error.what()));
+                return settings;
+            }
+            if (!root.is_object()) {
+                errors.push_back("progression.json: must be an object");
+                return settings;
+            }
+            EntryReader reader(root, "progression.json", errors);
+            if (const Json* experience = reader.Nested("experience", true, false)) {
+                EntryReader curve(*experience, "progression.json: experience", errors);
+                curve.ReadFloat("base", settings.experience.baseExperience, true);
+                curve.ReadFloat("exponent", settings.experience.exponent, true);
+                if (settings.experience.baseExperience <= 0.0f) curve.Error("'base' must be positive");
+                if (settings.experience.exponent < 1.0f) curve.Error("'exponent' must be at least 1 (each level takes more)");
+            }
+            return settings;
+        }
+
         ObjectiveSettings ReadObjectives(const String& text, std::vector<String>& errors) {
             ObjectiveSettings settings;
             const Json json = Json::parse(text, nullptr, /*allow_exceptions*/ false);
@@ -1133,10 +1161,11 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[14];
-        constexpr const char* files[14] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
-                                            "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json", "mutators.json" };
-        for (int i = 0; i < 14; ++i) {
+        String texts[15];
+        constexpr const char* files[15] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
+                                            "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json", "mutators.json",
+                                            "progression.json" };
+        for (int i = 0; i < 15; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -1145,14 +1174,15 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10], texts[11], texts[12], texts[13]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10], texts[11], texts[12], texts[13], texts[14]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                                     const String& classesJson, const String& enemiesJson,
                                                     const String& consumablesJson, const String& lootJson, const String& statusesJson,
                                                     const String& raritiesJson, const String& affixesJson, const String& alliesJson,
-                                                    const String& objectivesJson, const String& loreJson, const String& mutatorsJson) {
+                                                    const String& objectivesJson, const String& loreJson, const String& mutatorsJson,
+                                                    const String& progressionJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -1169,6 +1199,7 @@ namespace LB::Content {
         auto objectives = objectivesJson.empty() ? ObjectiveSettings{} : ReadObjectives(objectivesJson, result.errors);
         auto lore = ReadArray<LoreDefinition>(loreJson, "lore.json", ReadLore, result.errors);
         auto mutators = ReadArray<MutatorDefinition>(mutatorsJson, "mutators.json", ReadMutator, result.errors);
+        auto progression = progressionJson.empty() ? ProgressionSettings{} : ReadProgression(progressionJson, result.errors);
         if (!rarities.empty() && std::ranges::none_of(rarities, [](const RarityDefinition& r) { return r.weight > 0.0f; })) {
             result.errors.push_back("rarities.json: at least one rarity needs a positive 'weight'");
         }
@@ -1202,6 +1233,7 @@ namespace LB::Content {
         objectives_ = std::move(objectives);
         lore_ = std::move(lore);
         mutators_ = std::move(mutators);
+        progression_ = std::move(progression);
         return result;
     }
 

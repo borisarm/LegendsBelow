@@ -18,6 +18,7 @@ import LB.Dungeon;
 import LB.DungeonService;
 import LB.Inventory;
 import LB.InventoryService;
+import LB.ProgressionService;
 import LB.AudioSystem;
 import LB.InputSystem;
 import LB.PersistenceSystem;
@@ -807,6 +808,12 @@ export namespace LB::Engine {
         [[nodiscard]] std::vector<const Content::SpellDefinition*> GetSpellBar() const;
 
         /// <summary>
+        /// Progression by the content: the experience curve (progression.json), each class's table
+        /// and growth (classes.json), and the spells its levels open (spells.json)
+        /// </summary>
+        [[nodiscard]] const Services::Progression::ProgressionService& GetProgression() const noexcept { return progression_; }
+
+        /// <summary>
         /// The spellbook (design-spells-system.md): every spell of the hero's class the game can
         /// cast, by the level they open at; any of them can go on the bar's slots (CycleSpell, the
         /// character screen's Spells rows), the class's own bar to begin with. The bar is saved.
@@ -1305,6 +1312,7 @@ export namespace LB::Engine {
         Systems::Persistence::PersistenceSystem persistenceSystem_;
         std::shared_ptr<const Content::ContentDatabase> content_ = std::make_shared<Content::ContentDatabase>();
         Services::Dungeon::DungeonService dungeonService_;
+        Services::Progression::ProgressionService progression_;   // from the content (ConfigureClassRules)
         std::string initializationError_;
 
         // Models used to draw the world (all valid when loaded is true)

@@ -422,6 +422,17 @@ namespace LB::Engine {
 
     // Class rules (progression, speed, weapon adjustments) come from classes.json
     void GameEngine::ConfigureClassRules() {
+        // Progression by the data: the curve for every class, each class's table and growth, and
+        // the spells its levels open (its spellbook)
+        progression_.SetExperienceCurve(content_->GetProgression().experience);
+        session_->characterService.SetExperienceCurve(content_->GetProgression().experience);
+        for (const auto& definition : content_->GetClasses()) {
+            Services::Progression::ClassProgressionRules progression{ definition.progression, definition.primaryAttributes, definition.attributeGrowth, {} };
+            for (const auto& spell : content_->GetSpells()) {
+                if (spell.requiredClass == definition.characterClass && spell.IsCastable()) progression.abilities.push_back({ spell.name, spell.requiredLevel, definition.characterClass });
+            }
+            progression_.SetClassRules(definition.characterClass, std::move(progression));
+        }
         for (const auto& definition : content_->GetClasses()) {
             Services::Character::ClassRules rules{};
             rules.baseMovementSpeed = definition.baseMovementSpeed;

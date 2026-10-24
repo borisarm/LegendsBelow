@@ -194,6 +194,9 @@
     <ProjectReference Include="..\Services\LBAssetPersistenceService\LBAssetPersistenceService.vcxproj">
       <Project>{cc3058fb-9cf7-4f26-b020-5d8ee70368a3}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\Services\LBProgressionService\LBProgressionService.vcxproj">
+      <Project>{2b639d8e-e937-4271-b15a-3de571899be1}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Services\LBDungeonService\LBDungeonService.vcxproj">
       <Project>{dc0d706c-8aec-44d1-a396-c1e82dfbabe6}</Project>
     </ProjectReference>

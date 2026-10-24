@@ -160,3 +160,14 @@ TEST(ClassChoiceTests, AllFourClasses_AreOnTheNewGamePage) {
     for (const auto& item : engine.GetMenu().Items()) classes.push_back(item.text);
     EXPECT_EQ(classes, (std::vector<std::string>{ "Warrior", "Mage", "Rogue", "Cleric", "Back" }));
 }
+
+// Progression by the data: the engine's ProgressionService has each class's spells by level
+TEST(ClassTests, Progression_OpensTheClassSpellsByLevel) {
+    GameEngine engine;
+    InitializeMage(engine);
+    const auto& progression = engine.GetProgression();
+    EXPECT_EQ(progression.GetExperienceForLevel(5), engine.GetCharacters().GetExperienceForLevel(5));   // one curve
+    const auto opened = progression.GetAbilitiesAtLevel(LB::Character::CharacterClass::Mage, engine.GetContent()->FindSpell("spell_utility_blink_l2")->requiredLevel);
+    EXPECT_TRUE(std::ranges::find(opened, std::string("Blink")) != opened.end());
+    EXPECT_TRUE(progression.GetAbilitiesForLevelRange(LB::Character::CharacterClass::Mage, 1, 20).size() >= engine.Spellbook().size());
+}

@@ -54,6 +54,45 @@ export namespace LB::Character {
     };
 
     /// <summary>
+    /// The experience a level takes: base x (level - 1)^exponent (progression.json; level 1 takes
+    /// none), up to the level cap
+    /// </summary>
+    struct ExperienceCurve {
+        float baseExperience{100.0f};
+        float exponent{2.0f};
+        std::int32_t maxLevel{20};
+
+        [[nodiscard]] std::int32_t GetExperienceForLevel(std::int32_t level) const noexcept {
+            if (level <= 1) return 0;
+            level = std::min(level, maxLevel);
+            return static_cast<std::int32_t>(std::lround(baseExperience * std::pow(static_cast<float>(level - 1), exponent)));
+        }
+
+        [[nodiscard]] std::int32_t GetLevelForExperience(std::int32_t experience) const noexcept {
+            std::int32_t level = 1;
+            while (level < maxLevel && GetExperienceForLevel(level + 1) <= experience) ++level;
+            return level;
+        }
+
+        /// <summary>
+        /// The total a level after this one takes (0 at the cap)
+        /// </summary>
+        [[nodiscard]] std::int32_t GetExperienceToNextLevel(std::int32_t currentLevel) const noexcept {
+            return currentLevel >= maxLevel ? 0 : GetExperienceForLevel(currentLevel + 1);
+        }
+
+        /// <summary>
+        /// How far into its level an amount of experience is (0..1; 1 at the cap)
+        /// </summary>
+        [[nodiscard]] double GetLevelProgress(std::int32_t currentLevel, std::int32_t currentExperience) const noexcept {
+            if (currentLevel >= maxLevel) return 1.0;
+            const auto start = GetExperienceForLevel(currentLevel);
+            const auto end = GetExperienceForLevel(currentLevel + 1);
+            return end > start ? std::clamp(static_cast<double>(currentExperience - start) / (end - start), 0.0, 1.0) : 1.0;
+        }
+    };
+
+    /// <summary>
     /// A class's level 1..MaxLevel progression table
     /// </summary>
     struct ClassProgression {

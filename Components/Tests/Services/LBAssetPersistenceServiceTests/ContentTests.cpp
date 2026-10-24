@@ -311,7 +311,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 14u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies, objectives, lore, mutators
+    EXPECT_EQ(result.errors.size(), 15u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies, objectives, lore, mutators, progression
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -1179,5 +1179,20 @@ TEST_F(ShippedContentTests, Mutators_EachSaysWhatItDoes) {
         const bool does = mutator.enemyHitPoints > 0.0f || mutator.enemyArmorClass != 0 || mutator.enemyAttackBonus != 0 || mutator.enemyDamageBonus != 0
                        || mutator.enemyLifeSteal > 0.0f || mutator.extraEnemies > 0 || mutator.goldMultiplier != 1.0f;
         EXPECT_TRUE(does) << mutator.key;
+    }
+}
+
+TEST_F(ShippedContentTests, Progression_TheExperienceCurve) {
+    const auto& curve = content_.GetProgression().experience;
+    EXPECT_FLOAT_EQ(curve.baseExperience, 100.0f);
+    EXPECT_FLOAT_EQ(curve.exponent, 2.0f);
+    EXPECT_EQ(curve.maxLevel, LB::Character::ClassProgression::MaxLevel);
+    EXPECT_EQ(curve.GetExperienceForLevel(5), 1600);
+}
+
+TEST(ContentValidationTests, Progression_BadCurveRejected) {
+    for (const auto* bad : { R"({ "experience": { "base": 0, "exponent": 2.0 } })", R"({ "experience": { "base": 100, "exponent": 0.5 } })", R"({ })", "[1]" }) {
+        ContentDatabase content;
+        EXPECT_FALSE(content.LoadFromJson(Array(ValidSpell), Array(ValidWeapon), Array(ValidArmor), "[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]", "", "[]", "[]", bad).Succeeded()) << bad;
     }
 }

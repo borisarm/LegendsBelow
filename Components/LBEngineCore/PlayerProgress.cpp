@@ -411,8 +411,11 @@ namespace LB::Engine {
             if (gained.hitPoints > 0) card.lines.push_back(std::format("+{} hit points", gained.hitPoints));
             if (gained.mana > 0) card.lines.push_back(std::format("+{} {}", gained.mana, stamina ? "stamina" : "mana"));
             if (gained.attributePoints > 0) card.lines.push_back(std::format("+{} attribute point{} to spend (I)", gained.attributePoints, gained.attributePoints == 1 ? "" : "s"));
-            for (const auto* spell : GetSpellBar()) {
-                if (spell->requiredLevel > gained.previous && spell->requiredLevel <= gained.level) card.lines.push_back(std::format("New: {}", spell->name));
+            // What the levels open (ProgressionService, from the class's spells); those off the bar wait in the spellbook
+            for (const auto& ability : progression_.GetAbilitiesForLevelRange(session_->playerClass, gained.previous + 1, gained.level)) {
+                const auto bar = GetSpellBar();
+                const bool onBar = std::ranges::any_of(bar, [&](const Content::SpellDefinition* spell) { return spell->name == ability; });
+                card.lines.push_back(onBar ? std::format("New: {}", ability) : std::format("New in the spellbook: {}", ability));
             }
             const auto paths = Content::ClassDefinition::SpecializationLevel;
             if (gained.previous < paths && gained.level >= paths && session_->path.empty()) card.lines.push_back("A path to choose (I)");

@@ -278,6 +278,7 @@ TEST(GameEngineContentTests, InvalidContent_FailsWithAllErrors) {
         "bountyKills": 1, "bountyGoldPerDepth": 1 })";
     std::ofstream(dir.path / "lore.json") << "[]";
     std::ofstream(dir.path / "mutators.json") << "[]";
+    std::ofstream(dir.path / "progression.json") << R"({ "experience": { "base": 100, "exponent": 2.0 } })";
     GameEngine engine;
 
     EXPECT_FALSE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = dir.Utf8() }));
@@ -322,7 +323,7 @@ TEST(GameEngineClassDataTests, EditedClassSpeed_ChangesPlayerMovement) {
     TempSaveDir dir;
     std::filesystem::create_directories(dir.path);
     const std::filesystem::path source(std::u8string(shipped->begin(), shipped->end()));
-    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json", "mutators.json" }) {
+    for (const char* file : { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json", "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json", "mutators.json", "progression.json" }) {
         std::filesystem::copy_file(source / file, dir.path / file);
     }
 

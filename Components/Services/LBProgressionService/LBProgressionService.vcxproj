@@ -145,8 +145,6 @@
     <ClCompile Include="ExperienceCurve.ixx" />
     <ClCompile Include="LBProgressionService.ixx" />
     <ClCompile Include="LevelProgressionResult.ixx" />
-    <ClCompile Include="ResourceGrowthConfig.ixx" />
-    <ClCompile Include="StatGrowthConfig.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Model\LBModel.Character\LBModel.Character.vcxproj">

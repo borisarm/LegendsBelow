@@ -23,6 +23,7 @@ export namespace LB::Services::Character {
     using LB::Character::ArmorAdjustment;
     using LB::Character::AttributeGrowth;
     using LB::Character::ClassProgression;
+    using LB::Character::ExperienceCurve;
     using LB::Combat::ArmorCategory;
     using LB::Combat::EquipmentSlot;
     using LB::Combat::WeaponType;
@@ -378,6 +379,15 @@ export namespace LB::Services::Character {
             }
             return std::cref(it->second);
         }
+
+        /// <summary>
+        /// The experience curve every class levels by (progression.json); its cap is the class tables'
+        /// </summary>
+        void SetExperienceCurve(const ExperienceCurve& curve) {
+            experience_ = curve;
+            experience_.maxLevel = std::min(curve.maxLevel, ClassProgression::MaxLevel);
+        }
+        [[nodiscard]] const ExperienceCurve& GetExperienceCurve() const noexcept { return experience_; }
 
         /// <summary>
         /// What a character carries, worn and in the bag (the engine sums it); 0 by default
@@ -921,6 +931,7 @@ export namespace LB::Services::Character {
         std::unordered_map<CharacterId, GearBonus> gear_;
         std::unordered_map<CharacterId, std::map<AttributeType, std::int32_t>> assigned_;   // free points the player put in
         std::unordered_map<CharacterId, float> carried_;                                      // the load, worn and in the bag
+        ExperienceCurve experience_{};                                                         // progression.json
 
         // Max HP/MP after the attributes changed; current HP/MP move by as much
         void followAttributes(CharacterId id, Character& character, const ClassRules& classRules) const {
@@ -954,20 +965,15 @@ export namespace LB::Services::Character {
             return nextId_++;
         }
 
+        // The curve (progression.json; by default 100 (level - 1)^2: about level 5 through the first
+        // tier of the dungeon and 10 through the second, as the item tiers expect, design-armour-system.md 6.1)
         std::int32_t calculateExperienceForLevel(std::int32_t level) const {
-            // 100 (level - 1)^2: about level 5 through the first tier of the dungeon and 10 through the
-            // second, as the item tiers expect (design-armour-system.md 6.1)
-            if (level <= 1) return 0;
-            return static_cast<std::int32_t>(100 * std::pow(level - 1, 2.0));
+            return experience_.GetExperienceForLevel(level);
         }
 
         // The level cap (design-loot-and-progression.md 6.1): experience past it raises nothing
         std::int32_t calculateLevelForExperience(std::int32_t experience) const {
-            std::int32_t level = 1;
-            while (level < ClassProgression::MaxLevel && calculateExperienceForLevel(level + 1) <= experience) {
-                level++;
-            }
-            return level;
+            return experience_.GetLevelForExperience(experience);
         }
 
         // Slowest a character can move, however low its DEX

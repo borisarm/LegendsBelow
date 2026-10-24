@@ -147,7 +147,7 @@ The shell → engine → renderer split from `modularized-game-architecture.md` 
 - [x] Character growth: the Warrior's stamina abilities, the Rogue's level-3 and level-5 abilities, a path at level 5
 - [x] Group tactics (tanks lead, shooters keep behind), telegraphed boss attacks, a boss per tier (the Golem Warlord)
 - [x] A balance check: `BalanceTests` plays each class through all four tiers, the final floor to the victory, and New Game+1's first tier (Release builds), growing as a player would; `PerformanceTests` holds a step to a frame-time budget (a crowded floor, the final fight)
-- [x] The inventory and dungeon services are composed by the engine; progression is `CharacterService`'s, from classes.json (levels, the experience curve, attribute growth). `LBProgressionService` is an earlier service with hard-coded tables the game does not use, kept with its tests for now.
+- [x] The inventory, dungeon, and progression services are composed by the engine; progression comes from the data: `LBProgressionService` is configured from progression.json (the experience curve), classes.json (tables, growth), and spells.json (the abilities by level), and `CharacterService` levels by the same curve
 - Inject repositories over `GetContent()` (the services read the content database directly)
 - [x] Gamepad input through GameInput: `LB.InputSystem:GameInputBackend` (`GameInputBackend.cpp`) reads the most recently used gamepad; the engine enables it only with a real window and polls once per simulation step while focused
 - [x] Game states: the title menu, a run, the pause menu, the death screen (the resting places stand in for a town)

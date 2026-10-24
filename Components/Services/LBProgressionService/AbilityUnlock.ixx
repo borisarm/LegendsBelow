@@ -1,4 +1,4 @@
-// AbilityUnlock.ixx - Ability unlock configuration per class
+// AbilityUnlock.ixx - An ability a class opens at a level (from its spells in spells.json)
 export module LB.ProgressionService.AbilityUnlock;
 
 import LB.Core;
@@ -12,7 +12,7 @@ export namespace LB::Services::Progression {
     /// Ability unlock configuration
     /// Defines when abilities are unlocked per class
     /// </summary>
-    export struct AbilityUnlock {
+    struct AbilityUnlock {
         LB::String abilityName;
         std::int32_t requiredLevel;
         LB::Character::CharacterClass characterClass;

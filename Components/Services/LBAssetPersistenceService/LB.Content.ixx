@@ -405,6 +405,14 @@ export namespace LB::Content {
     };
 
     /// <summary>
+    /// How characters advance (progression.json, design-loot-and-progression.md 6.1): the
+    /// experience curve every class levels by
+    /// </summary>
+    struct ProgressionSettings {
+        LB::Character::ExperienceCurve experience{};
+    };
+
+    /// <summary>
     /// A New Game+ mutator (mutators.json, design-loot-and-progression.md 7.3): each cycle adds one,
     /// changing its enemies and finds on top of the cycle's own strength
     /// </summary>
@@ -620,7 +628,7 @@ export namespace LB::Content {
     public:
         /// <summary>
         /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json,
-        /// loot.json, statuses.json, rarities.json, affixes.json, allies.json, objectives.json, lore.json, and mutators.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// loot.json, statuses.json, rarities.json, affixes.json, allies.json, objectives.json, lore.json, mutators.json, and progression.json from a directory (UTF-8 path). On any error the database is left empty and
         /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
@@ -636,7 +644,7 @@ export namespace LB::Content {
                                        const String& consumablesJson = "[]", const String& lootJson = "[]",
                                        const String& statusesJson = "[]", const String& raritiesJson = "[]", const String& affixesJson = "[]",
                                        const String& alliesJson = "[]", const String& objectivesJson = "", const String& loreJson = "[]",
-                                       const String& mutatorsJson = "[]");
+                                       const String& mutatorsJson = "[]", const String& progressionJson = "");
 
         void Clear() {
             spells_.clear();
@@ -653,6 +661,7 @@ export namespace LB::Content {
             objectives_ = {};
             lore_.clear();
             mutators_.clear();
+            progression_ = {};
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
@@ -678,6 +687,7 @@ export namespace LB::Content {
         [[nodiscard]] const LoreDefinition* FindLore(std::string_view key) const { return FindByKey(lore_, key); }
         [[nodiscard]] const std::vector<MutatorDefinition>& GetMutators() const noexcept { return mutators_; }
         [[nodiscard]] const MutatorDefinition* FindMutator(std::string_view key) const { return FindByKey(mutators_, key); }
+        [[nodiscard]] const ProgressionSettings& GetProgression() const noexcept { return progression_; }
         [[nodiscard]] const AllyDefinition* FindAlly(std::string_view key) const { return FindByKey(allies_, key); }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
@@ -748,6 +758,7 @@ export namespace LB::Content {
         ObjectiveSettings objectives_;
         std::vector<LoreDefinition> lore_;
         std::vector<MutatorDefinition> mutators_;
+        ProgressionSettings progression_;
     };
 
 } // namespace LB::Content
