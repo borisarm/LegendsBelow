@@ -343,10 +343,20 @@ namespace LB::Content {
             reader.ReadFloat("evadeSeconds", spell.evadeSeconds, false);
             reader.ReadBool("teleportBehindTarget", spell.teleportBehindTarget);
             reader.ReadBool("canCrit", spell.canCrit);
+            reader.ReadString("effect", spell.effect, false);
+            reader.ReadFloat("blinkTiles", spell.blinkTiles, false);
             reader.ReadInt("cleansesStatuses", spell.cleansesStatuses, false);
             if (spell.dashTiles < 0.0f || spell.evadeSeconds < 0.0f || spell.cleansesStatuses < 0) reader.Error("'dashTiles', 'evadeSeconds', and 'cleansesStatuses' must not be negative");
             if (spell.teleportBehindTarget && spell.range <= 0.0f) reader.Error("'teleportBehindTarget' needs a 'range'");
 
+            if (!spell.effect.empty() && std::ranges::find(SpellDefinition::UtilityEffects, std::string_view(spell.effect)) == SpellDefinition::UtilityEffects.end()) {
+                reader.Error(std::format("unknown 'effect' '{}'", spell.effect));
+            }
+            if (spell.effect == "Blink" && spell.blinkTiles <= 0.0f) reader.Error("a Blink needs a positive 'blinkTiles'");
+            if (spell.effect == "Buff" && spell.appliedStatusIds.empty()) reader.Error("a Buff needs 'appliedStatusIds'");
+            if (spell.effect == "Cleanse" && spell.cleansesStatuses <= 0) reader.Error("a Cleanse needs 'cleansesStatuses'");
+            if ((spell.effect == "RemoteInteract" || spell.effect == "IceWall") && spell.range <= 0.0f) reader.Error(std::format("a {} needs a 'range'", spell.effect));
+            if ((spell.effect == "IceWall" || spell.effect == "RevealSecrets") && spell.durationSeconds <= 0.0f) reader.Error(std::format("a {} needs a 'durationSeconds'", spell.effect));
             if (spell.level < 1) reader.Error("'level' must be at least 1");
             if (spell.projectileSpeed < 0.0f) reader.Error("'projectileSpeed' must not be negative");
             if (spell.projectileSpeed > 0.0f && spell.range <= 0.0f) reader.Error("a missile ('projectileSpeed') needs a 'range'");
@@ -377,6 +387,8 @@ namespace LB::Content {
             reader.ReadInt("affixSlots", weapon.affixSlots, false);
             reader.ReadString("ammoType", weapon.ammoType, false);
             reader.ReadInt("value", weapon.value, false);
+            reader.ReadFloat("weight", weapon.weight, false);
+            if (weapon.weight < 0.0f) reader.Error("'weight' must not be negative");
             reader.ReadFloat("range", weapon.range, false);
             reader.ReadFloat("projectileSpeed", weapon.projectileSpeed, false);
 
@@ -896,8 +908,11 @@ namespace LB::Content {
             reader.ReadBool("preventsActions", status.preventsActions);
             reader.ReadInt("damagePerTick", status.damagePerTick, false);
             reader.ReadEnum("damageType", status.damageType, DamageTypes, false);
+            reader.ReadInt("attackBonus", status.attackBonus, false);
+            reader.ReadFloat("damageTakenMultiplier", status.damageTakenMultiplier, false);
 
             if (status.durationSeconds <= 0.0f) reader.Error("'durationSeconds' must be positive");
+            if (status.damageTakenMultiplier < 0.0f) reader.Error("'damageTakenMultiplier' must not be negative");
             if (status.tickIntervalSeconds <= 0.0f) reader.Error("'tickIntervalSeconds' must be positive");
             if (status.movementMultiplier < 0.0f || status.movementMultiplier > 1.0f) reader.Error("'movementMultiplier' must be between 0 and 1");
             if (status.damagePerTick < 0) reader.Error("'damagePerTick' must not be negative");
@@ -917,6 +932,8 @@ namespace LB::Content {
             reader.ReadString("ammoType", consumable.ammoType, false);
             reader.ReadBool("isKey", consumable.isKey);
             reader.ReadInt("value", consumable.value, false);
+            reader.ReadFloat("weight", consumable.weight, false);
+            if (consumable.weight < 0.0f) reader.Error("'weight' must not be negative");
             reader.ReadString("model", consumable.model, true);
 
             if (consumable.maxStack < 1) reader.Error("'maxStack' must be at least 1");

@@ -948,6 +948,25 @@ TEST(SpellContentTests, MissileWithoutRange_Rejected) {
     EXPECT_FALSE(content.LoadFromJson("[" + spell + "]", "[]", "[]").Succeeded());
 }
 
+// Utility spells (SpellDefinition::effect): castable, and checked for what their effect needs
+TEST(SpellContentTests, UtilityEffects_AreCastableAndChecked) {
+    const auto utility = [](const std::string& fields) {
+        return R"({"id":"spell_u","name":"U","school":"Utility","level":1,"categories":["Utility"],"requiredLevel":1,"manaCost":1,"castTimeSeconds":0.0,"cooldownSeconds":1.0,)" + fields + "}";
+    };
+    {
+        ContentDatabase content;
+        const auto result = content.LoadFromJson(Array(utility(R"("effect":"Blink","blinkTiles":4.0)")), "[]", "[]");
+        ASSERT_TRUE(result.Succeeded()) << ErrorsOf(result);
+        EXPECT_TRUE(content.GetSpells().front().IsCastable());
+        EXPECT_TRUE(content.GetSpells().front().IsUtility());
+        EXPECT_FALSE(content.GetSpells().front().IsDash());
+    }
+    for (const auto* bad : { R"("effect":"Juggle")", R"("effect":"Blink")", R"("effect":"Buff")", R"("effect":"IceWall","range":6.0)" }) {
+        ContentDatabase content;
+        EXPECT_FALSE(content.LoadFromJson(Array(utility(bad)), "[]", "[]").Succeeded()) << bad;
+    }
+}
+
 TEST(EnemyValidationTests, Caster_NeedsAKnownMissileSpell) {
     {
         ContentDatabase content;
@@ -980,7 +999,7 @@ TEST_F(ShippedContentTests, Mage_HasASpellBarManaRegenAndAKit) {
     EXPECT_EQ(warrior->spellBar.size(), 3u);
     EXPECT_EQ(warrior->specializations.size(), 2u);
     EXPECT_EQ(warrior->startingWeapon, "weapon_sword_rusted_shortsword_t1");
-    EXPECT_EQ(content_.GetStatuses().size(), 10u);
+    EXPECT_EQ(content_.GetStatuses().size(), 12u);   // with the blessing and the ward
 }
 
 TEST_F(ShippedContentTests, GolemAndNecromancer) {

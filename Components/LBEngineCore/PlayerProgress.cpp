@@ -227,6 +227,32 @@ namespace LB::Engine {
         return PutOn(item, slot);
     }
 
+    float GameEngine::WeightOf(ItemRef item) const {
+        const auto base = session_->rolls.BaseOf(item);
+        switch (base.kind) {
+        case ItemKind::Weapon:
+            if (const auto* weapon = content_->FindWeapon(base.id)) return weapon->weight;
+            break;
+        case ItemKind::Armor:
+            if (const auto* armor = content_->FindArmor(base.id)) return armor->weight;
+            break;
+        case ItemKind::Consumable:
+            if (const auto* consumable = content_->FindConsumable(base.id)) return consumable->weight;
+            break;
+        default:
+            break;
+        }
+        return 0.0f;
+    }
+
+    float GameEngine::CarriedWeight() const {
+        if (!session_->playerId) return 0.0f;
+        float weight = GetPlayerWeaponItem().IsValid() ? WeightOf(GetPlayerWeaponItem()) : 0.0f;
+        for (const auto& [slot, item] : WornItems()) weight += WeightOf(item);
+        for (const auto& stack : GetInventory()) weight += WeightOf(ItemRef::Unpack(stack.itemId)) * static_cast<float>(stack.quantity);
+        return weight;
+    }
+
     ItemRef GameEngine::EquippedItem(LB::Combat::EquipmentSlot slot) const {
         if (!session_->playerId) return {};
         const auto equipped = session_->inventoryService.GetEquippedItems(*session_->playerId);
@@ -489,6 +515,9 @@ namespace LB::Engine {
                                               count(LB::AttributeType::Intelligence), count(LB::AttributeType::Wisdom), count(LB::AttributeType::Charisma));
         data["player.gold"] = std::format("{}", session_->gold);
         data["player.path"] = session_->path;
+        std::string bar;
+        for (const auto& key : session_->spellBar) bar += key + ";";
+        data["player.spellbar"] = bar;   // empty: the class's own
         std::string allies;
         for (const auto& ally : session_->allies.Allies()) {
             const auto [weapon, armour] = AllyItems(ally.id);
@@ -579,6 +608,14 @@ namespace LB::Engine {
         if (const auto* text = field("player.gold"); text && ParseInt(*text, gold)) session_->gold = std::max(0, gold);
         if (const auto* text = field("player.path"); text && content_->FindClass(session_->playerClass) && content_->FindClass(session_->playerClass)->FindSpecialization(*text)) {
             session_->path = *text;
+        }
+        // The spell bar (older saves: the class's own)
+        session_->spellBar.clear();
+        if (const auto* text = field("player.spellbar")) {
+            for (const auto& key : Split(*text, ';')) {
+                if (key.empty()) continue;
+                if (const auto* spell = content_->FindSpell(key); spell && spell->requiredClass == session_->playerClass && session_->spellBar.size() < SpellSlots) session_->spellBar.push_back(key);
+            }
         }
         // The merchant's bounty, if one was posted and not yet fulfilled
         session_->bounty = {};

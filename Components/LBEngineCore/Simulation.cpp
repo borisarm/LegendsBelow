@@ -69,6 +69,7 @@ namespace LB::Engine {
             UpdatePlayerCombat(static_cast<float>(elapsedSeconds));
             UpdatePlayerCasting(static_cast<float>(elapsedSeconds));
             const auto before = session_->playerPosition;
+            if (session_->playerId) session_->characterService.SetCarriedWeight(*session_->playerId, CarriedWeight());
             MovePlayer(static_cast<float>(elapsedSeconds));
             const bool moving = Distance(before, session_->playerPosition) > 1e-4f;
             // Walking out of an enemy's reach invites its blow (design-combat-system.md 3.2)
@@ -366,11 +367,53 @@ namespace LB::Engine {
     std::vector<const Content::SpellDefinition*> GameEngine::GetSpellBar() const {
         std::vector<const Content::SpellDefinition*> bar;
         if (const auto* classData = PlayerClassDefinition()) {
-            for (const auto& key : classData->spellBar) {
+            for (const auto& key : session_->spellBar.empty() ? classData->spellBar : session_->spellBar) {
                 if (const auto* spell = content_->FindSpell(key)) bar.push_back(spell);
             }
         }
         return bar;
+    }
+
+    std::vector<const Content::SpellDefinition*> GameEngine::Spellbook() const {
+        std::vector<const Content::SpellDefinition*> book;
+        const auto* classData = PlayerClassDefinition();
+        if (!classData) return book;
+        for (const auto& spell : content_->GetSpells()) {
+            if (spell.requiredClass == classData->characterClass && spell.IsCastable()) book.push_back(&spell);
+        }
+        std::ranges::stable_sort(book, {}, &Content::SpellDefinition::requiredLevel);
+        return book;
+    }
+
+    bool GameEngine::SetSpell(std::size_t slot, std::string_view key) {
+        if (slot >= SpellSlots) return false;
+        const auto book = Spellbook();
+        if (std::ranges::none_of(book, [&](const Content::SpellDefinition* spell) { return spell->key == key; })) return false;
+        std::vector<std::string> keys;
+        for (const auto* spell : GetSpellBar()) keys.push_back(spell->key);
+        if (std::ranges::find(keys, key) != keys.end()) return false;   // on the bar already
+        if (slot >= keys.size()) keys.push_back(std::string(key));      // a free slot: the next one
+        else keys[slot] = std::string(key);
+        session_->spellBar = std::move(keys);
+        CancelCast();
+        return true;
+    }
+
+    // The slot takes the next spell of the spellbook not on the bar (around to the first)
+    bool GameEngine::CycleSpell(std::size_t slot) {
+        const auto book = Spellbook();
+        const auto bar = GetSpellBar();
+        if (book.empty() || slot >= SpellSlots) return false;
+        std::size_t start = 0;
+        if (slot < bar.size()) {
+            const auto it = std::ranges::find(book, bar[slot]);
+            if (it != book.end()) start = static_cast<std::size_t>(it - book.begin()) + 1;
+        }
+        for (std::size_t i = 0; i < book.size(); ++i) {
+            const auto* next = book[(start + i) % book.size()];
+            if (std::ranges::find(bar, next) == bar.end() && SetSpell(slot, next->key)) return true;
+        }
+        return false;
     }
 
     std::int32_t GameEngine::GetPlayerSpellPower() const {
@@ -414,6 +457,7 @@ namespace LB::Engine {
         session_->evadeSeconds = std::max(0.0f, session_->evadeSeconds - elapsedSeconds);
         session_->sneakWindowSeconds = std::max(0.0f, session_->sneakWindowSeconds - elapsedSeconds);
         session_->casting.releaseSeconds = std::max(0.0f, session_->casting.releaseSeconds - elapsedSeconds);
+        UpdateSpellWorks(elapsedSeconds);
 
         const auto* player = PlayerCharacter();
         const auto* classData = PlayerClassDefinition();
@@ -513,7 +557,10 @@ namespace LB::Engine {
             }
         };
 
-        if (spell.IsHeal()) {
+        if (spell.IsUtility()) {
+            CastUtility(spell);
+        }
+        else if (spell.IsHeal()) {
             // design-spells-system.md 5.2: base + coefficient x the caster's power; a cure lifts hindrances
             HealParty(spell, heal);
             session_->playerStatuses.RemoveHindrances(spell.cleansesStatuses);
@@ -589,6 +636,127 @@ namespace LB::Engine {
 
     void GameEngine::CancelCast() {
         session_->casting = PlayerCasting{};
+    }
+
+    // The utility spells (SpellDefinition::UtilityEffects): a blink, buffs and cleansing for the
+    // hero and the companions about them, secrets shown, a lever worked from afar, a wall of ice
+    void GameEngine::CastUtility(const Content::SpellDefinition& spell) {
+        const auto at = session_->playerPosition;
+        const Systems::Rendering::Vector3 over{ at.x, PlayerTop(), at.y };
+        const auto palette = ElementPalette(spell.damageType == LB::Combat::DamageType::None ? LB::Combat::DamageType::Arcane : spell.damageType);
+        if (spell.effect == "Blink") {
+            // The farthest open spot ahead, in sight, up to blinkTiles away
+            const auto forward = Forward(session_->playerFacingYaw);
+            WorldPoint best = at;
+            for (float d = 0.25f; d <= spell.blinkTiles + 1e-3f; d += 0.25f) {
+                const WorldPoint spot{ at.x + forward.x * d, at.y + forward.y * d };
+                if (!session_->world.LineOfSight(at, spot)) break;
+                if (session_->world.CircleFits(spot, PlayerRadius)) best = spot;
+            }
+            session_->effects.Emit(ParticleEffect::SpellBurst, { at.x, 0.6f, at.y }, 18, 0.8f, &palette);
+            session_->playerPosition = best;
+            session_->characterService.PlaceCharacter(*session_->playerId, ToTile(best));
+            session_->evadeSeconds = std::max(session_->evadeSeconds, spell.evadeSeconds);
+            session_->effects.Emit(ParticleEffect::SpellBurst, { best.x, 0.6f, best.y }, 18, 0.8f, &palette);
+            return;
+        }
+        if (spell.effect == "Buff" || spell.effect == "Cleanse") {
+            // The hero, and the companions within the spell's radius
+            const auto touch = [&](auto&& self, auto&& ally) {
+                self();
+                for (const auto& companion : session_->allies.Allies()) {
+                    if (!companion.IsDown() && Distance(companion.position, at) <= spell.radius) ally(companion.id);
+                }
+            };
+            if (spell.effect == "Buff") {
+                for (const auto& key : spell.appliedStatusIds) {
+                    const auto* status = content_->FindStatus(key);
+                    if (!status) continue;
+                    touch([&] { session_->playerStatuses.Apply(*status); }, [&](std::uint32_t id) { session_->allies.ApplyStatus(id, *status); });
+                }
+                session_->combatText.Add(spell.name, over, { 0.95f, 0.85f, 0.45f, 1.0f }, 2.0f);
+            }
+            else {
+                touch([&] { session_->playerStatuses.RemoveHindrances(spell.cleansesStatuses); }, [&](std::uint32_t id) { session_->allies.Cleanse(id, spell.cleansesStatuses); });
+                session_->combatText.Add("PURIFIED", over, { 0.95f, 0.85f, 0.45f, 1.0f }, 2.0f);
+            }
+            session_->effects.Emit(ParticleEffect::Healing, { at.x, 0.4f, at.y }, 30, 1.0f);
+            return;
+        }
+        if (spell.effect == "RevealSecrets") {
+            session_->revealSeconds = spell.durationSeconds;
+            const bool found = std::ranges::any_of(session_->features.Gates(), [&](const Gate& gate) {
+                return gate.kind == GateKind::Secret && !gate.open && Distance(gate.center, at) <= spell.radius;
+            });
+            session_->combatText.Add(found ? "A HIDDEN WAY NEARBY" : "NOTHING HIDDEN NEAR", over, { 0.55f, 0.85f, 1.0f, 1.0f }, 2.5f);
+            return;
+        }
+        if (spell.effect == "RemoteInteract") {
+            // The nearest lever in range and in sight, else the nearest candle
+            const auto& features = session_->features;
+            std::optional<std::size_t> lever;
+            for (std::size_t i = 0; i < features.Levers().size(); ++i) {
+                const auto& one = features.Levers()[i];
+                if (one.pulled || Distance(one.position, at) > spell.range || !session_->world.LineOfSight(at, one.position)) continue;
+                if (!lever || Distance(one.position, at) < Distance(features.Levers()[*lever].position, at)) lever = i;
+            }
+            if (lever) {
+                PullLever(*lever);
+                return;
+            }
+            for (std::size_t p = 0; p < features.Puzzles().size(); ++p) {
+                for (std::size_t c = 0; c < features.Puzzles()[p].candles.size(); ++c) {
+                    const auto& candle = features.Puzzles()[p].candles[c];
+                    if (Distance(candle.position, at) <= spell.range && session_->world.LineOfSight(at, candle.position)) {
+                        TouchCandle(p, c);
+                        return;
+                    }
+                }
+            }
+            session_->combatText.Add("NOTHING TO REACH", over, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+            return;
+        }
+        if (spell.effect == "IceWall") {
+            // Three cells across the way ahead, a third of the range out (not on a body, nor a
+            // cell shut already)
+            const auto forward = Forward(session_->playerFacingYaw);
+            const float reach = std::clamp(spell.range / 3.0f, 2.0f, spell.range);
+            const auto [cx, cy] = session_->world.CellOf({ at.x + forward.x * reach, at.y + forward.y * reach });
+            const bool alongX = std::abs(forward.y) >= std::abs(forward.x);   // facing up or down the map: the wall runs across it
+            IceWall wall{ {}, spell.durationSeconds, session_->playerFacingYaw + std::numbers::pi_v<float> * 0.5f };
+            for (const std::int32_t offset : { -1, 0, 1 }) {
+                const auto x = cx + (alongX ? offset : 0);
+                const auto y = cy + (alongX ? 0 : offset);
+                if (!session_->world.Walkable(x, y)) continue;
+                const auto center = session_->world.CellCenter(x, y);
+                const auto near = [&](WorldPoint p) { return std::abs(p.x - center.x) < WorldMap::CellTiles * 0.75f && std::abs(p.y - center.y) < WorldMap::CellTiles * 0.75f; };
+                if (near(session_->playerPosition) || std::ranges::any_of(session_->encounter.GetEnemies(), [&](const Enemy& e) { return !e.IsDead() && near(e.position); })) continue;
+                if (std::ranges::any_of(session_->allies.Allies(), [&](const auto& ally) { return near(ally.position); })) continue;
+                session_->world.SetBlocked(x, y, true);
+                wall.cells.emplace_back(x, y);
+            }
+            if (wall.cells.empty()) {
+                session_->combatText.Add("NO ROOM FOR IT", over, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+                return;
+            }
+            const auto frost = ElementPalette(LB::Combat::DamageType::Cold);
+            for (const auto& [x, y] : wall.cells) {
+                const auto center = session_->world.CellCenter(x, y);
+                session_->effects.Emit(ParticleEffect::SpellBurst, { center.x, 0.6f, center.y }, 12, 0.8f, &frost);
+            }
+            session_->iceWalls.push_back(std::move(wall));
+        }
+    }
+
+    // Ice walls melt (their cells open again) and Arcane Sight fades
+    void GameEngine::UpdateSpellWorks(float elapsedSeconds) {
+        session_->revealSeconds = std::max(0.0f, session_->revealSeconds - elapsedSeconds);
+        for (auto& wall : session_->iceWalls) {
+            wall.secondsLeft -= elapsedSeconds;
+            if (wall.secondsLeft > 0.0f) continue;
+            for (const auto& [x, y] : wall.cells) session_->world.SetBlocked(x, y, false);
+        }
+        std::erase_if(session_->iceWalls, [](const IceWall& wall) { return wall.secondsLeft <= 0.0f; });
     }
 
     // A heavy blow breaks the cast under way (design-spells-system.md 4.3): one of
@@ -782,9 +950,12 @@ namespace LB::Engine {
             if (event.spell && event.result.hit && IsPlayerAlive()) ApplySpellStatusesToPlayer(*event.spell);
             if (!event.result.hit || event.result.finalDamage <= 0 || !IsPlayerAlive()) continue;
 
-            session_->characterService.DamageCharacter(*session_->playerId, event.result.finalDamage);
+            // A ward takes its share of the blow (the damage shown is what was taken)
+            const auto taken = session_->playerStatuses.Taken(event.result.finalDamage);
+            session_->combatEvents.back().result.finalDamage = taken;
+            session_->characterService.DamageCharacter(*session_->playerId, taken);
             session_->playerCombat.hitFlashSeconds = Encounter::HitFlashSeconds;
-            InterruptCast(event.result.finalDamage);
+            InterruptCast(taken);
             if (!IsPlayerAlive()) {
                 session_->playerCombat.swinging = false;
                 session_->playerCombat.deadSeconds = 0.0f;

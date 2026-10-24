@@ -24,7 +24,8 @@ export namespace LB::Engine {
         GiveToAlly,       // choose an item from the bag for ally `index` (an id)
         TakeFromAlly,     // take ally `index`'s gear back
         Retrain,          // the merchant gives back the assigned attribute points (for gold)
-        ForgetPath        // the merchant lets the hero choose a path again (for more gold)
+        ForgetPath,       // the merchant lets the hero choose a path again (for more gold)
+        CycleSpell        // the bar's slot `index` takes the spellbook's next spell
     };
 
     /// <summary>

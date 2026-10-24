@@ -79,6 +79,8 @@ namespace LB::Engine {
 
     void GameEngine::StartFloor(std::int32_t depth) {
         session_->depth = depth;
+        session_->iceWalls.clear();
+        session_->revealSeconds = 0.0f;
         session_->world = WorldMap(depth == FinalDepth ? Services::Dungeon::DungeonService::FinalFloor()
                                                        : dungeonService_.GenerateFloor(ParamsFor(depth), FloorSeed(session_->baseSeed, depth)), {});
         const auto& layout = session_->world.Layout();
@@ -339,6 +341,7 @@ namespace LB::Engine {
         if (!step.playerStruck) return;
         const auto damage = session_->lootRoller.RollDice(LB::Dice{ 1, 6, ChallengeDepth() / 2 });
         CombatEvent event{ CombatEventKind::EnemyAttack, 0, Services::Combat::CombatService::ResolveSpellHit(damage, LB::Combat::DamageType::Piercing, GetPlayerDefense()), false };
+        event.result.finalDamage = session_->playerStatuses.Taken(event.result.finalDamage);
         session_->characterService.DamageCharacter(*session_->playerId, event.result.finalDamage);
         session_->playerCombat.hitFlashSeconds = Encounter::HitFlashSeconds;
         InterruptCast(event.result.finalDamage);
@@ -490,6 +493,7 @@ namespace LB::Engine {
         }
         data["floor.gates"] = JoinIndices(gates);
         data["floor.key"] = session_->features.KeyDropped() ? "1" : "0";
+        data["floor.waystones"] = session_->features.WaystonesAwake() ? "1" : "0";
         std::vector<std::int32_t> candles;
         for (const auto& puzzle : session_->features.Puzzles()) {
             std::int32_t bits = 0;
@@ -536,6 +540,7 @@ namespace LB::Engine {
             if (index >= 0) session_->features.Open(static_cast<std::size_t>(index), session_->world);
         }
         session_->features.SetKeyDropped(field("floor.key").value_or("0") == "1");
+        session_->features.SetWaystonesAwake(field("floor.waystones").value_or("0") == "1");
         const auto candles = ParseIndices(field("floor.candles").value_or(""));
         for (std::size_t p = 0; p < candles.size() && p < session_->features.Puzzles().size(); ++p) {
             auto& puzzle = session_->features.Puzzles()[p];
@@ -802,7 +807,7 @@ namespace LB::Engine {
         const auto& layout = session_->world.Layout();
         features.Update(1.0f / 60.0f);
         for (const auto& gate : features.Gates()) {   // a sinking gate grinds up dust
-            if (gate.kind == GateKind::Locked && gate.open && gate.openSeconds < GateSinkSeconds) {
+            if (gate.kind != GateKind::Secret && gate.open && gate.openSeconds < GateSinkSeconds) {
                 session_->effects.Stream(ParticleEffect::RiseDust, { gate.center.x, 0.03f, gate.center.y }, 40.0f, 1.0f / 60.0f);
             }
         }
@@ -838,6 +843,11 @@ namespace LB::Engine {
                     PlaySound(GameSound::NoMana, gate.center);
                 }
             }
+            if (gate.kind == GateKind::Lever && distance <= GateReach && !gate.warned) {
+                gate.warned = true;
+                session_->combatText.Add("SHUT - A LEVER OPENS IT", { gate.center.x, 1.4f, gate.center.y }, { 0.85f, 0.85f, 0.85f, 1.0f }, 2.5f);
+                PlaySound(GameSound::NoMana, gate.center);
+            }
             // A blow at a cracked wall (a swing, facing it, close enough) breaks it
             if (gate.kind == GateKind::Secret && session_->playerCombat.swinging && !session_->playerCombat.shooting && distance <= PlayerReach + 1.0f) {
                 const auto forward = Forward(session_->playerFacingYaw);
@@ -851,8 +861,29 @@ namespace LB::Engine {
             }
         }
 
-        // Candles: Interact touches the nearest within reach
+        // The far waystone awakens when the hero first reaches it
+        const auto& waystones = features.Waystones();
+        if (waystones.size() == 2 && !features.WaystonesAwake() && Encounter::Distance(waystones[1].position, hero) <= WaystoneReach) {
+            features.SetWaystonesAwake(true);
+            session_->combatText.Add("A WAYSTONE AWAKENS", { waystones[1].position.x, 1.2f, waystones[1].position.y }, { 0.55f, 0.85f, 1.0f, 1.0f }, 3.0f);
+            session_->effects.Emit(ParticleEffect::LevelUp, { waystones[1].position.x, 0.1f, waystones[1].position.y }, 40, 1.0f);
+            PlaySound(GameSound::LevelUp, waystones[1].position);
+            session_->events.Publish(FeatureActivatedEvent{ FeatureKind::Waystone, waystones[1].position });
+        }
+
+        // Levers, waystones, and candles: Interact acts on the nearest within reach
         if (!inputSystem_.IsActionTriggered(std::string(InteractAction))) return;
+        for (std::size_t l = 0; l < features.Levers().size(); ++l) {
+            const auto& lever = features.Levers()[l];
+            if (lever.pulled || Encounter::Distance(lever.position, hero) > LeverReach) continue;
+            PullLever(l);
+            return;
+        }
+        for (std::size_t w = 0; w < waystones.size(); ++w) {
+            if (Encounter::Distance(waystones[w].position, hero) > WaystoneReach) continue;
+            TravelByWaystone(w);
+            return;
+        }
         for (std::size_t p = 0; p < features.Puzzles().size(); ++p) {
             const auto& puzzle = features.Puzzles()[p];
             for (std::size_t c = 0; c < puzzle.candles.size(); ++c) {
@@ -863,6 +894,52 @@ namespace LB::Engine {
             }
         }
         (void)layout;
+    }
+
+    void GameEngine::PullLever(std::size_t index) {
+        auto& features = session_->features;
+        if (index >= features.Levers().size()) return;
+        const auto lever = features.Levers()[index];
+        if (!features.Pull(index, session_->world)) return;
+        const auto& gate = features.Gates()[lever.gate];
+        session_->combatText.Add("A GATE GRINDS OPEN", { lever.position.x, 1.4f, lever.position.y }, { 0.95f, 0.85f, 0.45f, 1.0f }, 2.5f);
+        PlaySound(GameSound::CandleTouched, lever.position);
+        PlaySound(GameSound::GateOpens, gate.center);
+        session_->events.Publish(FeatureActivatedEvent{ FeatureKind::Lever, lever.position });
+    }
+
+    bool GameEngine::TravelByWaystone(std::size_t from) {
+        auto& features = session_->features;
+        const auto& waystones = features.Waystones();
+        if (from >= waystones.size() || waystones.size() != 2 || !IsPlayerAlive()) return false;
+        const auto& here = waystones[from];
+        if (!features.WaystonesAwake()) {
+            session_->combatText.Add("ITS TWIN SLEEPS", { here.position.x, 1.2f, here.position.y }, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+            PlaySound(GameSound::NoMana, here.position);
+            return false;
+        }
+        const bool threatened = std::ranges::any_of(session_->encounter.GetEnemies(), [&](const Enemy& enemy) {
+            return (enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking) && Encounter::Distance(enemy.position, session_->playerPosition) <= WaystoneQuietRadius;
+        });
+        if (threatened) {
+            session_->combatText.Add("ENEMIES ARE NEAR", { here.position.x, 1.2f, here.position.y }, { 0.85f, 0.85f, 0.85f, 1.0f }, 2.0f);
+            PlaySound(GameSound::NoMana, here.position);
+            return false;
+        }
+        // Arrive beside the other stone (not on it: the next Interact is a choice)
+        const auto& there = waystones[1 - from];
+        WorldPoint at{ there.position.x - 1.0f, there.position.y };
+        if (!session_->world.CircleFits(at, PlayerRadius)) at = session_->world.RoomCenter(there.room);
+        session_->effects.Emit(ParticleEffect::LevelUp, { session_->playerPosition.x, 0.1f, session_->playerPosition.y }, 30, 1.0f);
+        session_->playerPosition = at;
+        session_->characterService.PlaceCharacter(*session_->playerId, ToTile(at));
+        session_->camera.SnapTo({ at.x, at.y });
+        session_->order = {};
+        session_->allies.PlaceAround(session_->world, at, false);
+        session_->effects.Emit(ParticleEffect::LevelUp, { at.x, 0.1f, at.y }, 30, 1.0f);
+        PlaySound(GameSound::Descend, at);
+        session_->events.Publish(FeatureActivatedEvent{ FeatureKind::Waystone, at });
+        return true;
     }
 
     void GameEngine::TouchCandle(std::size_t puzzleIndex, std::size_t candle) {
@@ -887,7 +964,7 @@ namespace LB::Engine {
         const auto view = GetViewArea();
         for (const auto& gate : session_->features.Gates()) {
             if (!view.Contains(gate.center, WorldMap::CellTiles)) continue;
-            const auto model = ModelOf(gate.kind == GateKind::Locked ? GateModel : SecretWallModel);
+            const auto model = ModelOf(gate.kind == GateKind::Secret ? SecretWallModel : GateModel);
             if (gate.kind == GateKind::Secret) {
                 // Broken: it shudders and falls in on itself, faster and faster, in a cloud of dust
                 const float t = gate.open ? gate.openSeconds / WallCrumbleSeconds : 0.0f;
@@ -902,6 +979,57 @@ namespace LB::Engine {
             if (t >= 1.0f) continue;
             const float sink = 1.0f - (1.0f - t) * (1.0f - t);
             renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ model, { gate.center.x, -2.0f * sink, gate.center.y }, gate.yaw, ModelScale, tint });
+        }
+        // Ice walls: icy wall segments across the way, fading as they melt
+        for (const auto& wall : session_->iceWalls) {
+            const float fade = std::clamp(wall.secondsLeft, 0.0f, 1.0f);
+            for (const auto& [x, y] : wall.cells) {
+                const auto center = session_->world.CellCenter(x, y);
+                if (!view.Contains(center, WorldMap::CellTiles)) continue;
+                renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ assets_.models.wall, { center.x, -1.0f * (1.0f - fade), center.y }, wall.yaw, ModelScale,
+                                                                                { 0.55f, 0.8f, 1.0f, 1.0f } });
+            }
+        }
+        // Arcane Sight: a glow on the cracked walls and the traps within reach
+        if (session_->revealSeconds > 0.0f) {
+            const float glow = std::clamp(session_->revealSeconds, 0.0f, 1.0f);
+            for (const auto& gate : session_->features.Gates()) {
+                if (gate.kind != GateKind::Secret || gate.open || !view.Contains(gate.center, WorldMap::CellTiles)) continue;
+                Systems::Rendering::PointLight light{};
+                light.position = { gate.center.x, 1.0f, gate.center.y };
+                light.color = { 0.55f, 0.75f, 1.0f, 1.0f };
+                light.radius = 3.0f;
+                light.intensity = glow;
+                renderingSystem_.DrawLight(light);
+            }
+            for (const auto& trap : session_->decor.Traps()) {
+                if (!view.Contains(trap.center, WorldMap::CellTiles)) continue;
+                renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ { trap.center.x, 0.2f, trap.center.y }, 0.35f, { 1.0f, 0.35f, 0.3f, glow }, true });
+            }
+        }
+        // Levers: a post lit red until pulled, then green
+        for (const auto& lever : session_->features.Levers()) {
+            if (!view.Contains(lever.position, 1.0f)) continue;
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(LeverModel), { lever.position.x, 0.0f, lever.position.y }, 0.0f, ModelScale * 0.45f, tint });
+            Systems::Rendering::PointLight light{};
+            light.position = { lever.position.x, 1.0f, lever.position.y };
+            light.color = lever.pulled ? Systems::Rendering::Color{ 0.4f, 1.0f, 0.5f, 1.0f } : Systems::Rendering::Color{ 1.0f, 0.3f, 0.25f, 1.0f };
+            light.radius = 2.0f;
+            light.intensity = 0.7f;
+            renderingSystem_.DrawLight(light);
+            renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ light.position, 0.12f, { light.color.r, light.color.g, light.color.b, 2.0f }, true });
+        }
+        // Waystones: a grate on the floor, dim asleep, glowing awake
+        const bool awake = session_->features.WaystonesAwake();
+        for (const auto& stone : session_->features.Waystones()) {
+            if (!view.Contains(stone.position, 1.5f)) continue;
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(WaystoneModel), { stone.position.x, 0.01f, stone.position.y }, 0.0f, ModelScale * 0.6f, tint });
+            Systems::Rendering::PointLight light{};
+            light.position = { stone.position.x, 0.4f, stone.position.y };
+            light.color = { 0.45f, 0.75f, 1.0f, 1.0f };
+            light.radius = awake ? 3.5f : 1.5f;
+            light.intensity = awake ? 1.0f : 0.3f;
+            renderingSystem_.DrawLight(light);
         }
         for (const auto& puzzle : session_->features.Puzzles()) {
             for (const auto& candle : puzzle.candles) {

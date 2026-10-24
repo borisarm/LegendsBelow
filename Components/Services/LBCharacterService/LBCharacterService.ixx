@@ -380,9 +380,38 @@ export namespace LB::Services::Character {
         }
 
         /// <summary>
+        /// What a character carries, worn and in the bag (the engine sums it); 0 by default
+        /// </summary>
+        void SetCarriedWeight(CharacterId id, float weight) { carried_[id] = std::max(0.0f, weight); }
+        [[nodiscard]] float GetCarriedWeight(CharacterId id) const {
+            const auto it = carried_.find(id);
+            return it != carried_.end() ? it->second : 0.0f;
+        }
+
+        /// <summary>
+        /// What a character can carry without slowing much (design-loot-and-progression.md 5.2):
+        /// CarryPerStrength for each point of STR, gear included; null for an unknown character
+        /// </summary>
+        [[nodiscard]] std::optional<float> GetCarryCapacity(CharacterId id) const {
+            const auto it = characters_.find(id);
+            if (it == characters_.end()) return std::nullopt;
+            return CarryPerStrength * static_cast<float>(std::max(1, EffectiveAttributesOf(id, it->second).strength));
+        }
+
+        /// <summary>
+        /// The share of speed a load costs (design-armour-system.md 4.2): nothing up to half the
+        /// capacity, then half of what it goes past, up to a quarter at the full capacity and beyond
+        /// </summary>
+        [[nodiscard]] float GetWeightPenalty(CharacterId id) const {
+            const auto capacity = GetCarryCapacity(id);
+            if (!capacity || *capacity <= 0.0f) return 0.0f;
+            return std::clamp(GetCarriedWeight(id) / *capacity - 0.5f, 0.0f, 0.5f) * 0.5f;
+        }
+
+        /// <summary>
         /// Real-time movement speed in tiles per second (design-character-system.md, 4.2):
-        /// TilesPerSecond = ClassBaseSpeed + DEX_mod * 0.1
-        /// Armour penalties (design-armour-system.md, 4.2) apply once equipment data is modelled.
+        /// TilesPerSecond = ClassBaseSpeed + DEX_mod * 0.1, slowed by the worn armour's category
+        /// penalties and by the load (design-armour-system.md, 4.2)
         /// </summary>
         std::optional<float> GetMovementSpeed(CharacterId id) const {
             auto it = characters_.find(id);
@@ -404,7 +433,7 @@ export namespace LB::Services::Character {
             for (const auto& piece : equippedArmorOf(id)) {
                 penalty += piece.movementPenalty * armorAdjustmentFor(*rules, piece.category).movementScale;
             }
-            return std::max(MinimumMovementSpeed, baseSpeed * std::max(0.0f, 1.0f - penalty));
+            return std::max(MinimumMovementSpeed, baseSpeed * std::max(0.0f, 1.0f - penalty) * (1.0f - GetWeightPenalty(id)));
         }
 
         /// <summary>
@@ -760,6 +789,7 @@ export namespace LB::Services::Character {
             equippedArmor_.erase(id);
             gear_.erase(id);
             assigned_.erase(id);
+            carried_.erase(id);
             return characters_.erase(id) > 0;
         }
 
@@ -890,6 +920,7 @@ export namespace LB::Services::Character {
         std::unordered_map<CharacterId, std::map<EquipmentSlot, ArmorPiece>> equippedArmor_;
         std::unordered_map<CharacterId, GearBonus> gear_;
         std::unordered_map<CharacterId, std::map<AttributeType, std::int32_t>> assigned_;   // free points the player put in
+        std::unordered_map<CharacterId, float> carried_;                                      // the load, worn and in the bag
 
         // Max HP/MP after the attributes changed; current HP/MP move by as much
         void followAttributes(CharacterId id, Character& character, const ClassRules& classRules) const {
@@ -941,6 +972,7 @@ export namespace LB::Services::Character {
 
         // Slowest a character can move, however low its DEX
         static constexpr float MinimumMovementSpeed = 1.0f;
+        static constexpr float CarryPerStrength = 8.0f;   // carry capacity per point of STR (design-loot-and-progression.md 5.2)
 
         std::vector<ArmorPiece> equippedArmorOf(CharacterId id) const {
             std::vector<ArmorPiece> pieces;

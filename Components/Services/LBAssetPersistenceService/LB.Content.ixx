@@ -63,6 +63,8 @@ export namespace LB::Content {
         bool teleportBehindTarget{false};             // the caster steps behind the target (within range)
         std::int32_t cleansesStatuses{0};             // hindrances (Debuff, Control) it removes from the caster
         bool canCrit{true};                           // its damage may be critical (design-spells-system.md 5.1)
+        String effect;                                // a utility spell's doing (UtilityEffects); empty: by its shape (a missile, a burst, ...)
+        float blinkTiles{0.0f};                       // Blink: how far ahead the caster appears
 
         /// <summary>
         /// How it is cast: a missile (projectileSpeed, flying `range` tiles; with a radius it bursts
@@ -75,7 +77,16 @@ export namespace LB::Content {
         [[nodiscard]] bool IsTargetedStrike() const noexcept { return projectileSpeed <= 0.0f && range > 0.0f && radius <= 0.0f && baseDamage > 0 && !teleportBehindTarget; }
         [[nodiscard]] bool IsTargetedBurst() const noexcept { return projectileSpeed <= 0.0f && range > 0.0f && radius > 0.0f; }
         [[nodiscard]] bool IsHeal() const noexcept { return baseHeal > 0 && baseDamage <= 0; }
-        [[nodiscard]] bool IsDash() const noexcept { return dashTiles > 0.0f; }
+        [[nodiscard]] bool IsDash() const noexcept { return dashTiles > 0.0f && effect.empty(); }
+        [[nodiscard]] bool IsUtility() const noexcept { return !effect.empty(); }
+
+        /// <summary>
+        /// The utility effects a spell can have (`effect`): an instant teleport ahead, statuses on
+        /// the caster and the companions within its radius, hindrances lifted from them, secrets and
+        /// traps shown within its radius, a lever or candle within its range worked from afar, a
+        /// wall of ice across the way ahead for its duration
+        /// </summary>
+        static constexpr std::array<std::string_view, 6> UtilityEffects{ "Blink", "Buff", "Cleanse", "RevealSecrets", "RemoteInteract", "IceWall" };
         [[nodiscard]] bool IsShadowstep() const noexcept { return teleportBehindTarget && range > 0.0f; }
 
         /// <summary>
@@ -88,7 +99,7 @@ export namespace LB::Content {
         /// </summary>
         [[nodiscard]] bool IsCastable() const noexcept {
             const bool affects = baseDamage > 0 || !appliedStatusIds.empty();
-            return IsHeal() || IsDash() || IsShadowstep() || IsTargetedStrike()
+            return IsHeal() || IsDash() || IsShadowstep() || IsTargetedStrike() || IsUtility()
                 || ((IsMissile() || IsBurstAroundCaster() || IsTargetedBurst()) && affects);
         }
 
@@ -125,6 +136,7 @@ export namespace LB::Content {
         std::int32_t affixSlots{0};
         String ammoType;                              // ranged weapons only
         std::int32_t value{0};                        // gold a merchant asks for it (it buys at a fraction)
+        float weight{0.0f};                           // what it adds to the load (design-loot-and-progression.md 5.2)
         std::int32_t tier{1};                         // its "_tN" key suffix: the dungeon tier it drops from (design-armour-system.md 6.1)
         float range{0.0f};                            // tiles a shot flies (bows, crossbows, wands); 0: melee
         float projectileSpeed{0.0f};                  // tiles per second of the arrow or bolt
@@ -486,6 +498,7 @@ export namespace LB::Content {
         String ammoType;                              // ammunition for weapons of this ammoType ("Arrow", "Bolt"); empty: not ammunition
         bool isKey{false};                            // opens a locked gate (design-dungeon-and-world.md 4.3); not used from the bag
         std::int32_t value{0};                        // gold a merchant asks for one
+        float weight{0.0f};                           // one's share of the load (design-loot-and-progression.md 5.2)
 
         [[nodiscard]] bool IsAmmunition() const noexcept { return !ammoType.empty(); }
     };
@@ -596,6 +609,8 @@ export namespace LB::Content {
         bool preventsActions{false};                  // no moving, attacking, or casting (frozen, charmed)
         std::int32_t damagePerTick{0};
         DamageType damageType{DamageType::None};
+        std::int32_t attackBonus{0};                  // to hit while it lasts (a blessing)
+        float damageTakenMultiplier{1.0f};            // what blows do while it lasts (0.8: a fifth less)
     };
 
     /// <summary>

@@ -11,7 +11,8 @@ export namespace LB::Engine {
 
     enum class GateKind : std::uint8_t {
         Locked,   // iron bars: a key opens them
-        Secret    // a cracked wall: a blow breaks it
+        Secret,   // a cracked wall: a blow breaks it
+        Lever     // iron bars: a lever in another room opens them (design-dungeon-and-world.md 6.3)
     };
 
     /// <summary>
@@ -27,6 +28,25 @@ export namespace LB::Engine {
         bool open{false};
         float openSeconds{0.0f};          // since it opened (the bars sink into the floor)
         bool warned{false};               // "locked" said once per approach
+    };
+
+    /// <summary>
+    /// A lever that opens a gate elsewhere on the floor (design-dungeon-and-world.md 6.3)
+    /// </summary>
+    struct Lever {
+        WorldPoint position{};
+        std::size_t gate{0};              // the gate it opens (FloorFeatures::Gates)
+        std::int32_t room{-1};            // the room it stands in
+        bool pulled{false};
+    };
+
+    /// <summary>
+    /// One of a floor's two waystones (design-dungeon-and-world.md 6.3, teleporters): by the
+    /// entrance, and in the room before the way down
+    /// </summary>
+    struct Waystone {
+        WorldPoint position{};
+        std::int32_t room{-1};
     };
 
     /// <summary>
@@ -63,6 +83,8 @@ export namespace LB::Engine {
         static constexpr std::size_t PuzzleCandles = 4;
         static constexpr std::int32_t LockedFromDepth = 2;
         static constexpr std::int32_t SecretFromDepth = 3;
+        static constexpr std::int32_t LeverFromDepth = 4;      // from here a locked gate may answer a lever instead of a key
+        static constexpr std::int32_t WaystoneFromDepth = 2;
         static constexpr float CandleInset = 0.9f;   // tiles in from the room's wall
 
         /// <summary>
@@ -74,6 +96,9 @@ export namespace LB::Engine {
         void Build(WorldMap& world, std::int32_t depth, std::uint32_t seed, bool restFloor) {
             gates_.clear();
             puzzles_.clear();
+            levers_.clear();
+            waystones_.clear();
+            waystonesAwake_ = false;
             keyRoom_ = -1;
             keyDropped_ = false;
             world.ClearBlocked();
@@ -88,7 +113,13 @@ export namespace LB::Engine {
             }
             std::ranges::shuffle(hidden, rng);
             if (!hidden.empty() && depth >= LockedFromDepth) {
-                if (AddGate(world, hidden[0], GateKind::Locked)) keyRoom_ = KeyRoomFor(layout, hidden[0]);
+                // From LeverFromDepth, half the floors open it with a lever where the key would fall
+                const bool lever = depth >= LeverFromDepth && rng() % 2 == 0;
+                if (AddGate(world, hidden[0], lever ? GateKind::Lever : GateKind::Locked)) {
+                    const auto from = KeyRoomFor(layout, hidden[0]);
+                    if (lever) levers_.push_back({ InsideTheWall(world, from), gates_.size() - 1, from, false });
+                    else keyRoom_ = from;
+                }
             }
             if (hidden.size() > 1 && depth >= SecretFromDepth) AddGate(world, hidden[1], GateKind::Secret);
 
@@ -114,6 +145,15 @@ export namespace LB::Engine {
                 puzzle.solved = false;
                 puzzles_.push_back(std::move(puzzle));
             }
+
+            // Waystones: by the entrance, and in the critical-path room before the exit's
+            if (depth >= WaystoneFromDepth) {
+                const auto far = RoomBeforeTheExit(layout);
+                if (far >= 0 && far != layout.entranceRoom) {
+                    waystones_.push_back({ BesideTheCenter(world, layout.entranceRoom), layout.entranceRoom });
+                    waystones_.push_back({ BesideTheCenter(world, far), far });
+                }
+            }
         }
 
         /// <summary>
@@ -124,7 +164,29 @@ export namespace LB::Engine {
             gates_[index].open = true;
             gates_[index].openSeconds = 0.0f;
             world.SetBlocked(gates_[index].cellX, gates_[index].cellY, false);
+            for (auto& lever : levers_) {
+                if (lever.gate == index) lever.pulled = true;
+            }
         }
+
+        /// <summary>
+        /// Pull a lever: its gate opens. False when there is no such lever or it is pulled already.
+        /// </summary>
+        bool Pull(std::size_t index, WorldMap& world) {
+            if (index >= levers_.size() || levers_[index].pulled) return false;
+            Open(levers_[index].gate, world);
+            return true;
+        }
+
+        [[nodiscard]] const std::vector<Lever>& Levers() const noexcept { return levers_; }
+
+        /// <summary>
+        /// The waystones: none, or the entrance's and the far one; travel between them once the
+        /// far one is awake (the hero reached it)
+        /// </summary>
+        [[nodiscard]] const std::vector<Waystone>& Waystones() const noexcept { return waystones_; }
+        [[nodiscard]] bool WaystonesAwake() const noexcept { return waystonesAwake_; }
+        void SetWaystonesAwake(bool awake) noexcept { waystonesAwake_ = awake && !waystones_.empty(); }
 
         void Update(float elapsedSeconds) {
             for (auto& gate : gates_) {
@@ -210,8 +272,36 @@ export namespace LB::Engine {
             return layout.entranceRoom;
         }
 
+        // About a tile in from a room's north wall, a quarter of the way along
+        static WorldPoint InsideTheWall(const WorldMap& world, std::int32_t room) {
+            const auto& area = world.Layout().rooms[static_cast<std::size_t>(room)].area;
+            const auto corner = world.CellCorner(area.x, area.y);
+            const float w = static_cast<float>(area.width) * WorldMap::CellTiles;
+            return { corner.x + std::clamp(w * 0.25f, 1.2f, w - 1.2f), corner.y + 1.1f };
+        }
+
+        // Beside a room's center (where chests, relics, and the hero arriving stand)
+        static WorldPoint BesideTheCenter(const WorldMap& world, std::int32_t room) {
+            const auto& area = world.Layout().rooms[static_cast<std::size_t>(room)].area;
+            const auto center = world.RoomCenter(room);
+            const float reach = std::min(1.8f, static_cast<float>(std::min(area.width, area.height)) * WorldMap::CellTiles * 0.5f - 1.0f);
+            return { center.x + reach, center.y + reach };
+        }
+
+        // The critical-path room the exit's room is reached from (-1: none)
+        static std::int32_t RoomBeforeTheExit(const Dungeon::FloorLayout& layout) {
+            if (layout.exitRoom < 0) return -1;
+            for (const auto other : layout.rooms[static_cast<std::size_t>(layout.exitRoom)].connections) {
+                if (layout.rooms[static_cast<std::size_t>(other)].onCriticalPath) return other;
+            }
+            return -1;
+        }
+
         std::vector<Gate> gates_;
         std::vector<CandlePuzzle> puzzles_;
+        std::vector<Lever> levers_;
+        std::vector<Waystone> waystones_;
+        bool waystonesAwake_{false};
         std::int32_t keyRoom_{-1};
         bool keyDropped_{false};
     };

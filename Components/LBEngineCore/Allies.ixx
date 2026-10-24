@@ -98,7 +98,7 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] Services::Combat::WeaponAttackProfile Attack() const {
             Services::Combat::WeaponAttackProfile attack{};
-            attack.attackBonus = definition->attackBonus + (level - 1) / 2 + gear.attackBonus;
+            attack.attackBonus = definition->attackBonus + (level - 1) / 2 + gear.attackBonus + statuses.AttackBonus();
             attack.damageDice = definition->damageDice;
             attack.damageBonus = definition->damageBonus + (level - 1) / 3 + gear.damage;
             attack.damageType = definition->damageType;
@@ -189,6 +189,13 @@ export namespace LB::Engine {
         }
 
         /// <summary>
+        /// Lift up to `count` hindrances (Debuff, Control) from an ally (a cleansing spell)
+        /// </summary>
+        void Cleanse(std::uint32_t id, std::int32_t count) {
+            if (auto* ally = Mutable(id); ally && !ally->IsDown()) ally->statuses.RemoveHindrances(count);
+        }
+
+        /// <summary>
         /// The hero reached a level: their allies grow with them (the hit points gained are healed)
         /// </summary>
         void SetLevel(std::int32_t level) {
@@ -222,7 +229,7 @@ export namespace LB::Engine {
         bool Damage(std::uint32_t id, std::int32_t amount) {
             auto* ally = Mutable(id);
             if (!ally || ally->IsDown() || amount <= 0) return false;
-            ally->hitPoints = std::max(0, ally->hitPoints - amount);
+            ally->hitPoints = std::max(0, ally->hitPoints - ally->statuses.Taken(amount));
             ally->hitFlashSeconds = HitFlashSeconds;
             if (ally->hitPoints > 0) {
                 if (!ally->swinging) ally->animator.Play(clips_.hit.id, false, 1.0f, true, 0.05f);

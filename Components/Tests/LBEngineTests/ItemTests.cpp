@@ -126,3 +126,29 @@ TEST(AmmunitionTests, Hud_CountsTheArrows) {
     const auto expected = std::format("ARROWS {}", engine.AmmoCount("Arrow"));
     EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [&](const auto& t) { return t.text == expected; }));
 }
+
+// The load: everything carried counts, and past half the capacity the hero walks slower
+TEST(ItemTests, AHeavyBag_SlowsTheHero) {
+    GameEngine engine;
+    InitializeForCombat(engine);
+    engine.Tick(OneSixtieth);
+    const auto& characters = engine.GetCharacters();
+    const auto id = *engine.GetPlayerId();
+    const float light = engine.CarriedWeight();
+    EXPECT_GT(light, 0.0f);   // the starting kit
+    const float free = *characters.GetMovementSpeed(id);
+
+    const auto* plate = engine.GetContent()->FindArmor("armor_chest_rusted_breastplate_t1");
+    ASSERT_NE(plate, nullptr);
+    EXPECT_EQ(engine.GiveItem(plate->key, 8), 8);
+    engine.Tick(OneSixtieth);
+    EXPECT_FLOAT_EQ(engine.CarriedWeight(), light + 8.0f * plate->weight);
+    EXPECT_FLOAT_EQ(characters.GetCarriedWeight(id), engine.CarriedWeight());
+    EXPECT_GT(characters.GetWeightPenalty(id), 0.0f);
+    EXPECT_LT(*characters.GetMovementSpeed(id), free);
+
+    TapKey(engine, Keys::FromChar('I'));
+    engine.Tick(OneSixtieth);
+    const auto& rows = engine.GetCharacterScreen().GetRows();
+    EXPECT_TRUE(std::ranges::any_of(rows, [](const ScreenRow& row) { return row.text.starts_with("Load ") && row.detail.starts_with("slowed"); }));
+}

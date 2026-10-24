@@ -75,5 +75,19 @@
     "durationSeconds": 3.0,
     "movementMultiplier": 0.0,
     "preventsActions": true
+  },
+  {
+    "id": "status_blessed",
+    "displayName": "Blessed",
+    "categories": ["Buff"],
+    "durationSeconds": 15.0,
+    "attackBonus": 2
+  },
+  {
+    "id": "status_sanctuary",
+    "displayName": "Warded",
+    "categories": ["Buff"],
+    "durationSeconds": 10.0,
+    "damageTakenMultiplier": 0.8
   }
 ]

@@ -397,3 +397,91 @@ TEST(GameEngineMageTests, SaveAndLoad_KeepTheClass) {
     EXPECT_EQ(engine.GetPlayerWeapon()->category, LB::Combat::WeaponType::Wand);
     EXPECT_EQ(engine.GetSpellBar().size(), 4u);
 }
+
+// The spellbook: the class's castable spells, any of them on the bar; saved
+TEST(SpellbookTests, TheBar_TakesAnySpellOfTheClass) {
+    TempSaveDir dir;
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(),
+        .spawnEnemies = false, .randomSeed = CombatSeed, .playerClass = LB::Character::CharacterClass::Mage }));
+    const auto book = engine.Spellbook();
+    const auto has = [&](std::string_view key) { return std::ranges::any_of(book, [&](const auto* spell) { return spell->key == key; }); };
+    EXPECT_TRUE(has("spell_utility_blink_l2"));
+    EXPECT_TRUE(has("spell_frost_ice_wall_l2"));
+    EXPECT_FALSE(has("spell_holy_bless_l2"));   // the Cleric's
+    for (const auto* spell : book) EXPECT_TRUE(spell->requiredClass.has_value()) << spell->key;   // the Shadow spells are reserved
+
+    const auto before = engine.GetSpellBar()[0]->key;
+    ASSERT_TRUE(engine.CycleSpell(0));
+    const auto bar = engine.GetSpellBar();
+    EXPECT_NE(bar[0]->key, before);
+    for (std::size_t i = 0; i < bar.size(); ++i) {
+        for (std::size_t j = i + 1; j < bar.size(); ++j) EXPECT_NE(bar[i], bar[j]);
+    }
+    EXPECT_FALSE(engine.SetSpell(1, "spell_holy_bless_l2"));
+    EXPECT_FALSE(engine.SetSpell(1, bar[0]->key));   // on the bar already
+    ASSERT_TRUE(engine.SetSpell(3, "spell_utility_blink_l2"));
+    EXPECT_EQ(engine.GetSpellBar()[3]->key, "spell_utility_blink_l2");
+
+    ASSERT_TRUE(engine.SaveGame(GameEngine::SaveSlots[0]));
+    GameEngine loaded;
+    ASSERT_TRUE(loaded.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(),
+        .spawnEnemies = false, .randomSeed = CombatSeed, .playerClass = LB::Character::CharacterClass::Mage }));
+    ASSERT_TRUE(loaded.LoadGame(GameEngine::SaveSlots[0]));
+    ASSERT_EQ(loaded.GetSpellBar().size(), engine.GetSpellBar().size());
+    for (std::size_t i = 0; i < loaded.GetSpellBar().size(); ++i) EXPECT_EQ(loaded.GetSpellBar()[i]->key, engine.GetSpellBar()[i]->key);
+}
+
+// Blink: the hero appears a few tiles ahead at once
+TEST(SpellbookTests, Blink_CarriesTheHeroAhead) {
+    GameEngine engine;
+    InitializeMage(engine);
+    engine.GrantExperience(2500);   // level 6
+    engine.Tick(OneSixtieth);
+    ASSERT_TRUE(engine.SetSpell(0, "spell_utility_blink_l2"));
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 3);   // face screen-right
+    const auto start = engine.GetPlayerPosition();
+    TapKey(engine, Keys::FromChar('1'));
+    RunSteps(engine, 3);
+    EXPECT_GT(Encounter::Distance(engine.GetPlayerPosition(), start), 3.0f);
+    EXPECT_LE(Encounter::Distance(engine.GetPlayerPosition(), start), 5.5f);
+}
+
+// Bless: to hit while it lasts; a ward takes a fifth of each blow
+TEST(SpellbookTests, BlessAndSanctuary_HelpTheHero) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false,
+        .randomSeed = CombatSeed, .playerClass = LB::Character::CharacterClass::Cleric }));
+    engine.GrantExperience(2500);   // level 6
+    engine.Tick(OneSixtieth);
+    const auto plain = engine.GetPlayerAttackProfile().attackBonus;
+    ASSERT_TRUE(engine.SetSpell(0, "spell_holy_bless_l2"));
+    TapKey(engine, Keys::FromChar('1'));
+    RunSteps(engine, 70);   // a second's cast
+    EXPECT_TRUE(engine.GetPlayerStatuses().Has("status_blessed"));
+    EXPECT_EQ(engine.GetPlayerAttackProfile().attackBonus, plain + engine.GetContent()->FindStatus("status_blessed")->attackBonus);
+
+    StatusSet ward;
+    ward.Apply(*engine.GetContent()->FindStatus("status_sanctuary"));
+    EXPECT_EQ(ward.Taken(10), 8);
+    EXPECT_EQ(ward.Taken(1), 1);   // a blow that hurt still hurts
+}
+
+// Ice Wall: cells ahead shut for its duration, then open again
+TEST(SpellbookTests, IceWall_ShutsTheWayAheadForAWhile) {
+    GameEngine engine;
+    InitializeMage(engine);
+    engine.GrantExperience(2500);   // level 6
+    engine.Tick(OneSixtieth);
+    ASSERT_TRUE(engine.SetSpell(0, "spell_frost_ice_wall_l2"));
+    HoldKeysFor(engine, { Keys::FromChar('D') }, 3);
+    TapKey(engine, Keys::FromChar('1'));
+    RunSteps(engine, 80);   // its cast
+    ASSERT_EQ(engine.GetIceWalls().size(), 1u);
+    const auto cells = engine.GetIceWalls().front().cells;
+    ASSERT_FALSE(cells.empty());
+    for (const auto& [x, y] : cells) EXPECT_TRUE(engine.GetWorld().IsBlocked(x, y));
+    RunSteps(engine, static_cast<int>(60 * engine.GetContent()->FindSpell("spell_frost_ice_wall_l2")->durationSeconds) + 5);
+    EXPECT_TRUE(engine.GetIceWalls().empty());
+    for (const auto& [x, y] : cells) EXPECT_FALSE(engine.GetWorld().IsBlocked(x, y));
+}

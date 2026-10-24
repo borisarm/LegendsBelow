@@ -1140,3 +1140,24 @@ TEST(CharacterServiceProgressTests, ExperienceForLevel_MatchesLevelUps) {
     service.AwardExperience(id, 1);
     EXPECT_EQ(Get(service, id).GetLevel(), 2);
 }
+
+// The load (design-loot-and-progression.md 5.2, design-armour-system.md 4.2): free up to half the
+// carry capacity (8 a point of STR), then half of what goes past, a quarter at most
+TEST(CharacterServiceWeightTests, Load_SlowsPastHalfTheCapacity) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{12, 10, 10, 10, 10, 10}));
+    ASSERT_FLOAT_EQ(*service.GetCarryCapacity(id), 96.0f);
+    const float free = *service.GetMovementSpeed(id);
+
+    service.SetCarriedWeight(id, 48.0f);   // half: still free
+    EXPECT_FLOAT_EQ(service.GetWeightPenalty(id), 0.0f);
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), free);
+
+    service.SetCarriedWeight(id, 72.0f);   // three quarters: an eighth slower
+    EXPECT_FLOAT_EQ(service.GetWeightPenalty(id), 0.125f);
+    EXPECT_FLOAT_EQ(*service.GetMovementSpeed(id), free * 0.875f);
+
+    service.SetCarriedWeight(id, 500.0f);  // far past it: a quarter at most
+    EXPECT_FLOAT_EQ(service.GetWeightPenalty(id), 0.25f);
+    EXPECT_FALSE(service.GetCarryCapacity(999).has_value());
+}

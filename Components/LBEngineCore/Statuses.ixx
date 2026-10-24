@@ -66,6 +66,28 @@ export namespace LB::Engine {
             return multiplier;
         }
 
+        /// <summary>
+        /// To hit from the statuses held (a blessing), and what they leave of a blow's damage
+        /// </summary>
+        [[nodiscard]] std::int32_t AttackBonus() const noexcept {
+            std::int32_t bonus = 0;
+            for (const auto& status : active_) bonus += status.definition->attackBonus;
+            return bonus;
+        }
+        [[nodiscard]] float DamageTakenMultiplier() const noexcept {
+            float multiplier = 1.0f;
+            for (const auto& status : active_) multiplier *= status.definition->damageTakenMultiplier;
+            return multiplier;
+        }
+
+        /// <summary>
+        /// A blow's damage as the statuses leave it (at least 1 of a blow that did any)
+        /// </summary>
+        [[nodiscard]] std::int32_t Taken(std::int32_t damage) const noexcept {
+            if (damage <= 0) return damage;
+            return std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(damage) * DamageTakenMultiplier())));
+        }
+
         [[nodiscard]] bool PreventsActions() const noexcept {
             return std::ranges::any_of(active_, [](const ActiveStatus& status) { return status.definition->preventsActions; });
         }

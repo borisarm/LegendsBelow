@@ -211,6 +211,8 @@
   },
   {
     "id": "spell_frost_ice_wall_l2",
+    "effect": "IceWall",
+    "durationSeconds": 8.0,
     "name": "Ice Wall",
     "school": "Frost",
     "level": 2,
@@ -278,6 +280,8 @@
   },
   {
     "id": "spell_utility_arcane_sight_l1",
+    "effect": "RevealSecrets",
+    "radius": 14.0,
     "name": "Arcane Sight",
     "school": "Utility",
     "level": 1,
@@ -292,6 +296,7 @@
   },
   {
     "id": "spell_utility_mage_hand_l1",
+    "effect": "RemoteInteract",
     "name": "Mage Hand",
     "school": "Utility",
     "level": 1,
@@ -306,6 +311,8 @@
   },
   {
     "id": "spell_utility_blink_l2",
+    "effect": "Blink",
+    "blinkTiles": 5.0,
     "name": "Blink",
     "school": "Utility",
     "level": 2,
@@ -334,6 +341,9 @@
   },
   {
     "id": "spell_utility_greater_blink_l3",
+    "effect": "Blink",
+    "blinkTiles": 9.0,
+    "evadeSeconds": 1.0,
     "name": "Greater Blink",
     "school": "Utility",
     "level": 3,
@@ -413,6 +423,9 @@
   },
   {
     "id": "spell_holy_bless_l2",
+    "effect": "Buff",
+    "appliedStatusIds": ["status_blessed"],
+    "radius": 6.0,
     "name": "Bless",
     "school": "Holy",
     "level": 2,
@@ -443,6 +456,9 @@
   },
   {
     "id": "spell_holy_purify_l3",
+    "effect": "Cleanse",
+    "cleansesStatuses": 3,
+    "radius": 6.0,
     "name": "Purify",
     "school": "Holy",
     "level": 3,
@@ -456,6 +472,8 @@
   },
   {
     "id": "spell_holy_sanctuary_l4",
+    "effect": "Buff",
+    "appliedStatusIds": ["status_sanctuary"],
     "name": "Sanctuary",
     "school": "Holy",
     "level": 4,

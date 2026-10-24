@@ -486,6 +486,12 @@ namespace LB::Engine {
         }
         else {
             // A cracked wall, or a puzzle's candles, nearby
+            for (const auto& lever : session_->features.Levers()) {
+                if (!lever.pulled && Distance(lever.position, session_->playerPosition) <= LeverReach) hud.hint = "F: pull the lever";
+            }
+            for (const auto& stone : session_->features.Waystones()) {
+                if (Distance(stone.position, session_->playerPosition) <= WaystoneReach && session_->features.WaystonesAwake()) hud.hint = "F: travel by the waystone";
+            }
             for (const auto& gate : session_->features.Gates()) {
                 if (!gate.open && gate.kind == GateKind::Secret && Distance(gate.center, session_->playerPosition) <= GateReach + 1.0f) hud.hint = "A cracked wall: strike it";
             }

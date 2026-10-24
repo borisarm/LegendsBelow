@@ -1,5 +1,6 @@
 // FeatureTests.cpp - LB.Engine tests: cells closed off in the world, a treasure room behind a
-// locked gate (and its key), a secret room behind a cracked wall, candle puzzles, greater chests
+// locked gate (and its key) or a lever, a secret room behind a cracked wall, candle puzzles, greater
+// chests, and waystones
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -258,4 +259,107 @@ TEST(FeatureTests, OpenedGatesAndCandles_KeptInSaves) {
     EXPECT_FALSE(engine.GetWorld().IsBlocked(gate.cellX, gate.cellY));
     const auto& candles = engine.GetFeatures().Puzzles().front().candles;
     for (std::size_t c = 0; c < candles.size(); ++c) EXPECT_EQ(candles[c].lit, lit[c]) << c;
+}
+
+// A lever gate (design-dungeon-and-world.md 6.3): bars no key opens; a lever in the room on the
+// way does, once, and says so on the run's bus
+TEST(FeatureTests, ALever_OpensItsGate) {
+    const auto seed = FindFloor(5, [](const GameEngine& engine) { return GateOf(engine, GateKind::Lever) != nullptr; });
+    ASSERT_NE(seed, 0u);
+    GameEngine engine;
+    Open(engine, seed, 5);
+    const auto gate = *GateOf(engine, GateKind::Lever);
+    ASSERT_EQ(engine.GetFeatures().Levers().size(), 1u);
+    const auto lever = engine.GetFeatures().Levers().front();
+    EXPECT_EQ(&engine.GetFeatures().Gates()[lever.gate], GateOf(engine, GateKind::Lever));
+    EXPECT_TRUE(engine.GetWorld().Layout().rooms[static_cast<std::size_t>(lever.room)].onCriticalPath);   // on the way: no soft-lock
+    EXPECT_EQ(engine.GetFeatures().KeyRoom(), -1);   // no key on this floor
+    EXPECT_TRUE(engine.GetWorld().IsBlocked(gate.cellX, gate.cellY));
+    std::vector<FeatureKind> activated;
+    engine.GetEvents().Subscribe<FeatureActivatedEvent>([&](const FeatureActivatedEvent& event) { activated.push_back(event.kind); });
+
+    // A key does not open it
+    engine.GiveItem(GameEngine::KeyItem);
+    engine.EnterFloorPosition(Outside(engine, gate));
+    RunSteps(engine, 5);
+    EXPECT_TRUE(engine.GetWorld().IsBlocked(gate.cellX, gate.cellY));
+    EXPECT_EQ(engine.CountItem(GameEngine::KeyItem), 1);
+
+    // Interact by the lever does
+    engine.EnterFloorPosition({ lever.position.x + 0.5f, lever.position.y + 0.5f });
+    RunSteps(engine, 2);
+    TapKey(engine, Keys::FromChar('F'));
+    RunSteps(engine, 2);
+    EXPECT_TRUE(engine.GetFeatures().Levers().front().pulled);
+    EXPECT_FALSE(engine.GetWorld().IsBlocked(gate.cellX, gate.cellY));
+    EXPECT_EQ(activated, std::vector<FeatureKind>{ FeatureKind::Lever });
+}
+
+// Waystones (design-dungeon-and-world.md 6.3, teleporters): the far one awakens when reached; then
+// either carries the hero to the other, unless enemies are awake nearby; kept in saves
+TEST(FeatureTests, Waystones_CarryTheHeroBackAndForth) {
+    TempSaveDir dir;
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(),
+        .randomSeed = CombatSeed, .dungeon = true }));
+    engine.EnterFloor(2);
+    engine.Tick(OneSixtieth);
+    const auto stones = engine.GetFeatures().Waystones();
+    ASSERT_EQ(stones.size(), 2u);
+    const auto& layout = engine.GetWorld().Layout();
+    EXPECT_EQ(stones[0].room, layout.entranceRoom);
+    EXPECT_TRUE(std::ranges::find(layout.rooms[static_cast<std::size_t>(layout.exitRoom)].connections, stones[1].room)
+                != layout.rooms[static_cast<std::size_t>(layout.exitRoom)].connections.end());   // the room before the way down
+
+    // Asleep: no travel yet
+    engine.EnterFloorPosition({ stones[0].position.x + 0.3f, stones[0].position.y });
+    RunSteps(engine, 2);
+    EXPECT_FALSE(engine.TravelByWaystone(0));
+
+    // Reached: it awakens, and carries the hero back to the entrance
+    engine.EnterFloorPosition(stones[1].position);
+    RunSteps(engine, 2);
+    ASSERT_TRUE(engine.GetFeatures().WaystonesAwake());
+    const auto awake = std::ranges::any_of(engine.GetEncounter().GetEnemies(), [](const Enemy& e) { return e.state == EnemyState::Chasing || e.state == EnemyState::Attacking; });
+    if (awake) {
+        EXPECT_FALSE(engine.TravelByWaystone(1));   // not with enemies awake nearby
+        for (const auto& enemy : engine.GetEncounter().GetEnemies()) engine.DefeatEnemy(enemy.id);
+        RunSteps(engine, 2);
+    }
+    ASSERT_TRUE(engine.TravelByWaystone(1));
+    EXPECT_LT(Encounter::Distance(engine.GetPlayerPosition(), stones[0].position), 1.5f);
+    EXPECT_EQ(engine.GetWorld().RoomAt(engine.GetPlayerPosition()), layout.entranceRoom);
+
+    // Kept in a save
+    ASSERT_TRUE(engine.SaveGame(GameEngine::SaveSlots[0]));
+    GameEngine loaded;
+    ASSERT_TRUE(loaded.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(),
+        .randomSeed = CombatSeed, .dungeon = true }));
+    ASSERT_TRUE(loaded.LoadGame(GameEngine::SaveSlots[0]));
+    EXPECT_TRUE(loaded.GetFeatures().WaystonesAwake());
+    EXPECT_FALSE(loaded.GetFeatures().Waystones().empty());
+}
+
+// Mage Hand pulls a lever from afar
+TEST(FeatureTests, MageHand_PullsALeverFromAfar) {
+    const auto seed = FindFloor(5, [](const GameEngine& engine) { return GateOf(engine, GateKind::Lever) != nullptr; });
+    ASSERT_NE(seed, 0u);
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = seed, .dungeon = true,
+        .playerClass = LB::Character::CharacterClass::Mage }));
+    engine.EnterFloor(5);
+    engine.Tick(OneSixtieth);
+    ASSERT_EQ(engine.GetFeatures().Levers().size(), 1u);
+    const auto lever = engine.GetFeatures().Levers().front();
+    const auto room = engine.GetWorld().RoomCenter(lever.room);
+    engine.EnterFloorPosition(room);   // a few tiles off, in sight
+    RunSteps(engine, 2);
+    for (const auto& enemy : engine.GetEncounter().GetEnemies()) engine.DefeatEnemy(enemy.id);
+    RunSteps(engine, 2);
+    ASSERT_GT(Encounter::Distance(engine.GetPlayerPosition(), lever.position), GameEngine::LeverReach);
+    ASSERT_TRUE(engine.SetSpell(0, "spell_utility_mage_hand_l1"));
+    TapKey(engine, Keys::FromChar('1'));
+    RunSteps(engine, 20);
+    EXPECT_TRUE(engine.GetFeatures().Levers().front().pulled);
+    EXPECT_TRUE(engine.GetFeatures().Gates()[lever.gate].open);
 }

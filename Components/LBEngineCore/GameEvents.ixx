@@ -37,6 +37,22 @@ export namespace LB::Engine {
     };
 
     /// <summary>
+    /// What a dungeon's interactive element is (design-dungeon-and-world.md 6.3)
+    /// </summary>
+    enum class FeatureKind : std::uint8_t {
+        Lever,       // pulled: its gate opens
+        Waystone     // awakened, or travelled by
+    };
+
+    /// <summary>
+    /// An interactive element was activated (design-dungeon-and-world.md 6.3: OnActivated)
+    /// </summary>
+    struct FeatureActivatedEvent {
+        FeatureKind kind{FeatureKind::Lever};
+        WorldPoint at{};
+    };
+
+    /// <summary>
     /// The final boss fell (design-dungeon-and-world.md 7.4): the run is won (the victory, the
     /// legacy, the codex's last page react)
     /// </summary>

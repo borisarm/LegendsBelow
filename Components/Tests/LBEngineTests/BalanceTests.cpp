@@ -451,7 +451,7 @@ namespace {
 
     // Every class clears the first tier, its boss included, in time. The bot charges in and sets up
     // no sneak attacks, so it dies more than a player would: the cap catches a class that got much
-    // harder (at the last pass: Warrior 0, Mage 2, Rogue 8, Cleric 4 deaths, level 5; 5 to 13
+    // harder (at the last pass: Warrior 0, Mage 1, Rogue 10, Cleric 4 deaths, level 5; 5 to 13
     // minutes; over six seeds the Warrior, Mage, and Cleric died 0 to 15 times. On seed 2 the
     // Cleric needs more than the 20 minutes at the Necromancer: a borderline run any small change
     // tips either way)
@@ -492,7 +492,7 @@ TEST(BalanceTests, Cleric_ClearsTheFirstTier) {
 namespace {
     constexpr std::int32_t SecondRestingPlace = 2 * GameEngine::BossFloorInterval + 1;
     constexpr float SecondBudgetMinutes = 30.0f;
-    // At the last pass: Warrior 0, Mage 6, Rogue 8, Cleric 4 deaths, level 10, 11 to 25 minutes;
+    // At the last pass: Warrior 0, Mage 3, Rogue 10, Cleric 4 deaths, level 10, 10 to 24 minutes;
     // over six seeds the Warrior, Mage, and Cleric died 0 to 22 times, the Rogue 5 to 26
     constexpr std::int32_t MostSecondTierDeaths = 30;
     constexpr std::int32_t MostRogueSecondTierDeaths = 40;
@@ -526,8 +526,8 @@ TEST(BalanceTests, Cleric_ClearsTheSecondTier) {
 namespace {
     constexpr std::int32_t ThirdRestingPlace = 3 * GameEngine::BossFloorInterval + 1;
     constexpr float ThirdBudgetMinutes = 45.0f;
-    // At the last pass: Warrior 0, Mage 8, Rogue 8, Cleric 4 deaths, level 14 (the third item
-    // tier's levels), 19 to 38 minutes; over six seeds 0 to 29 deaths
+    // At the last pass: Warrior 0, Mage 4, Rogue 10, Cleric 4 deaths, level 14 (the third item
+    // tier's levels), 18 to 38 minutes; over six seeds 0 to 29 deaths
     constexpr std::int32_t MostThirdTierDeaths = 45;
 }
 
@@ -561,12 +561,12 @@ TEST(BalanceTests, Cleric_ClearsTheThirdTier) {
 namespace {
     constexpr std::int32_t FourthRestingPlace = 4 * GameEngine::BossFloorInterval + 1;
     constexpr float FourthBudgetMinutes = 60.0f;
-    // At the last pass: Warrior 0, Mage 8, Rogue 8, Cleric 4 deaths, level 19 (the cap is 20),
-    // 25 to 50 minutes; over six seeds 0 to 35 deaths, 22 to 59 minutes
+    // At the last pass: Warrior 0, Mage 4, Rogue 10, Cleric 4 deaths, level 19 (the cap is 20),
+    // 23 to 51 minutes; over six seeds 0 to 35 deaths, 22 to 59 minutes
     constexpr std::int32_t MostFourthTierDeaths = 60;
     // From the fourth resting place to the victory. The hall's boss starts over whenever the hero
-    // falls, so it must be won in one life. At the last pass: Warrior 1.1, Mage 1.0, Rogue 1.0,
-    // Cleric 1.4 minutes, without a death; over six seeds (LB_BALANCE_SEED 1 to 5 and this one)
+    // falls, so it must be won in one life. At the last pass (450 hit points): Warrior 1.3, Mage
+    // 1.2, Rogue 1.4, Cleric 2.0 minutes, without a death; over six seeds (LB_BALANCE_SEED 1 to 5 and this one)
     // every class won without a death in 0.9 to 2.0 minutes. Before the bot sold or dropped its
     // spares, its bag was full by the third tier and it met the Archivist in that tier's gear: the
     // Rogue's fight swung from 0 deaths to 77 in 58 minutes.

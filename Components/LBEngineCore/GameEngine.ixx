@@ -469,7 +469,8 @@ export namespace LB::Engine {
             const std::int32_t modifier = weapon.attributeScale == "DEX" ? attributes.GetDexterityModifier()
                                         : weapon.attributeScale == "STR" ? attributes.GetStrengthModifier() : 0;
             const auto bonuses = EquippedBonuses();
-            attack.attackBonus = session_->characterService.GetAttackBonus(*session_->playerId, weapon.category).value_or(0) + bonuses.attackBonus;
+            attack.attackBonus = session_->characterService.GetAttackBonus(*session_->playerId, weapon.category).value_or(0) + bonuses.attackBonus
+                               + session_->playerStatuses.AttackBonus();
             attack.damageDice = weapon.damageDice;
             attack.damageBonus = weapon.damageBonus + static_cast<std::int32_t>(std::lround(static_cast<float>(modifier) * weapon.scaleFactor)) + bonuses.damage;
             attack.damageType = weapon.damageTypes.empty() ? LB::Combat::DamageType::Slashing : weapon.damageTypes.front();
@@ -548,6 +549,14 @@ export namespace LB::Engine {
         /// The armour worn (every slot but the main hand), by slot
         /// </summary>
         [[nodiscard]] std::vector<std::pair<LB::Combat::EquipmentSlot, ItemRef>> WornItems() const;
+
+        /// <summary>
+        /// The hero's load (design-loot-and-progression.md 5.2): the weight of what is worn, the
+        /// weapon in hand, and everything in the bag; past half the carry capacity it slows them
+        /// (CharacterService::GetWeightPenalty)
+        /// </summary>
+        [[nodiscard]] float CarriedWeight() const;
+        [[nodiscard]] float WeightOf(ItemRef item) const;
 
         /// <summary>
         /// Ammunition of a type in the bag (arrows for "Arrow")
@@ -741,6 +750,13 @@ export namespace LB::Engine {
         /// Touch a puzzle candle by index (as Interact beside it does; tools and tests)
         /// </summary>
         void TouchCandle(std::size_t puzzle, std::size_t candle);
+
+        /// <summary>
+        /// Pull a lever (its gate opens), or travel from one waystone to the other (awake, and no
+        /// enemy awake nearby; false otherwise): what Interact does beside them (tools and tests)
+        /// </summary>
+        void PullLever(std::size_t index);
+        bool TravelByWaystone(std::size_t from);
         [[nodiscard]] const FloorTheme& GetTheme() const noexcept { return session_->dungeonMode ? ThemeForDepth(session_->depth) : FloorThemes[0]; }
         [[nodiscard]] const CharacterScreen& GetTradeScreen() const noexcept { return session_->trade; }
 
@@ -789,6 +805,27 @@ export namespace LB::Engine {
         /// without spells
         /// </summary>
         [[nodiscard]] std::vector<const Content::SpellDefinition*> GetSpellBar() const;
+
+        /// <summary>
+        /// The spellbook (design-spells-system.md): every spell of the hero's class the game can
+        /// cast, by the level they open at; any of them can go on the bar's slots (CycleSpell, the
+        /// character screen's Spells rows), the class's own bar to begin with. The bar is saved.
+        /// </summary>
+        [[nodiscard]] std::vector<const Content::SpellDefinition*> Spellbook() const;
+        bool CycleSpell(std::size_t slot);
+        bool SetSpell(std::size_t slot, std::string_view key);
+
+        /// <summary>
+        /// Cells an Ice Wall holds shut (for how long), and how long Arcane Sight still shows the
+        /// floor's secrets and traps
+        /// </summary>
+        struct IceWall {
+            std::vector<std::pair<std::int32_t, std::int32_t>> cells;
+            float secondsLeft{0.0f};
+            float yaw{0.0f};
+        };
+        [[nodiscard]] const std::vector<IceWall>& GetIceWalls() const noexcept { return session_->iceWalls; }
+        [[nodiscard]] float GetRevealSeconds() const noexcept { return session_->revealSeconds; }
 
         /// <summary>
         /// Why the spell in a slot cannot be cast now ("level 5", "mana", "cooldown", ...), or
@@ -1093,6 +1130,8 @@ export namespace LB::Engine {
         void ReleaseCast();
         void CancelCast();
         void InterruptCast(std::int32_t damage);
+        void CastUtility(const Content::SpellDefinition& spell);
+        void UpdateSpellWorks(float elapsedSeconds);
         void ChooseMutators();
         [[nodiscard]] static std::string MutatorNames(const std::vector<const Content::MutatorDefinition*>& mutators, std::string_view separator);
         void UpdatePlayerStatuses(float elapsedSeconds);
@@ -1359,6 +1398,9 @@ export namespace LB::Engine {
             PlayerOrder order;
             std::optional<std::uint32_t> picked;     // under the mouse, or cycled to while paused
             std::array<float, SpellSlots> spellCooldowns{};
+            std::vector<std::string> spellBar;       // the bar's spell keys (empty: the class's own)
+            std::vector<IceWall> iceWalls;
+            float revealSeconds{0.0f};               // Arcane Sight
             float manaCarry{0.0f};                   // regenerated mana not yet a whole point
             float evadeSeconds{0.0f};                // no attack touches the player (an evasion)
             float sneakWindowSeconds{0.0f};          // blows are sneak attacks (after a shadowstep)

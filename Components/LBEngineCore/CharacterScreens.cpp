@@ -69,6 +69,11 @@ namespace LB::Engine {
         info(std::format("Experience {} / {}", status.currentExperience, status.experienceToNextLevel),
              usesMana ? std::format("HP {}/{}   MP {}/{}   Gold {}", status.currentHitPoints, status.maxHitPoints, status.currentManaPoints, status.maxManaPoints, session_->gold)
                       : std::format("HP {}/{}   Gold {}", status.currentHitPoints, status.maxHitPoints, session_->gold));
+        // The load (design-loot-and-progression.md 5.2): past half the capacity it slows the hero
+        const auto capacity = session_->characterService.GetCarryCapacity(*session_->playerId).value_or(0.0f);
+        const auto load = CarriedWeight();
+        const auto slowed = session_->characterService.GetWeightPenalty(*session_->playerId);
+        info(std::format("Load {:.0f} / {:.0f}", load, capacity), slowed > 0.0f ? std::format("slowed {:.0f}%", slowed * 100.0f) : std::string("unhindered"));
 
         // Attributes: with points to spend, each one below its cap can be raised
         const auto points = character.GetUnspentAttributePoints();
@@ -217,6 +222,21 @@ namespace LB::Engine {
             }
             rows.push_back(std::move(row));
         }
+        // The spell bar, last (below the gear): each slot changed from the spellbook (Enter: the next spell)
+        if (const auto book = Spellbook(); book.size() > 1) {
+            heading(std::format("Spells - {} known (Enter: change)", book.size()));
+            const auto spells = GetSpellBar();
+            for (std::size_t slot = 0; slot < SpellSlots && slot <= spells.size(); ++slot) {
+                ScreenRow row{ slot < spells.size() ? std::format("{}  {}", slot + 1, spells[slot]->name) : std::format("{}  (empty)", slot + 1),
+                               slot < spells.size() ? (character.GetLevel() < spells[slot]->requiredLevel ? std::format("level {}", spells[slot]->requiredLevel)
+                                                                                                     : std::format("{} mana", spells[slot]->manaCost))
+                                                 : std::string{} };
+                row.action = ScreenAction::CycleSpell;
+                row.index = slot;
+                rows.push_back(std::move(row));
+            }
+        }
+
         return rows;
     }
 
@@ -297,6 +317,7 @@ namespace LB::Engine {
         case ScreenAction::Sell:
         case ScreenAction::Retrain:
         case ScreenAction::ForgetPath: break;
+        case ScreenAction::CycleSpell: CycleSpell(row->index); break;
         case ScreenAction::None: break;
         }
         session_->characterScreen.SetRows(BuildScreenRows());
