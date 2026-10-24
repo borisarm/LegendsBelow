@@ -170,6 +170,7 @@ namespace LB::Systems::Rendering {
                 backend->renderer.AddImage(image);
             }
             gpu_ = std::move(backend);
+            textureCache_.SetCompress(true);   // model textures are sampled from now on
         }
         catch (const std::exception&) {
             gpu_.reset();
@@ -187,6 +188,7 @@ namespace LB::Systems::Rendering {
         animations_.clear();
         animationFiles_.clear();
         textureCache_.Clear();
+        textureCache_.SetCompress(false);
         prefetched_.clear();
         fonts_.clear();
         fontPaths_.clear();
@@ -432,6 +434,20 @@ namespace LB::Systems::Rendering {
         }   // the threads join here
         for (std::size_t i = 0; i < work.size(); ++i) prefetched_.emplace(std::move(work[i].second), std::move(results[i]));
         return work.size();
+    }
+
+    TextureMemory RenderingSystem::GetModelTextureMemory() const {
+        TextureMemory memory;
+        std::unordered_set<const ModelTexture*> seen;
+        for (const auto& model : models_) {
+            for (const auto& texture : model->textures) {
+                if (!texture || !seen.insert(texture.get()).second) continue;
+                ++memory.textures;
+                if (texture->encoding != ModelTexture::Encoding::Rgba8) ++memory.compressed;
+                for (const auto& level : texture->mips) memory.bytes += level.pixels.size();
+            }
+        }
+        return memory;
     }
 
     ImageLoadResult RenderingSystem::LoadImage(const std::filesystem::path& path) {

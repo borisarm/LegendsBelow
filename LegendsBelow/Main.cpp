@@ -231,6 +231,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
             std::FILE* log = nullptr;
             if (_wfopen_s(&log, logPath, L"w") == 0 && log) {
                 for (const auto& timing : g_engine->GetStartupTimings()) std::fprintf(log, "%s %.3f\n", timing.phase.c_str(), timing.seconds);
+                const auto textures = g_engine->GetRendering().GetModelTextureMemory();
+                std::fprintf(log, "textures %zu (%zu compressed) %.1f MiB\n", textures.textures, textures.compressed, static_cast<double>(textures.bytes) / (1024.0 * 1024.0));
                 std::fclose(log);
             }
         }

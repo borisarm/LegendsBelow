@@ -39,16 +39,25 @@ export namespace LB::Systems::Rendering {
 
     /// <summary>
     /// An image decoded to 8-bit RGBA (sRGB color), with its full mip chain: level 0 is the
-    /// image, each next level halves the size (box filtered in linear space) down to 1x1
+    /// image, each next level halves the size (box filtered in linear space) down to 1x1. Model
+    /// textures drawn on a GPU are block compressed (CompressTexture): BC1 when opaque, BC3 with alpha.
     /// </summary>
     struct ModelTexture {
+        /// <summary>How the levels' bytes are laid out</summary>
+        enum class Encoding : std::uint8_t {
+            Rgba8,   // 4 bytes a pixel
+            Bc1,     // 8 bytes a 4x4 block (opaque)
+            Bc3,     // 16 bytes a 4x4 block (with alpha)
+        };
+
         struct MipLevel {
             std::uint32_t width{0};
             std::uint32_t height{0};
-            std::vector<std::uint8_t> pixels;   // width * height * 4 bytes, rows top to bottom
+            std::vector<std::uint8_t> pixels;   // Rgba8: width * height * 4 bytes, rows top to bottom; BC: rows of 4x4 blocks
         };
 
         std::vector<MipLevel> mips;
+        Encoding encoding{Encoding::Rgba8};
 
         [[nodiscard]] std::uint32_t Width() const noexcept { return mips.empty() ? 0 : mips.front().width; }
         [[nodiscard]] std::uint32_t Height() const noexcept { return mips.empty() ? 0 : mips.front().height; }

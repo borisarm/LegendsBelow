@@ -39,7 +39,13 @@ namespace LB::Systems::Rendering::Detail {
             textures_.clear();
         }
 
+        // Whether images decoded from now on are block compressed (with a GPU device: headless runs
+        // skip the work, since nothing samples them)
+        void SetCompress(bool compress) noexcept { compress_ = compress; }
+        [[nodiscard]] bool Compress() const noexcept { return compress_; }
+
     private:
+        std::atomic<bool> compress_{false};
         mutable std::mutex mutex_;
         std::unordered_map<std::uint64_t, std::shared_ptr<const ModelTexture>> textures_;
     };
@@ -54,6 +60,13 @@ namespace LB::Systems::Rendering::Detail {
 }
 
 export namespace LB::Systems::Rendering {
+    /// <summary>
+    /// Block compress a texture's levels in place (stb_dxt, high quality): BC1 when every pixel is
+    /// opaque, BC3 otherwise. A sixth (BC1) or a quarter (BC3) of the memory and bandwidth. Returns
+    /// false, leaving it as it was, when it is compressed already or not a multiple of 4 wide and tall.
+    /// </summary>
+    bool CompressTexture(ModelTexture& texture);
+
     using LB::String;
     using LB::Position;
 
@@ -275,6 +288,15 @@ export namespace LB::Systems::Rendering {
     /// <summary>
     /// Render statistics
     /// </summary>
+    /// <summary>
+    /// What the loaded models' textures take (each shared image once)
+    /// </summary>
+    struct TextureMemory {
+        std::size_t textures{0};
+        std::size_t compressed{0};   // block compressed (BC1 or BC3)
+        std::size_t bytes{0};        // every level
+    };
+
     struct RenderStats {
         std::uint32_t drawCalls{0};
         std::uint32_t meshesRendered{0};
@@ -478,6 +500,11 @@ export namespace LB::Systems::Rendering {
         /// already are skipped. Returns how many were read.
         /// </summary>
         std::size_t PrefetchModels(std::span<const std::filesystem::path> paths);
+
+        /// <summary>
+        /// What the loaded models' textures take, each shared image counted once
+        /// </summary>
+        [[nodiscard]] TextureMemory GetModelTextureMemory() const;
 
         /// <summary>
         /// A loaded model by handle, or null

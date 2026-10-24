@@ -189,7 +189,7 @@ namespace LB::Systems::Rendering::Detail
                     throw std::runtime_error("too many distinct textures");
 
                 Pending upload{ texture };
-                const auto desc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, texture->Width(), texture->Height(), 1,
+                const auto desc = CD3DX12_RESOURCE_DESC::Tex2D(TextureFormat(*texture), texture->Width(), texture->Height(), 1,
                     static_cast<UINT16>(texture->mips.size()));
                 const CD3DX12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE_DEFAULT);
                 ThrowIfFailed(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
@@ -211,8 +211,9 @@ namespace LB::Systems::Rendering::Detail
                         const auto& footprint = upload.footprints[mip];
                         for (UINT row = 0; row < rows[mip]; ++row)
                         {
+                            // A row of pixels, or of 4x4 blocks: the level's bytes are packed rows of rowBytes
                             std::memcpy(mapped + footprint.Offset + UINT64(row) * footprint.Footprint.RowPitch,
-                                        level.pixels.data() + std::size_t{ row } * level.width * 4, static_cast<std::size_t>(rowBytes[mip]));
+                                        level.pixels.data() + std::size_t{ row } * rowBytes[mip], static_cast<std::size_t>(rowBytes[mip]));
                         }
                     }
                 });
@@ -242,7 +243,7 @@ namespace LB::Systems::Rendering::Detail
             {
                 const std::size_t slot = m_textures.size();
                 D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
-                view.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+                view.Format = TextureFormat(*upload.texture);
                 view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
                 view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
                 view.Texture2D.MipLevels = static_cast<UINT>(upload.texture->mips.size());
@@ -252,6 +253,16 @@ namespace LB::Systems::Rendering::Detail
         }
 
     private:
+        static DXGI_FORMAT TextureFormat(const ModelTexture& texture) noexcept
+        {
+            switch (texture.encoding)
+            {
+            case ModelTexture::Encoding::Bc1: return DXGI_FORMAT_BC1_UNORM_SRGB;
+            case ModelTexture::Encoding::Bc3: return DXGI_FORMAT_BC3_UNORM_SRGB;
+            default: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+            }
+        }
+
         // Unmaps a mapped upload buffer when it goes out of scope
         struct MappedRange
         {

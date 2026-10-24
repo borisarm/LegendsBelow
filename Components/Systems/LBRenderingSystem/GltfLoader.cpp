@@ -22,12 +22,15 @@ module;
 #define STBI_ONLY_JPEG
 #define STBI_NO_STDIO
 #include <stb_image.h>
+#define STB_DXT_IMPLEMENTATION
+#include <stb_dxt.h>
 #pragma warning(pop)
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -196,6 +199,7 @@ namespace LB::Systems::Rendering::Detail {
             top.pixels.assign(pixels.get(), pixels.get() + std::size_t{ top.width } * top.height * 4);
             texture->mips.push_back(std::move(top));
             BuildMipChain(*texture);
+            if (cache.Compress()) CompressTexture(*texture);
 
             return cache.Insert(key, std::move(texture));   // the first kept, if another thread decoded it too
         }
@@ -620,3 +624,38 @@ namespace LB::Systems::Rendering::Detail {
     }
 
 } // namespace LB::Systems::Rendering::Detail
+
+namespace LB::Systems::Rendering {
+    bool CompressTexture(ModelTexture& texture) {
+        if (texture.encoding != ModelTexture::Encoding::Rgba8 || texture.mips.empty()) return false;
+        if (texture.Width() % 4 != 0 || texture.Height() % 4 != 0) return false;   // D3D12: BC level 0 is whole blocks
+
+        const auto& top = texture.mips.front().pixels;
+        bool opaque = true;
+        for (std::size_t i = 3; i < top.size() && opaque; i += 4) opaque = top[i] == 255;
+        const std::size_t blockBytes = opaque ? 8 : 16;
+
+        for (auto& level : texture.mips) {
+            // Levels smaller than a block are padded by repeating their edge pixels
+            const std::uint32_t blocksWide = (level.width + 3) / 4;
+            const std::uint32_t blocksTall = (level.height + 3) / 4;
+            std::vector<std::uint8_t> blocks(std::size_t{ blocksWide } * blocksTall * blockBytes);
+            std::array<std::uint8_t, 64> source{};
+            for (std::uint32_t by = 0; by < blocksTall; ++by) {
+                for (std::uint32_t bx = 0; bx < blocksWide; ++bx) {
+                    for (std::uint32_t y = 0; y < 4; ++y) {
+                        for (std::uint32_t x = 0; x < 4; ++x) {
+                            const std::uint32_t sx = std::min(bx * 4 + x, level.width - 1);
+                            const std::uint32_t sy = std::min(by * 4 + y, level.height - 1);
+                            std::memcpy(&source[(y * 4 + x) * 4], &level.pixels[(std::size_t{ sy } * level.width + sx) * 4], 4);
+                        }
+                    }
+                    stb_compress_dxt_block(&blocks[(std::size_t{ by } * blocksWide + bx) * blockBytes], source.data(), opaque ? 0 : 1, STB_DXT_HIGHQUAL);
+                }
+            }
+            level.pixels = std::move(blocks);
+        }
+        texture.encoding = opaque ? ModelTexture::Encoding::Bc1 : ModelTexture::Encoding::Bc3;
+        return true;
+    }
+}

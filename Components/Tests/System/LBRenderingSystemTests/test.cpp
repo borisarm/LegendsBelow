@@ -1605,3 +1605,54 @@ TEST(ModelLoadingTests, Prefetched_LoadAsReadOneByOne) {
     EXPECT_EQ(broken.PrefetchModels(std::vector<std::filesystem::path>{ dir / "does_not_exist.glb" }), 1u);
     EXPECT_FALSE(broken.LoadModel(dir / "does_not_exist.glb").Succeeded());
 }
+
+// Model textures are block compressed for the GPU: BC1 when opaque (8 bytes a 4x4 block), BC3
+// with alpha (16), every level, the small ones padded to a block
+TEST(ModelLoadingTests, CompressTexture_BlocksEveryLevel) {
+    ModelTexture opaque;
+    opaque.mips.push_back({ 8, 4, std::vector<std::uint8_t>(8 * 4 * 4, 255) });
+    opaque.mips.push_back({ 4, 2, std::vector<std::uint8_t>(4 * 2 * 4, 255) });
+    opaque.mips.push_back({ 2, 1, std::vector<std::uint8_t>(2 * 1 * 4, 255) });
+    opaque.mips.push_back({ 1, 1, std::vector<std::uint8_t>(4, 255) });
+    ASSERT_TRUE(CompressTexture(opaque));
+    EXPECT_EQ(opaque.encoding, ModelTexture::Encoding::Bc1);
+    EXPECT_EQ(opaque.mips[0].pixels.size(), 2u * 8u);
+    EXPECT_EQ(opaque.mips[1].pixels.size(), 8u);
+    EXPECT_EQ(opaque.mips[3].pixels.size(), 8u);
+    EXPECT_EQ(opaque.mips[0].width, 8u);   // the sizes stay the image's
+    EXPECT_FALSE(CompressTexture(opaque));   // once
+
+    ModelTexture faded;
+    faded.mips.push_back({ 4, 4, std::vector<std::uint8_t>(4 * 4 * 4, 255) });
+    faded.mips[0].pixels[3] = 128;
+    ASSERT_TRUE(CompressTexture(faded));
+    EXPECT_EQ(faded.encoding, ModelTexture::Encoding::Bc3);
+    EXPECT_EQ(faded.mips[0].pixels.size(), 16u);
+
+    ModelTexture odd;   // not whole blocks: kept as it is
+    odd.mips.push_back({ 6, 4, std::vector<std::uint8_t>(6 * 4 * 4, 255) });
+    EXPECT_FALSE(CompressTexture(odd));
+    EXPECT_EQ(odd.encoding, ModelTexture::Encoding::Rgba8);
+
+    // A flat color stays that color: the block's two endpoints are it (RGB 565)
+    ModelTexture red;
+    red.mips.push_back({ 4, 4, {} });
+    for (int i = 0; i < 16; ++i) red.mips[0].pixels.insert(red.mips[0].pixels.end(), { 255, 0, 0, 255 });
+    ASSERT_TRUE(CompressTexture(red));
+    const auto& block = red.mips[0].pixels;
+    const auto color0 = static_cast<std::uint16_t>(block[0] | (block[1] << 8));
+    EXPECT_EQ(color0 >> 11, 31);         // red full
+    EXPECT_EQ((color0 >> 5) & 63, 0);    // no green
+    EXPECT_EQ(color0 & 31, 0);           // no blue
+}
+
+// Headless, nothing samples the textures: they stay RGBA (no compression work in tests and tools)
+TEST(ModelLoadingTests, Headless_KeepsTexturesUncompressed) {
+    const auto dir = ModelsDirectory();
+    ASSERT_FALSE(dir.empty()) << "Assets/Models not found";
+    RenderingSystem system;
+    const auto result = system.LoadModel(dir / "barrel_large.gltf");
+    ASSERT_TRUE(result.Succeeded()) << result.error;
+    ASSERT_FALSE(system.GetModel(result.id)->textures.empty());
+    EXPECT_EQ(system.GetModel(result.id)->textures[0]->encoding, ModelTexture::Encoding::Rgba8);
+}
