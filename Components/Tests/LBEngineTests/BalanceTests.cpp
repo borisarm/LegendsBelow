@@ -302,7 +302,17 @@ namespace {
                     const auto* found = engine_.GetContent()->FindWeapon(base.id);
                     const auto* wielded = engine_.GetPlayerWeapon();
                     if (!found || !wielded || found->IsRanged() != wielded->IsRanged()) continue;
-                    if (engine_.PriceOf(item) > engine_.PriceOf(engine_.GetPlayerWeaponItem()) && engine_.EquipItemRef(item) && !found->IsRanged()) melee_ = found->key;
+                    // Tried in hand: kept when it does more damage (the class's skill with it counts),
+                    // the old one back otherwise
+                    const auto before = engine_.GetPlayerWeaponItem();
+                    const float was = DamagePerSecond();
+                    if (!engine_.EquipItemRef(item)) continue;
+                    if (DamagePerSecond() > was) {
+                        if (!found->IsRanged()) melee_ = found->key;
+                    }
+                    else {
+                        engine_.EquipItemRef(before);
+                    }
                 }
                 else if (base.kind == ItemKind::Armor) {
                     const auto* piece = engine_.GetContent()->FindArmor(base.id);
@@ -317,6 +327,18 @@ namespace {
                 const auto spares = Spares();
                 if (spares.empty() || !engine_.DropItem(*std::ranges::min_element(spares, {}, [&](ItemRef item) { return engine_.PriceOf(item); }))) break;
             }
+        }
+
+        // What the weapon in hand does a second against an armour class 14 (the hit chance of the
+        // hero's attack bonus, the average blow)
+        float DamagePerSecond() const {
+            const auto* weapon = engine_.GetPlayerWeapon();
+            if (!weapon) return 0.0f;
+            const auto attack = engine_.GetPlayerAttackProfile();
+            const float hit = std::clamp((7.0f + static_cast<float>(attack.attackBonus)) / 20.0f, 0.05f, 0.95f);
+            const float blow = static_cast<float>(attack.damageDice.count) * (static_cast<float>(attack.damageDice.sides) + 1.0f) * 0.5f
+                             + static_cast<float>(attack.damageDice.bonus + attack.damageBonus);
+            return hit * blow / std::max(0.1f, weapon->attackTimeSeconds);
         }
 
         // The weapons and armour in the bag (the better ones are worn already), but for the melee
@@ -429,13 +451,15 @@ namespace {
 
     // Every class clears the first tier, its boss included, in time. The bot charges in and sets up
     // no sneak attacks, so it dies more than a player would: the cap catches a class that got much
-    // harder (at the last pass: Warrior 0, Mage 2, Rogue 29, Cleric 8 deaths, level 5 or 6; 5 to
-    // 15 minutes; over six seeds the Warrior, Mage, and Cleric died 0 to 13 times)
+    // harder (at the last pass: Warrior 0, Mage 2, Rogue 8, Cleric 4 deaths, level 5; 5 to 13
+    // minutes; over six seeds the Warrior, Mage, and Cleric died 0 to 15 times. On seed 2 the
+    // Cleric needs more than the 20 minutes at the Necromancer: a borderline run any small change
+    // tips either way)
     constexpr std::int32_t RestingPlace = GameEngine::BossFloorInterval + 1;
     constexpr float BudgetMinutes = 20.0f;
     constexpr std::int32_t MostDeaths = 15;
     // The bot's Rogue sets up no sneak attacks (the class's strength): it dies most, and varies most
-    // with the floors' layouts (9 to 29 deaths over six seeds)
+    // with the floors' layouts (5 to 26 deaths over six seeds)
     constexpr std::int32_t MostRogueDeaths = 35;
 }
 
@@ -468,8 +492,8 @@ TEST(BalanceTests, Cleric_ClearsTheFirstTier) {
 namespace {
     constexpr std::int32_t SecondRestingPlace = 2 * GameEngine::BossFloorInterval + 1;
     constexpr float SecondBudgetMinutes = 30.0f;
-    // At the last pass: Warrior 0, Mage 8, Rogue 30, Cleric 8 deaths, level 9 or 10, 10 to 23
-    // minutes; over six seeds the Warrior, Mage, and Cleric died 0 to 14 times, the Rogue 9 to 30
+    // At the last pass: Warrior 0, Mage 6, Rogue 8, Cleric 4 deaths, level 10, 11 to 25 minutes;
+    // over six seeds the Warrior, Mage, and Cleric died 0 to 22 times, the Rogue 5 to 26
     constexpr std::int32_t MostSecondTierDeaths = 30;
     constexpr std::int32_t MostRogueSecondTierDeaths = 40;
 }
@@ -502,8 +526,8 @@ TEST(BalanceTests, Cleric_ClearsTheSecondTier) {
 namespace {
     constexpr std::int32_t ThirdRestingPlace = 3 * GameEngine::BossFloorInterval + 1;
     constexpr float ThirdBudgetMinutes = 45.0f;
-    // At the last pass: Warrior 0, Mage 15, Rogue 33, Cleric 8 deaths, level 14 or 15 (the third
-    // item tier's levels), 18 to 34 minutes; over six seeds 0 to 33 deaths
+    // At the last pass: Warrior 0, Mage 8, Rogue 8, Cleric 4 deaths, level 14 (the third item
+    // tier's levels), 19 to 38 minutes; over six seeds 0 to 29 deaths
     constexpr std::int32_t MostThirdTierDeaths = 45;
 }
 
@@ -537,20 +561,20 @@ TEST(BalanceTests, Cleric_ClearsTheThirdTier) {
 namespace {
     constexpr std::int32_t FourthRestingPlace = 4 * GameEngine::BossFloorInterval + 1;
     constexpr float FourthBudgetMinutes = 60.0f;
-    // At the last pass: Warrior 0, Mage 32, Rogue 33, Cleric 8 deaths, level 19 or 20 (the cap),
-    // 24 to 45 minutes; over six seeds 0 to 33 deaths, 21 to 49 minutes
+    // At the last pass: Warrior 0, Mage 8, Rogue 8, Cleric 4 deaths, level 19 (the cap is 20),
+    // 25 to 50 minutes; over six seeds 0 to 35 deaths, 22 to 59 minutes
     constexpr std::int32_t MostFourthTierDeaths = 60;
     // From the fourth resting place to the victory. The hall's boss starts over whenever the hero
-    // falls, so it must be won in one life. At the last pass: Warrior 1.1, Mage 1.0, Rogue 1.5,
-    // Cleric 1.2 minutes, without a death; over six seeds (LB_BALANCE_SEED 1 to 5 and this one)
-    // every class won without a death in 1.0 to 2.1 minutes. Before the bot sold or dropped its
+    // falls, so it must be won in one life. At the last pass: Warrior 1.1, Mage 1.0, Rogue 1.0,
+    // Cleric 1.4 minutes, without a death; over six seeds (LB_BALANCE_SEED 1 to 5 and this one)
+    // every class won without a death in 0.9 to 2.0 minutes. Before the bot sold or dropped its
     // spares, its bag was full by the third tier and it met the Archivist in that tier's gear: the
     // Rogue's fight swung from 0 deaths to 77 in 58 minutes.
     constexpr float FinalFloorBudgetMinutes = 15.0f;
     constexpr std::int32_t MostFinalFloorDeaths = 15;
-    // From the victory to New Game+1's first resting place. At the last pass: no deaths; 2.9 to
-    // 4.4 minutes, the Cleric 10.4 (its blows land least on the veterans' armour); over six seeds
-    // no deaths, 2.7 to 10.7 minutes
+    // From the victory to New Game+1's first resting place (with its mutator). At the last pass:
+    // no deaths; 3.0 to 3.9 minutes, the Cleric 9.4 (its blows land least on the veterans' armour);
+    // over six seeds no deaths, 2.7 to 12.1 minutes
     constexpr float NewGamePlusBudgetMinutes = 30.0f;
     constexpr std::int32_t MostNewGamePlusDeaths = 30;
 

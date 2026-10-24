@@ -23,6 +23,7 @@ export namespace LB::Engine {
     struct SpellPayload {
         const Content::SpellDefinition* spell{nullptr};   // into the content, which outlives it
         std::int32_t rawDamage{0};
+        bool critical{false};                              // a critical cast: rawDamage is multiplied already
     };
 
     /// <summary>

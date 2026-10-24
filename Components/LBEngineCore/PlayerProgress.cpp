@@ -123,6 +123,7 @@ namespace LB::Engine {
         if (item.kind != ItemKind::Weapon && item.kind != ItemKind::Armor) return item;
         const auto depth = (session_->depth > 0 ? ChallengeDepth() : std::max(1, session_->encounter.GetWave())) + depthBonus;
         item = ForTier(item, TierForDepth(depth));   // the deeper tiers drop their own gear
+        item = ForClass(item);                       // mostly gear the hero can use
         const auto* rarity = session_->lootRoller.RollRarity(*content_, depth);
         if (!rarity || rarity->affixes <= 0) return item;
         const bool weapon = item.kind == ItemKind::Weapon;
@@ -417,7 +418,10 @@ namespace LB::Engine {
         for (std::int32_t roll = 0; roll < std::max(1, rolls); ++roll) {
             for (auto drop : session_->lootRoller.Roll(*table, *content_)) drops.push_back(drop);
         }
+        float gold = 1.0f;   // New Game+ mutators (Gilded)
+        for (const auto* mutator : GetMutators()) gold *= mutator->goldMultiplier;
         for (auto drop : drops) {
+            if (!drop.item.IsValid() && gold != 1.0f) drop.quantity = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(drop.quantity) * gold)));
             drop.item = RollDrop(drop.item, depthBonus);
             const auto offset = session_->lootRoller.Scatter(0.45f);
             drop.id = session_->nextGroundItemId++;
@@ -478,6 +482,11 @@ namespace LB::Engine {
         data["player.experience"] = std::format("{}", character.GetExperience());
         data["player.attributes"] = std::format("{};{};{};{};{};{}", a.strength, a.dexterity, a.constitution, a.intelligence, a.wisdom, a.charisma);
         data["player.points"] = std::format("{}", character.GetUnspentAttributePoints());
+        // The points the player assigned, by attribute ("STR;DEX;CON;INT;WIS;CHA"): what retraining gives back
+        const auto assigned = session_->characterService.GetAssignedPoints(*session_->playerId);
+        const auto count = [&](LB::AttributeType attribute) { const auto it = assigned.find(attribute); return it != assigned.end() ? it->second : 0; };
+        data["player.assigned"] = std::format("{};{};{};{};{};{}", count(LB::AttributeType::Strength), count(LB::AttributeType::Dexterity), count(LB::AttributeType::Constitution),
+                                              count(LB::AttributeType::Intelligence), count(LB::AttributeType::Wisdom), count(LB::AttributeType::Charisma));
         data["player.gold"] = std::format("{}", session_->gold);
         data["player.path"] = session_->path;
         std::string allies;
@@ -555,6 +564,18 @@ namespace LB::Engine {
             return;
         }
 
+        // Older saves have no assigned points: retraining gives back nothing they spent
+        if (const auto* text = field("player.assigned")) {
+            const auto parts = Split(*text, ';');
+            constexpr std::array order{ LB::AttributeType::Strength, LB::AttributeType::Dexterity, LB::AttributeType::Constitution,
+                                        LB::AttributeType::Intelligence, LB::AttributeType::Wisdom, LB::AttributeType::Charisma };
+            std::map<LB::AttributeType, std::int32_t> assigned;
+            for (std::size_t i = 0; i < parts.size() && i < order.size(); ++i) {
+                std::int32_t value = 0;
+                if (ParseInt(parts[i], value) && value != 0) assigned[order[i]] = value;
+            }
+            if (parts.size() == order.size()) session_->characterService.RestoreAssignedPoints(*session_->playerId, assigned);
+        }
         if (const auto* text = field("player.gold"); text && ParseInt(*text, gold)) session_->gold = std::max(0, gold);
         if (const auto* text = field("player.path"); text && content_->FindClass(session_->playerClass) && content_->FindClass(session_->playerClass)->FindSpecialization(*text)) {
             session_->path = *text;
@@ -698,6 +719,42 @@ namespace LB::Engine {
             return ItemRef{ ItemKind::Armor, best->id };
         }
         return item;
+    }
+
+    ItemRef GameEngine::ForClass(ItemRef item) {
+        const auto* player = PlayerCharacter();
+        const auto* classData = PlayerClassDefinition();
+        if (!player || !classData || (item.kind != ItemKind::Weapon && item.kind != ItemKind::Armor)) return item;
+        const auto characterClass = player->GetClass();
+        // What it becomes: of what the class may use, what it is good with first (weapons it has
+        // no attack penalty with, armour it bears no heavier than others: classes.json adjustments)
+        std::vector<ItemRef> suited;
+        std::vector<ItemRef> usable;
+        const auto offer = [&](ItemRef candidate, bool good) {
+            usable.push_back(candidate);
+            if (good) suited.push_back(candidate);
+        };
+        if (item.kind == ItemKind::Weapon) {
+            const auto* weapon = content_->FindWeapon(item.id);
+            if (!weapon || weapon->IsUsableBy(characterClass) || !session_->lootRoller.Chance(UsableLootChance)) return item;
+            for (const auto& other : content_->GetWeapons()) {
+                if (other.tier == weapon->tier && other.IsUsableBy(characterClass)) {
+                    offer(ItemRef{ ItemKind::Weapon, other.id }, classData->GetWeaponAdjustment(other.category) >= 0);
+                }
+            }
+        }
+        else {
+            const auto* armor = content_->FindArmor(item.id);
+            if (!armor || armor->IsUsableBy(characterClass) || !session_->lootRoller.Chance(UsableLootChance)) return item;
+            for (const auto& other : content_->GetArmour()) {
+                if (other.slot == armor->slot && other.tier == armor->tier && other.IsUsableBy(characterClass)) {
+                    const auto adjustment = classData->GetArmorAdjustment(other.category);
+                    offer(ItemRef{ ItemKind::Armor, other.id }, adjustment.movementScale <= 1.0f && adjustment.castingScale <= 1.0f);
+                }
+            }
+        }
+        const auto& from = suited.empty() ? usable : suited;
+        return from.empty() ? item : from[session_->lootRoller.Pick(from.size())];
     }
 
 } // namespace LB::Engine

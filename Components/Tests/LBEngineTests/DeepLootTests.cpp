@@ -165,6 +165,37 @@ TEST(ItemTierTests, TheCaves_DropTheSecondTiersGear) {
     EXPECT_GT(gear, 0);
 }
 
+// Smart loot: a piece the hero's class cannot use mostly becomes one it can, of its slot and tier
+TEST(ItemTierTests, ForClass_MostlyGivesGearTheHeroCanUse) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = CombatSeed,
+        .dungeon = true, .playerClass = LB::Character::CharacterClass::Mage }));
+    const auto& content = *engine.GetContent();
+    const auto chainShirt = ItemRef::FromKey(content, "armor_chest_chain_shirt_t1");
+    ASSERT_TRUE(chainShirt.IsValid());
+    ASSERT_FALSE(content.FindArmor(chainShirt.id)->IsUsableBy(LB::Character::CharacterClass::Mage));
+
+    std::int32_t swapped = 0;
+    constexpr std::int32_t Rolls = 200;
+    for (std::int32_t i = 0; i < Rolls; ++i) {
+        const auto item = engine.ForClass(chainShirt);
+        if (item == chainShirt) continue;
+        ++swapped;
+        const auto* armor = content.FindArmor(item.id);
+        ASSERT_NE(armor, nullptr);
+        EXPECT_TRUE(armor->IsUsableBy(LB::Character::CharacterClass::Mage)) << armor->key;
+        EXPECT_EQ(armor->slot, content.FindArmor(chainShirt.id)->slot) << armor->key;
+        EXPECT_EQ(armor->tier, 1) << armor->key;
+    }
+    // About UsableLootChance of them; some stay as they were
+    EXPECT_GT(swapped, Rolls * GameEngine::UsableLootChance * 0.75f);
+    EXPECT_LT(swapped, Rolls);
+
+    // What the hero can use stays itself
+    const auto robe = ItemRef::FromKey(content, "armor_chest_threadbare_robe_t1");
+    for (std::int32_t i = 0; i < 20; ++i) EXPECT_EQ(engine.ForClass(robe), robe);
+}
+
 TEST(ItemTierTests, ThePotion_GrowsWithTheHero) {
     GameEngine engine;
     InitializeForCombat(engine);

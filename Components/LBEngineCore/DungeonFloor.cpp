@@ -62,6 +62,19 @@ namespace LB::Engine {
             }
             return indices;
         }
+
+        // "a;b;" -> { "a", "b" }
+        std::vector<std::string> SplitKeys(const std::string& text) {
+            std::vector<std::string> keys;
+            std::size_t start = 0;
+            while (start < text.size()) {
+                const auto end = text.find(';', start);
+                keys.push_back(text.substr(start, end == std::string::npos ? std::string::npos : end - start));
+                if (end == std::string::npos) break;
+                start = end + 1;
+            }
+            return keys;
+        }
     }
 
     void GameEngine::StartFloor(std::int32_t depth) {
@@ -76,8 +89,20 @@ namespace LB::Engine {
         entrance.cleared = true;
 
         session_->encounter.Reset();
-        session_->encounter.SetVeterans(NewGamePlusAttackBonus * session_->cycle, NewGamePlusArmorClass * session_->cycle,
-                                        NewGamePlusHitPoints * static_cast<float>(session_->cycle));
+        // The cycle's veterans, and its mutators on top
+        std::int32_t attack = NewGamePlusAttackBonus * session_->cycle;
+        std::int32_t armour = NewGamePlusArmorClass * session_->cycle;
+        float hitPoints = NewGamePlusHitPoints * static_cast<float>(session_->cycle);
+        std::int32_t damage = 0;
+        float lifeSteal = 0.0f;
+        for (const auto* mutator : GetMutators()) {
+            attack += mutator->enemyAttackBonus;
+            armour += mutator->enemyArmorClass;
+            hitPoints += mutator->enemyHitPoints;
+            damage += mutator->enemyDamageBonus;
+            lifeSteal += mutator->enemyLifeSteal;
+        }
+        session_->encounter.SetVeterans(attack, armour, hitPoints, damage, std::min(lifeSteal, 1.0f));
         session_->groundItems.clear();
 
         // A resting place: every room is quiet; the merchant and the shrine stand in the entrance
@@ -151,6 +176,7 @@ namespace LB::Engine {
         if (!session_->dungeonMode || !session_->playerId) return;
         ++session_->cycle;
         session_->baseSeed = FloorSeed(session_->baseSeed, 1000 + session_->cycle);   // a new Below: other floors
+        ChooseMutators();
         session_->bounty = {};
         session_->onWayUp = false;
         PlaySound(GameSound::Descend);
@@ -158,9 +184,41 @@ namespace LB::Engine {
         session_->characterService.RestCharacter(*session_->playerId);
         session_->allies.RestoreAll();
         session_->combatText.Clear();
+        std::vector<std::string> lines{ "Enemies are tougher, and their finds richer" };
+        const auto mutators = GetMutators();
+        if (!mutators.empty()) lines.push_back(std::format("{}: {}", mutators.back()->name, mutators.back()->description));
         session_->fanfare.ShowFirst(FanfareCard{ "THE BELOW STIRS", std::format("New Game+{}: the depths grow stronger", session_->cycle),
-                                                 { "Enemies are tougher, and their finds richer" }, { 0.85f, 0.35f, 0.30f } });
+                                                 std::move(lines), { 0.85f, 0.35f, 0.30f } });
         AutoSave();
+    }
+
+    std::string GameEngine::MutatorNames(const std::vector<const Content::MutatorDefinition*>& mutators, std::string_view separator) {
+        std::string names;
+        for (const auto* mutator : mutators) names += (names.empty() ? std::string{} : std::string(separator)) + mutator->name;
+        return names;
+    }
+
+    std::vector<const Content::MutatorDefinition*> GameEngine::GetMutators() const {
+        std::vector<const Content::MutatorDefinition*> mutators;
+        for (const auto& key : session_->mutators) {
+            if (const auto* mutator = content_->FindMutator(key)) mutators.push_back(mutator);
+        }
+        return mutators;
+    }
+
+    // One mutator a cycle: the list is topped up from the run's seed with those not drawn yet
+    // (once every one is in, no more), and cut back to the cycle when there are more
+    void GameEngine::ChooseMutators() {
+        auto& keys = session_->mutators;
+        if (keys.size() > static_cast<std::size_t>(session_->cycle)) keys.resize(static_cast<std::size_t>(session_->cycle));
+        while (keys.size() < static_cast<std::size_t>(session_->cycle)) {
+            std::vector<const Content::MutatorDefinition*> left;
+            for (const auto& mutator : content_->GetMutators()) {
+                if (std::ranges::find(keys, mutator.key) == keys.end()) left.push_back(&mutator);
+            }
+            if (left.empty()) break;
+            keys.push_back(left[FloorSeed(session_->baseSeed, 2000 + static_cast<std::int32_t>(keys.size())) % left.size()]->key);
+        }
     }
 
     void GameEngine::Descend() {
@@ -188,6 +246,8 @@ namespace LB::Engine {
             const auto* caster = content_->FindEnemy(roster.caster);
             const auto* brute = content_->FindEnemy(roster.brute);
             const auto* boss = content_->FindEnemy(BossForDepth(session_->depth));
+            std::int32_t extra = 0;   // a New Game+ mutator's (Teeming)
+            for (const auto* mutator : GetMutators()) extra += mutator->extraEnemies;
             const auto raise = [&](const Content::EnemyDefinition* kind, std::int32_t count) {
                 if (!kind || count <= 0) return;
                 for (const auto id : session_->encounter.SpawnInRoom(*kind, count, here, session_->playerPosition, ChallengeDepth())) room.enemies.push_back(id);
@@ -202,6 +262,7 @@ namespace LB::Engine {
                 raise(ranged, session_->depth >= 2 ? std::min(1 + session_->depth / 6, 2) : 0);   // shooters from the second floor
                 raise(caster, session_->depth >= 3 ? 1 : 0);                                       // casters from the third
                 raise(brute, session_->depth >= 5 ? 1 : 0);
+                raise(light, extra);
                 break;
             case RoomType::Elite:
                 raise(heavy, session_->depth >= 2 ? 2 : 1);
@@ -209,6 +270,7 @@ namespace LB::Engine {
                 raise(ranged, 1);
                 raise(caster, session_->depth >= 3 ? 1 : 0);
                 raise(brute, session_->depth >= 3 ? 1 : 0);
+                raise(light, extra);
                 break;
             case RoomType::Exit:
                 // The final floor: the last boss alone in its hall (its echoes come later); the end
@@ -279,6 +341,7 @@ namespace LB::Engine {
         CombatEvent event{ CombatEventKind::EnemyAttack, 0, Services::Combat::CombatService::ResolveSpellHit(damage, LB::Combat::DamageType::Piercing, GetPlayerDefense()), false };
         session_->characterService.DamageCharacter(*session_->playerId, event.result.finalDamage);
         session_->playerCombat.hitFlashSeconds = Encounter::HitFlashSeconds;
+        InterruptCast(event.result.finalDamage);
         session_->combatEvents.push_back(event);
         if (!IsPlayerAlive()) {
             session_->playerCombat.swinging = false;
@@ -415,6 +478,9 @@ namespace LB::Engine {
         data["floor.seed"] = std::format("{}", session_->baseSeed);
         data["floor.depth"] = std::format("{}", session_->depth);
         data["floor.cycle"] = std::format("{}", session_->cycle);
+        std::string mutators;
+        for (const auto& key : session_->mutators) mutators += key + ";";
+        data["floor.mutators"] = mutators;
         data["floor.cleared"] = JoinIndices(cleared);
         data["floor.chests"] = JoinIndices(chests);
         // Gates opened, the key's fall, the candles' states ("lit bits" per puzzle)
@@ -454,6 +520,12 @@ namespace LB::Engine {
         std::int32_t cycle = 0;   // saves from before New Game+ have none
         if (const auto cycleText = field("floor.cycle")) std::from_chars(cycleText->data(), cycleText->data() + cycleText->size(), cycle);
         session_->cycle = std::max(0, cycle);
+        // Its mutators (older saves have none kept: drawn again from the seed)
+        session_->mutators.clear();
+        for (const auto& key : SplitKeys(field("floor.mutators").value_or(""))) {
+            if (!key.empty() && content_->FindMutator(key)) session_->mutators.push_back(key);
+        }
+        ChooseMutators();
         StartFloor(depth);
         for (const auto index : ParseIndices(field("floor.cleared").value_or(""))) {
             if (index < 0 || static_cast<std::size_t>(index) >= session_->rooms.size()) continue;
@@ -563,6 +635,31 @@ namespace LB::Engine {
         return true;
     }
 
+    std::int32_t GameEngine::RetrainCost() const {
+        const auto* player = PlayerCharacter();
+        return RetrainGoldPerLevel * (player ? player->GetLevel() : 1);
+    }
+
+    std::int32_t GameEngine::ForgetPathCost() const {
+        const auto* player = PlayerCharacter();
+        return ForgetPathGoldPerLevel * (player ? player->GetLevel() : 1);
+    }
+
+    bool GameEngine::Retrain() {
+        if (!NearMerchant() || !session_->playerId || session_->gold < RetrainCost()) return false;
+        const auto cost = RetrainCost();
+        if (session_->characterService.Retrain(*session_->playerId) <= 0) return false;
+        session_->gold -= cost;
+        return true;
+    }
+
+    bool GameEngine::ForgetPath() {
+        if (!NearMerchant() || session_->path.empty() || session_->gold < ForgetPathCost()) return false;
+        session_->gold -= ForgetPathCost();
+        session_->path.clear();   // its bonuses go with it (they follow GetPlayerPath); the cards offer the paths again
+        return true;
+    }
+
     // The merchant's wares to buy, then the bag to sell
     std::vector<ScreenRow> GameEngine::BuildTradeRows() const {
         std::vector<ScreenRow> rows;
@@ -587,6 +684,21 @@ namespace LB::Engine {
             row.color = RarityColorOf(entry.item);
             row.enabled = session_->gold >= entry.price;
             rows.push_back(std::move(row));
+        }
+        // The merchant's teaching: the respec (game-design.md)
+        if (const auto* player = PlayerCharacter()) {
+            heading("Training");
+            std::int32_t assigned = 0;
+            for (const auto& [attribute, count] : session_->characterService.GetAssignedPoints(*session_->playerId)) assigned += count;
+            ScreenRow retrain{ std::format("Retrain ({} points back)", assigned), assigned > 0 ? std::format("{} gold", RetrainCost()) : std::string("none assigned") };
+            retrain.action = ScreenAction::Retrain;
+            retrain.enabled = assigned > 0 && session_->gold >= RetrainCost();
+            rows.push_back(std::move(retrain));
+            const auto* path = GetPlayerPath();
+            ScreenRow forget{ path ? std::format("Forget the {} path", path->name) : std::string("Forget a path"), path ? std::format("{} gold", ForgetPathCost()) : std::string("no path yet") };
+            forget.action = ScreenAction::ForgetPath;
+            forget.enabled = path && session_->gold >= ForgetPathCost() && player->GetLevel() >= Content::ClassDefinition::SpecializationLevel;
+            rows.push_back(std::move(forget));
         }
         heading("Sell");
         const auto bag = GetInventory();
@@ -624,7 +736,14 @@ namespace LB::Engine {
         if (triggered(MenuDownAction)) trade.Step(+1);
         if (triggered(MenuConfirmAction)) {
             if (const auto* row = trade.Selected(); row && row->enabled) {
-                const bool done = row->action == ScreenAction::Buy ? BuyFromMerchant(row->index) : row->action == ScreenAction::Sell && SellToMerchant(row->item);
+                bool done = false;
+                switch (row->action) {
+                case ScreenAction::Buy: done = BuyFromMerchant(row->index); break;
+                case ScreenAction::Sell: done = SellToMerchant(row->item); break;
+                case ScreenAction::Retrain: done = Retrain(); break;
+                case ScreenAction::ForgetPath: done = ForgetPath(); break;
+                default: break;
+                }
                 PlaySound(done ? GameSound::Gold : GameSound::NoMana);
             }
         }

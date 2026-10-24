@@ -71,6 +71,8 @@ namespace LB::Engine {
             const auto before = session_->playerPosition;
             MovePlayer(static_cast<float>(elapsedSeconds));
             const bool moving = Distance(before, session_->playerPosition) > 1e-4f;
+            // Walking out of an enemy's reach invites its blow (design-combat-system.md 3.2)
+            if (moving && IsPlayerAlive()) session_->encounter.CheckOpportunity(before, session_->playerPosition, GetPlayerDefense());
             if (session_->knockSeconds > 0.0f) {   // thrown back: carried along, against the walls
                 const float t = std::min(static_cast<float>(elapsedSeconds), session_->knockSeconds);
                 session_->playerPosition = session_->world.Move(session_->playerPosition, { session_->knockVelocity.x * t, session_->knockVelocity.y * t }, PlayerRadius);
@@ -436,7 +438,7 @@ namespace LB::Engine {
         }
         if (casting.active) {
             casting.seconds += elapsedSeconds;
-            if (casting.seconds + 1e-4f >= casting.spell->castTimeSeconds) ReleaseCast();   // steps add up to just under whole times
+            if (casting.seconds + 1e-4f >= casting.castSeconds) ReleaseCast();   // steps add up to just under whole times
             return;
         }
         if (session_->playerCombat.swinging) return;
@@ -472,13 +474,15 @@ namespace LB::Engine {
         auto& casting = session_->casting;
         casting = PlayerCasting{ true, slot, &spell, 0.0f, std::nullopt, 0.0f };
         casting.target = target;
+        // Armour slows it (design-armour-system.md 4.3: castPenalty, scaled by the class's armorAdjustments)
+        casting.castSeconds = spell.castTimeSeconds * session_->characterService.GetCastTimeMultiplier(*session_->playerId).value_or(1.0f);
         if (const auto* enemy = target ? session_->encounter.FindEnemy(*target) : nullptr) {
             session_->playerFacingYaw = std::atan2(enemy->position.x - session_->playerPosition.x, enemy->position.y - session_->playerPosition.y);
         }
         session_->playerCombat.hurtSeconds = 0.0f;
         session_->playerAnimator.Play(assets_.playerClips.castLoop.id, true, 1.0f, true, 0.1f);
         PlaySound(GameSound::SpellCast, session_->playerPosition);
-        if (spell.castTimeSeconds <= 0.0f) ReleaseCast();
+        if (casting.castSeconds <= 0.0f) ReleaseCast();
     }
 
     // The spell leaves: mana is spent and the cooldown starts; a missile flies at the target
@@ -491,7 +495,12 @@ namespace LB::Engine {
         if (spell.manaCost > 0 && !session_->characterService.ConsumeMana(*session_->playerId, spell.manaCost)) return;
         session_->spellCooldowns[slot] = spell.cooldownSeconds;
 
-        const SpellPayload payload{ &spell, Encounter::SpellDamage(spell, GetPlayerSpellPower()) };
+        // A damaging spell's natural 20 is critical (design-spells-system.md 5.1): the whole cast
+        SpellPayload payload{ &spell, Encounter::SpellDamage(spell, GetPlayerSpellPower()) };
+        if (spell.canCrit && payload.rawDamage > 0 && session_->lootRoller.Chance(SpellCritChance)) {
+            payload.critical = true;
+            payload.rawDamage = static_cast<std::int32_t>(std::lround(static_cast<float>(payload.rawDamage) * SpellCritMultiplier));
+        }
         const auto* target = casting.target ? session_->encounter.FindEnemy(*casting.target) : nullptr;
         if (target && !target->IsTargetable()) target = nullptr;
         const auto heal = static_cast<std::int32_t>(std::lround(static_cast<float>(spell.baseHeal) + spell.powerCoefficient * static_cast<float>(GetPlayerSpellPower())));
@@ -580,6 +589,16 @@ namespace LB::Engine {
 
     void GameEngine::CancelCast() {
         session_->casting = PlayerCasting{};
+    }
+
+    // A heavy blow breaks the cast under way (design-spells-system.md 4.3): one of
+    // CastInterruptFraction of the hero's hit points or more; the mana is not spent
+    void GameEngine::InterruptCast(std::int32_t damage) {
+        const auto* player = PlayerCharacter();
+        if (!session_->casting.active || !player || !IsPlayerAlive()) return;
+        if (static_cast<float>(damage) < CastInterruptFraction * static_cast<float>(player->GetMaxHitPoints())) return;
+        CancelCast();
+        session_->combatText.Add("INTERRUPTED", { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
     }
 
     // Burning and other damage over time on the player; a spell's statuses taking hold
@@ -729,7 +748,9 @@ namespace LB::Engine {
     void GameEngine::UpdateEncounter(float elapsedSeconds) {
         if (!session_->playerId) return;
 
-        const PlayerTarget target{ session_->playerPosition, IsPlayerAlive(), GetPlayerDefense(), PlayerRadius };
+        const auto* hero = PlayerCharacter();
+        const float health = hero ? static_cast<float>(hero->GetCurrentHitPoints()) / static_cast<float>(std::max(1, hero->GetMaxHitPoints())) : 1.0f;
+        const PlayerTarget target{ session_->playerPosition, IsPlayerAlive(), GetPlayerDefense(), PlayerRadius, 0, health };
         if (session_->dungeonMode) {
             UpdateFloorInteractions();
         }
@@ -763,6 +784,7 @@ namespace LB::Engine {
 
             session_->characterService.DamageCharacter(*session_->playerId, event.result.finalDamage);
             session_->playerCombat.hitFlashSeconds = Encounter::HitFlashSeconds;
+            InterruptCast(event.result.finalDamage);
             if (!IsPlayerAlive()) {
                 session_->playerCombat.swinging = false;
                 session_->playerCombat.deadSeconds = 0.0f;

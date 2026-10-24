@@ -1,5 +1,5 @@
 // RestFloorTests.cpp - LB.Engine tests: resting places after the bosses (no enemies, a shrine, a
-// merchant), buying and selling
+// merchant), buying and selling, retraining
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -105,4 +105,70 @@ TEST(RestFloorTests, Interact_OpensTheTradeScreen) {
     engine.Tick(OneSixtieth);
     EXPECT_FALSE(engine.GetTradeScreen().IsOpen());
     EXPECT_FALSE(engine.GetMenu().IsOpen());   // Esc closed the trade, not into the pause menu
+}
+
+// Retraining (game-design.md, respec options): the points the player assigned come back, for gold
+TEST(RestFloorTests, Retrain_GivesBackTheAssignedPoints) {
+    GameEngine engine;
+    InitializeRestFloor(engine);
+    engine.GrantExperience(1600);   // level 5
+    engine.Tick(OneSixtieth);
+    const auto& hero = [&]() -> const LB::Character::Character& { return engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get(); };
+    const auto strength = hero().GetAttributes().strength;
+    std::int32_t spent = 0;
+    while (engine.SpendAttributePoint(LB::AttributeType::Strength)) ++spent;
+    ASSERT_GT(spent, 0);
+    ASSERT_EQ(hero().GetAttributes().strength, strength + spent);
+
+    // Kept in a save
+    ASSERT_TRUE(engine.SaveGame(1));
+    ASSERT_TRUE(engine.LoadGame(1));
+    engine.Tick(OneSixtieth);
+
+    Earn(engine, engine.RetrainCost());
+    ASSERT_GE(engine.GetGold(), engine.RetrainCost());
+    EXPECT_FALSE(engine.Retrain());   // not by the merchant
+    GoTo(engine, *engine.GetMerchantPosition());
+    const auto gold = engine.GetGold();
+    const auto cost = engine.RetrainCost();
+    EXPECT_EQ(cost, GameEngine::RetrainGoldPerLevel * 5);
+
+    ASSERT_TRUE(engine.Retrain());
+    EXPECT_EQ(hero().GetAttributes().strength, strength);
+    EXPECT_EQ(hero().GetUnspentAttributePoints(), spent);
+    EXPECT_EQ(engine.GetGold(), gold - cost);
+    EXPECT_GE(hero().GetCurrentHitPoints(), 1);
+    EXPECT_FALSE(engine.Retrain());   // nothing assigned now: no charge
+    EXPECT_EQ(engine.GetGold(), gold - cost);
+
+    // Spent again elsewhere
+    ASSERT_TRUE(engine.SpendAttributePoint(LB::AttributeType::Dexterity));
+    EXPECT_EQ(engine.GetCharacters().GetAssignedPoints(*engine.GetPlayerId()).at(LB::AttributeType::Dexterity), 1);
+}
+
+// The full respec: the path forgotten, the hero chooses again
+TEST(RestFloorTests, ForgetPath_LetsTheHeroChooseAgain) {
+    GameEngine engine;
+    InitializeRestFloor(engine);
+    engine.GrantExperience(1600);   // level 5: a path
+    engine.Tick(OneSixtieth);
+    const auto* classData = engine.GetContent()->FindClass(LB::Character::CharacterClass::Warrior);
+    ASSERT_GE(classData->specializations.size(), 2u);
+    const auto& first = classData->specializations[0].key;
+    const auto& second = classData->specializations[1].key;
+    ASSERT_TRUE(engine.ChoosePath(first));
+    EXPECT_FALSE(engine.ChoosePath(second));   // one path at a time
+
+    Earn(engine, engine.ForgetPathCost());
+    ASSERT_GE(engine.GetGold(), engine.ForgetPathCost());
+    GoTo(engine, *engine.GetMerchantPosition());
+    EXPECT_GT(engine.ForgetPathCost(), engine.RetrainCost());
+    const auto gold = engine.GetGold();
+
+    ASSERT_TRUE(engine.ForgetPath());
+    EXPECT_EQ(engine.GetPlayerPath(), nullptr);
+    EXPECT_EQ(engine.GetGold(), gold - engine.ForgetPathCost());
+    EXPECT_FALSE(engine.ForgetPath());   // no path to forget
+    ASSERT_TRUE(engine.ChoosePath(second));
+    EXPECT_EQ(engine.GetPlayerPath()->key, second);
 }

@@ -62,6 +62,7 @@ export namespace LB::Content {
         float evadeSeconds{0.0f};                     // ... and no attack touches them this long
         bool teleportBehindTarget{false};             // the caster steps behind the target (within range)
         std::int32_t cleansesStatuses{0};             // hindrances (Debuff, Control) it removes from the caster
+        bool canCrit{true};                           // its damage may be critical (design-spells-system.md 5.1)
 
         /// <summary>
         /// How it is cast: a missile (projectileSpeed, flying `range` tiles; with a radius it bursts
@@ -392,6 +393,24 @@ export namespace LB::Content {
     };
 
     /// <summary>
+    /// A New Game+ mutator (mutators.json, design-loot-and-progression.md 7.3): each cycle adds one,
+    /// changing its enemies and finds on top of the cycle's own strength
+    /// </summary>
+    struct MutatorDefinition {
+        ContentId id{0};
+        String key;                                   // e.g. "mutator_ironclad"
+        String name;                                  // "Ironclad", on the HUD and the save slots
+        String description;                           // what it does, on the banner
+        float enemyHitPoints{0.0f};                   // a share more hit points (0.25: a quarter more)
+        std::int32_t enemyArmorClass{0};
+        std::int32_t enemyAttackBonus{0};
+        std::int32_t enemyDamageBonus{0};
+        float enemyLifeSteal{0.0f};                   // a share of an enemy's melee damage that heals it
+        std::int32_t extraEnemies{0};                 // more of a room's light enemies (combat and elite rooms)
+        float goldMultiplier{1.0f};                   // gold piles that drop
+    };
+
+    /// <summary>
     /// A relic a floor's objective asks for (objectives.json "relics")
     /// </summary>
     struct RelicDefinition {
@@ -586,7 +605,7 @@ export namespace LB::Content {
     public:
         /// <summary>
         /// Load spells.json, weapons.json, armour.json, classes.json, enemies.json, consumables.json,
-        /// loot.json, statuses.json, rarities.json, affixes.json, allies.json, objectives.json, and lore.json from a directory (UTF-8 path). On any error the database is left empty and
+        /// loot.json, statuses.json, rarities.json, affixes.json, allies.json, objectives.json, lore.json, and mutators.json from a directory (UTF-8 path). On any error the database is left empty and
         /// every error is reported.
         /// </summary>
         ContentLoadResult LoadFromDirectory(const String& directory);
@@ -601,7 +620,8 @@ export namespace LB::Content {
                                        const String& classesJson = "[]", const String& enemiesJson = "[]",
                                        const String& consumablesJson = "[]", const String& lootJson = "[]",
                                        const String& statusesJson = "[]", const String& raritiesJson = "[]", const String& affixesJson = "[]",
-                                       const String& alliesJson = "[]", const String& objectivesJson = "", const String& loreJson = "[]");
+                                       const String& alliesJson = "[]", const String& objectivesJson = "", const String& loreJson = "[]",
+                                       const String& mutatorsJson = "[]");
 
         void Clear() {
             spells_.clear();
@@ -617,6 +637,7 @@ export namespace LB::Content {
             allies_.clear();
             objectives_ = {};
             lore_.clear();
+            mutators_.clear();
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept {
@@ -640,6 +661,8 @@ export namespace LB::Content {
         [[nodiscard]] const ObjectiveSettings& GetObjectives() const noexcept { return objectives_; }
         [[nodiscard]] const std::vector<LoreDefinition>& GetLore() const noexcept { return lore_; }
         [[nodiscard]] const LoreDefinition* FindLore(std::string_view key) const { return FindByKey(lore_, key); }
+        [[nodiscard]] const std::vector<MutatorDefinition>& GetMutators() const noexcept { return mutators_; }
+        [[nodiscard]] const MutatorDefinition* FindMutator(std::string_view key) const { return FindByKey(mutators_, key); }
         [[nodiscard]] const AllyDefinition* FindAlly(std::string_view key) const { return FindByKey(allies_, key); }
 
         [[nodiscard]] const SpellDefinition* FindSpell(ContentId id) const { return FindById(spells_, id); }
@@ -709,6 +732,7 @@ export namespace LB::Content {
         std::vector<AllyDefinition> allies_;
         ObjectiveSettings objectives_;
         std::vector<LoreDefinition> lore_;
+        std::vector<MutatorDefinition> mutators_;
     };
 
 } // namespace LB::Content

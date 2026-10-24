@@ -894,6 +894,39 @@ TEST(CharacterServiceGrowthTests, SpendAttributePoint_RaisesAttributeAndConsumes
     EXPECT_EQ(Get(service, id).GetUnspentAttributePoints(), 0);
 }
 
+TEST(CharacterServiceGrowthTests, Retrain_GivesBackOnlyTheAssignedPoints) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{10, 10, 11, 10, 10, 10}));
+    service.AwardExperience(id, 400);  // level 3: two automatic points and two free ones
+    const auto before = Get(service, id).GetAttributes();
+    const auto maxHP = Get(service, id).GetMaxHitPoints();
+    ASSERT_EQ(Get(service, id).GetUnspentAttributePoints(), 2);
+    ASSERT_TRUE(service.SpendAttributePoint(id, AttributeType::Constitution));
+    ASSERT_TRUE(service.SpendAttributePoint(id, AttributeType::Charisma));
+
+    EXPECT_EQ(service.Retrain(id), 2);
+
+    EXPECT_EQ(Get(service, id).GetAttributes().constitution, before.constitution);   // the automatic gains stay
+    EXPECT_EQ(Get(service, id).GetAttributes().charisma, before.charisma);
+    EXPECT_EQ(Get(service, id).GetAttributes().strength, before.strength);
+    EXPECT_EQ(Get(service, id).GetUnspentAttributePoints(), 2);
+    EXPECT_EQ(Get(service, id).GetMaxHitPoints(), maxHP);
+    EXPECT_TRUE(service.GetAssignedPoints(id).empty());
+    EXPECT_EQ(service.Retrain(id), 0);
+}
+
+TEST(CharacterServiceGrowthTests, RestoreAssignedPoints_RefusesMoreThanTheAttribute) {
+    CharacterService service = MakeTestService();
+    auto id = *service.CreateCharacter(CharacterCreationRequest("W", CharacterClass::Warrior, Attributes{12, 10, 10, 10, 10, 10}));
+
+    EXPECT_FALSE(service.RestoreAssignedPoints(id, { { AttributeType::Strength, 12 } }));
+    EXPECT_FALSE(service.RestoreAssignedPoints(id, { { AttributeType::Strength, -1 } }));
+    EXPECT_TRUE(service.GetAssignedPoints(id).empty());
+    ASSERT_TRUE(service.RestoreAssignedPoints(id, { { AttributeType::Strength, 2 } }));
+    EXPECT_EQ(service.Retrain(id), 2);
+    EXPECT_EQ(Get(service, id).GetAttributes().strength, 10);
+}
+
 TEST(CharacterServiceGrowthTests, SpendAttributePoint_WithoutPoints_Fails) {
     CharacterService service = MakeTestService();
     auto id = *service.CreateCharacter(CharacterCreationRequest("R", CharacterClass::Rogue, Attributes{10, 10, 10, 10, 10, 10}));

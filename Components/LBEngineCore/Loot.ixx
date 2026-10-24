@@ -343,6 +343,13 @@ export namespace LB::Engine {
             return std::uniform_real_distribution<float>(0.0f, 1.0f)(rng_) < probability;
         }
 
+        /// <summary>
+        /// One of `count` at random (0 when there are none)
+        /// </summary>
+        std::size_t Pick(std::size_t count) {
+            return count > 1 ? std::uniform_int_distribution<std::size_t>(0, count - 1)(rng_) : 0;
+        }
+
     private:
 
         std::mt19937 rng_;

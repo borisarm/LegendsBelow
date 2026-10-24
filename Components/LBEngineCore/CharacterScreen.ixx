@@ -22,7 +22,9 @@ export namespace LB::Engine {
         Sell,             // sell one `item` from the bag
         ChoosePath,       // take the class's specialization `index`
         GiveToAlly,       // choose an item from the bag for ally `index` (an id)
-        TakeFromAlly      // take ally `index`'s gear back
+        TakeFromAlly,     // take ally `index`'s gear back
+        Retrain,          // the merchant gives back the assigned attribute points (for gold)
+        ForgetPath        // the merchant lets the hero choose a path again (for more gold)
     };
 
     /// <summary>

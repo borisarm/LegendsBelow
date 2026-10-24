@@ -342,6 +342,7 @@ namespace LB::Content {
             if (spell.knockbackTiles < 0.0f) reader.Error("'knockbackTiles' must not be negative");
             reader.ReadFloat("evadeSeconds", spell.evadeSeconds, false);
             reader.ReadBool("teleportBehindTarget", spell.teleportBehindTarget);
+            reader.ReadBool("canCrit", spell.canCrit);
             reader.ReadInt("cleansesStatuses", spell.cleansesStatuses, false);
             if (spell.dashTiles < 0.0f || spell.evadeSeconds < 0.0f || spell.cleansesStatuses < 0) reader.Error("'dashTiles', 'evadeSeconds', and 'cleansesStatuses' must not be negative");
             if (spell.teleportBehindTarget && spell.range <= 0.0f) reader.Error("'teleportBehindTarget' needs a 'range'");
@@ -723,6 +724,24 @@ namespace LB::Content {
             return lore;
         }
 
+        MutatorDefinition ReadMutator(EntryReader& reader) {
+            MutatorDefinition mutator;
+            reader.ReadString("id", mutator.key, true);
+            reader.ReadString("name", mutator.name, true);
+            reader.ReadString("description", mutator.description, true);
+            reader.ReadFloat("enemyHitPoints", mutator.enemyHitPoints, false);
+            reader.ReadInt("enemyArmorClass", mutator.enemyArmorClass, false);
+            reader.ReadInt("enemyAttackBonus", mutator.enemyAttackBonus, false);
+            reader.ReadInt("enemyDamageBonus", mutator.enemyDamageBonus, false);
+            reader.ReadFloat("enemyLifeSteal", mutator.enemyLifeSteal, false);
+            reader.ReadInt("extraEnemies", mutator.extraEnemies, false);
+            reader.ReadFloat("goldMultiplier", mutator.goldMultiplier, false);
+            if (mutator.enemyHitPoints < 0.0f || mutator.enemyLifeSteal < 0.0f || mutator.enemyLifeSteal > 1.0f || mutator.extraEnemies < 0 || mutator.goldMultiplier <= 0.0f) {
+                reader.Error("'enemyHitPoints' and 'extraEnemies' must not be negative, 'enemyLifeSteal' must be 0 to 1, and 'goldMultiplier' positive");
+            }
+            return mutator;
+        }
+
         // objectives.json: one object of settings
         ObjectiveSettings ReadObjectives(const String& text, std::vector<String>& errors) {
             ObjectiveSettings settings;
@@ -1097,10 +1116,10 @@ namespace LB::Content {
         const std::filesystem::path root(std::u8string(directory.begin(), directory.end()));
 
         ContentLoadResult result{};
-        String texts[13];
-        constexpr const char* files[13] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
-                                            "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json" };
-        for (int i = 0; i < 13; ++i) {
+        String texts[14];
+        constexpr const char* files[14] = { "spells.json", "weapons.json", "armour.json", "classes.json", "enemies.json", "consumables.json", "loot.json",
+                                            "statuses.json", "rarities.json", "affixes.json", "allies.json", "objectives.json", "lore.json", "mutators.json" };
+        for (int i = 0; i < 14; ++i) {
             if (auto text = ReadTextFile(root / files[i])) texts[i] = std::move(*text);
             else result.errors.push_back(std::format("{}: file not found in content directory", files[i]));
         }
@@ -1109,14 +1128,14 @@ namespace LB::Content {
             Clear();
             return result;
         }
-        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10], texts[11], texts[12]);
+        return LoadFromJson(texts[0], texts[1], texts[2], texts[3], texts[4], texts[5], texts[6], texts[7], texts[8], texts[9], texts[10], texts[11], texts[12], texts[13]);
     }
 
     ContentLoadResult ContentDatabase::LoadFromJson(const String& spellsJson, const String& weaponsJson, const String& armourJson,
                                                     const String& classesJson, const String& enemiesJson,
                                                     const String& consumablesJson, const String& lootJson, const String& statusesJson,
                                                     const String& raritiesJson, const String& affixesJson, const String& alliesJson,
-                                                    const String& objectivesJson, const String& loreJson) {
+                                                    const String& objectivesJson, const String& loreJson, const String& mutatorsJson) {
         ContentLoadResult result{};
 
         auto spells = ReadArray<SpellDefinition>(spellsJson, "spells.json", ReadSpell, result.errors);
@@ -1132,6 +1151,7 @@ namespace LB::Content {
         auto allies = ReadArray<AllyDefinition>(alliesJson, "allies.json", ReadAlly, result.errors);
         auto objectives = objectivesJson.empty() ? ObjectiveSettings{} : ReadObjectives(objectivesJson, result.errors);
         auto lore = ReadArray<LoreDefinition>(loreJson, "lore.json", ReadLore, result.errors);
+        auto mutators = ReadArray<MutatorDefinition>(mutatorsJson, "mutators.json", ReadMutator, result.errors);
         if (!rarities.empty() && std::ranges::none_of(rarities, [](const RarityDefinition& r) { return r.weight > 0.0f; })) {
             result.errors.push_back("rarities.json: at least one rarity needs a positive 'weight'");
         }
@@ -1164,6 +1184,7 @@ namespace LB::Content {
         allies_ = std::move(allies);
         objectives_ = std::move(objectives);
         lore_ = std::move(lore);
+        mutators_ = std::move(mutators);
         return result;
     }
 

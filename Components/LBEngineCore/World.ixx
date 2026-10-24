@@ -29,12 +29,16 @@ export namespace LB::Engine {
     }
 
     /// <summary>
-    /// The part of the ground the camera can see, kept generous: a circle around its focus.
-    /// What lies outside is not drawn (the default sees everything).
+    /// The part of the ground the camera can see, kept generous: a circle around its focus and,
+    /// when the screen's corners come down to the floor, the ground they frame (the view frustum's
+    /// footprint) widened by `padding`. What lies outside is not drawn (the default sees everything).
     /// </summary>
     struct ViewArea {
         WorldPoint center{};
         float radius{std::numeric_limits<float>::infinity()};
+        std::array<WorldPoint, 4> corners{};   // the screen's corners on the floor, in order around it
+        bool framed{false};                    // corners set
+        float padding{0.0f};                   // tiles past the frame still drawn (tall walls, models' size)
 
         /// <summary>
         /// Is a point (with something `margin` tiles across around it) possibly in view?
@@ -43,7 +47,27 @@ export namespace LB::Engine {
             const float dx = p.x - center.x;
             const float dy = p.y - center.y;
             const float reach = radius + margin;
-            return dx * dx + dy * dy <= reach * reach;
+            if (dx * dx + dy * dy > reach * reach) return false;
+            if (!framed) return true;
+            // Inside the frame, or no farther past any of its edges than the padding
+            float turn = 0.0f;   // the corners' winding: positive counterclockwise
+            for (std::size_t i = 0; i < corners.size(); ++i) {
+                const auto& a = corners[i];
+                const auto& b = corners[(i + 1) % corners.size()];
+                turn += a.x * b.y - b.x * a.y;
+            }
+            const float side = turn >= 0.0f ? 1.0f : -1.0f;
+            for (std::size_t i = 0; i < corners.size(); ++i) {
+                const auto& a = corners[i];
+                const auto& b = corners[(i + 1) % corners.size()];
+                const float ex = b.x - a.x;
+                const float ey = b.y - a.y;
+                const float length = std::hypot(ex, ey);
+                if (length < 1e-4f) continue;
+                const float inward = side * (ex * (p.y - a.y) - ey * (p.x - a.x)) / length;   // distance inside this edge
+                if (inward < -(padding + margin)) return false;
+            }
+            return true;
         }
     };
 

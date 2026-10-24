@@ -229,6 +229,69 @@ TEST(GameEngineMageTests, Moving_CancelsTheCastForFree) {
     EXPECT_EQ(PlayerMana(engine), full);
 }
 
+// Armour slows a cast (design-armour-system.md 4.3): a cleric's breastplate, castPenalty 0.05
+TEST(GameEngineMageTests, Armour_SlowsTheCast) {
+    const auto stepsToCast = [](bool breastplate) {
+        GameEngine engine;
+        EXPECT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false,
+            .randomSeed = CombatSeed, .playerClass = LB::Character::CharacterClass::Cleric }));
+        engine.GrantExperience(1600);   // level 5, the breastplate's
+        engine.Tick(OneSixtieth);
+        if (breastplate) {
+            EXPECT_EQ(engine.GiveItem("armor_chest_rusted_breastplate_t1"), 1);
+            EXPECT_TRUE(engine.EquipItem("armor_chest_rusted_breastplate_t1"));
+        }
+        TapKey(engine, Keys::FromChar('2'));   // Divine Light, 0.8 seconds
+        int steps = 0;
+        for (engine.Tick(OneSixtieth); engine.IsPlayerCasting() && steps < 600; ++steps) engine.Tick(OneSixtieth);
+        return steps;
+    };
+    const auto bare = stepsToCast(false);
+    const auto armoured = stepsToCast(true);
+    EXPECT_NEAR(bare, 48, 1);
+    EXPECT_NEAR(armoured, 50, 1);   // 5% longer
+    EXPECT_GT(armoured, bare);
+}
+
+// A heavy blow breaks a cast for free (design-spells-system.md 4.3); a light one does not
+TEST(GameEngineMageTests, AHeavyBlow_InterruptsTheCast) {
+    GameEngine engine;
+    InitializeMage(engine);
+    const auto full = PlayerMana(engine);
+    const auto most = engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get().GetMaxHitPoints();
+
+    TapKey(engine, Keys::FromChar('1'));
+    engine.Tick(OneSixtieth);
+    ASSERT_TRUE(engine.IsPlayerCasting());
+    if (static_cast<float>(most) * GameEngine::CastInterruptFraction > 1.0f) {
+        engine.DamagePlayer(0);
+        EXPECT_TRUE(engine.IsPlayerCasting());
+    }
+    engine.DamagePlayer(static_cast<std::int32_t>(std::ceil(static_cast<float>(most) * GameEngine::CastInterruptFraction)));
+
+    EXPECT_FALSE(engine.IsPlayerCasting());
+    RunSteps(engine, 60);
+    EXPECT_TRUE(engine.GetEncounter().GetProjectiles().empty());
+    EXPECT_EQ(PlayerMana(engine), full);
+}
+
+// A critical cast: its hits are critical, its damage multiplied once (design-spells-system.md 5.1)
+TEST(SpellEncounterTests, ACriticalCast_HitsCritically) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    encounter.SetContent(content.engine.GetContent().get());
+    const auto id = encounter.Spawn(*content.warrior, { 2.0f, 0.0f }, FacingWest, false);
+    const auto* bolt = content.engine.GetContent()->FindSpell("spell_evocation_arcane_bolt_l1");
+    ASSERT_TRUE(bolt->canCrit);
+
+    const auto plain = encounter.StrikeWithSpell(SpellPayload{ bolt, 6 }, id);
+    const auto critical = encounter.StrikeWithSpell(SpellPayload{ bolt, 9, true }, id);
+    ASSERT_TRUE(plain && critical);
+    EXPECT_FALSE(plain->result.critical);
+    EXPECT_TRUE(critical->result.critical);
+    EXPECT_EQ(critical->result.rawDamage, 9);
+}
+
 TEST(GameEngineMageTests, NotEnoughMana_SaysSoAndDoesNotCast) {
     GameEngine engine;
     InitializeMage(engine);

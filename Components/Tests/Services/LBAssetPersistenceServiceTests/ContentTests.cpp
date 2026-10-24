@@ -311,7 +311,7 @@ TEST(ContentValidationTests, MissingDirectory_ReportsMissingFiles) {
 
     auto result = content.LoadFromDirectory("Z:/does/not/exist");
 
-    EXPECT_EQ(result.errors.size(), 13u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies, objectives, lore
+    EXPECT_EQ(result.errors.size(), 14u) << ErrorsOf(result);  // spells, weapons, armour, classes, enemies, consumables, loot, statuses, rarities, affixes, allies, objectives, lore, mutators
     EXPECT_TRUE(AnyErrorContains(result, "spells.json: file not found"));
     EXPECT_TRUE(content.IsEmpty());
 }
@@ -1129,4 +1129,36 @@ TEST(AffixValidationTests, BadAffixesAndRarities_Rejected) {
     ContentDatabase content;
     EXPECT_FALSE(content.LoadFromJson("[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]",
         R"([{"id":"r","name":"R","affixes":5,"color":[1,1,1],"weight":1}])").Succeeded());
+}
+
+TEST(ContentValidationTests, Mutators_LoadWithDefaults_AndBadOnesAreRejected) {
+    ContentDatabase content;
+    const String mutators = R"([{ "id": "mutator_a", "name": "A", "description": "a", "enemyArmorClass": 3, "extraEnemies": 1 },
+                                 { "id": "mutator_b", "name": "B", "description": "b", "enemyLifeSteal": 0.25, "goldMultiplier": 1.5 }])";
+    ASSERT_TRUE(content.LoadFromJson(Array(ValidSpell), Array(ValidWeapon), Array(ValidArmor), "[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]", "", "[]", mutators).Succeeded());
+    ASSERT_EQ(content.GetMutators().size(), 2u);
+    const auto* a = content.FindMutator("mutator_a");
+    ASSERT_NE(a, nullptr);
+    EXPECT_EQ(a->enemyArmorClass, 3);
+    EXPECT_EQ(a->extraEnemies, 1);
+    EXPECT_FLOAT_EQ(a->goldMultiplier, 1.0f);   // a default
+    EXPECT_FLOAT_EQ(content.FindMutator("mutator_b")->enemyLifeSteal, 0.25f);
+
+    const String bad = R"([{ "id": "mutator_c", "name": "C", "description": "c", "enemyLifeSteal": 2.0 },
+                            { "id": "mutator_d", "name": "D", "description": "d", "goldMultiplier": 0 }])";
+    const auto result = content.LoadFromJson(Array(ValidSpell), Array(ValidWeapon), Array(ValidArmor), "[]", "[]", "[]", "[]", "[]", "[]", "[]", "[]", "", "[]", bad);
+    EXPECT_FALSE(result.Succeeded());
+    EXPECT_EQ(result.errors.size(), 2u) << ErrorsOf(result);
+    EXPECT_TRUE(content.GetMutators().empty());
+}
+
+TEST_F(ShippedContentTests, Mutators_EachSaysWhatItDoes) {
+    ASSERT_GE(content_.GetMutators().size(), 4u);
+    for (const auto& mutator : content_.GetMutators()) {
+        EXPECT_FALSE(mutator.name.empty()) << mutator.key;
+        EXPECT_FALSE(mutator.description.empty()) << mutator.key;
+        const bool does = mutator.enemyHitPoints > 0.0f || mutator.enemyArmorClass != 0 || mutator.enemyAttackBonus != 0 || mutator.enemyDamageBonus != 0
+                       || mutator.enemyLifeSteal > 0.0f || mutator.extraEnemies > 0 || mutator.goldMultiplier != 1.0f;
+        EXPECT_TRUE(does) << mutator.key;
+    }
 }

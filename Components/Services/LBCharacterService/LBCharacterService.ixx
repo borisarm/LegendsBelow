@@ -481,13 +481,57 @@ export namespace LB::Services::Character {
             attributes.Set(attribute, attributes.Get(attribute) + 1);
             character.SetAttributes(attributes);
             character.SetUnspentAttributePoints(character.GetUnspentAttributePoints() - 1);
-
-            const auto level = character.GetLevel();
-            const auto newMaxHP = calculateMaxHitPoints(classRules, level, attributes) + gearOf(id).hitPoints;
-            const auto newMaxMP = std::max(0, calculateMaxManaPoints(character.GetClass(), classRules, level, attributes) + gearOf(id).mana);
-            character.SetHitPoints(std::clamp(character.GetCurrentHitPoints() + newMaxHP - character.GetMaxHitPoints(), 0, newMaxHP), newMaxHP);
-            character.SetManaPoints(std::clamp(character.GetCurrentManaPoints() + newMaxMP - character.GetMaxManaPoints(), 0, newMaxMP), newMaxMP);
+            ++assigned_[id][attribute];
+            followAttributes(id, character, classRules);
             return true;
+        }
+
+        /// <summary>
+        /// The free points the player assigned to each attribute (SpendAttributePoint), which a
+        /// retraining gives back; attributes not listed have none
+        /// </summary>
+        [[nodiscard]] std::map<AttributeType, std::int32_t> GetAssignedPoints(CharacterId id) const {
+            const auto it = assigned_.find(id);
+            return it != assigned_.end() ? it->second : std::map<AttributeType, std::int32_t>{};
+        }
+
+        /// <summary>
+        /// Put back the assigned points of a save; false (and nothing kept) when one is negative or
+        /// more than the attribute's value above 1
+        /// </summary>
+        bool RestoreAssignedPoints(CharacterId id, const std::map<AttributeType, std::int32_t>& points) {
+            const auto it = characters_.find(id);
+            if (it == characters_.end()) return false;
+            for (const auto& [attribute, count] : points) {
+                if (count < 0 || count >= it->second.GetAttributes().Get(attribute)) return false;
+            }
+            assigned_[id] = points;
+            return true;
+        }
+
+        /// <summary>
+        /// Retraining (game-design.md, respec options): the assigned points come off their
+        /// attributes and are unspent again. Max HP/MP follow; current HP/MP drop by as much (not
+        /// below 1 HP). Returns how many came back.
+        /// </summary>
+        std::int32_t Retrain(CharacterId id) {
+            auto it = characters_.find(id);
+            const auto* rules = GetRulesFor(id);
+            if (it == characters_.end() || rules == nullptr) return 0;
+            auto& character = it->second;
+            auto attributes = character.GetAttributes();
+            std::int32_t refunded = 0;
+            for (const auto& [attribute, count] : GetAssignedPoints(id)) {
+                attributes.Set(attribute, attributes.Get(attribute) - count);
+                refunded += count;
+            }
+            assigned_.erase(id);
+            if (refunded == 0) return 0;
+            character.SetAttributes(attributes);
+            character.SetUnspentAttributePoints(character.GetUnspentAttributePoints() + refunded);
+            followAttributes(id, character, *rules);
+            if (character.GetCurrentHitPoints() < 1) character.SetHitPoints(1, character.GetMaxHitPoints());
+            return refunded;
         }
 
         /// <summary>
@@ -714,6 +758,8 @@ export namespace LB::Services::Character {
         /// </summary>
         bool RemoveCharacter(CharacterId id) {
             equippedArmor_.erase(id);
+            gear_.erase(id);
+            assigned_.erase(id);
             return characters_.erase(id) > 0;
         }
 
@@ -843,6 +889,17 @@ export namespace LB::Services::Character {
         std::unordered_map<CharacterClass, ClassRules> classRules_;
         std::unordered_map<CharacterId, std::map<EquipmentSlot, ArmorPiece>> equippedArmor_;
         std::unordered_map<CharacterId, GearBonus> gear_;
+        std::unordered_map<CharacterId, std::map<AttributeType, std::int32_t>> assigned_;   // free points the player put in
+
+        // Max HP/MP after the attributes changed; current HP/MP move by as much
+        void followAttributes(CharacterId id, Character& character, const ClassRules& classRules) const {
+            const auto level = character.GetLevel();
+            const auto& attributes = character.GetAttributes();
+            const auto newMaxHP = calculateMaxHitPoints(classRules, level, attributes) + gearOf(id).hitPoints;
+            const auto newMaxMP = std::max(0, calculateMaxManaPoints(character.GetClass(), classRules, level, attributes) + gearOf(id).mana);
+            character.SetHitPoints(std::clamp(character.GetCurrentHitPoints() + newMaxHP - character.GetMaxHitPoints(), 0, newMaxHP), newMaxHP);
+            character.SetManaPoints(std::clamp(character.GetCurrentManaPoints() + newMaxMP - character.GetMaxManaPoints(), 0, newMaxMP), newMaxMP);
+        }
 
         [[nodiscard]] GearBonus gearOf(CharacterId id) const {
             const auto it = gear_.find(id);

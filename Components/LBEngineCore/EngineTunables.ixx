@@ -243,6 +243,9 @@ export namespace LB::Engine {
         static constexpr std::int32_t MerchantGearCount = 6;
         static constexpr std::int32_t MerchantArrowBundle = 20;
         static constexpr float SellFraction = 0.25f;          // of an item's value, what the merchant pays
+        static constexpr std::int32_t RetrainGoldPerLevel = 15;     // the merchant's retraining: the assigned points back (game-design.md, respec options)
+        static constexpr std::int32_t ForgetPathGoldPerLevel = 60;  // ... and a new path: the full respec, dearer
+        static constexpr float UsableLootChance = 0.6f;       // a dropped weapon or armour piece the hero cannot use becomes one they can, of its slot and tier
         static constexpr float MerchantRadius = 1.6f;         // close enough to trade
         static constexpr float PlayerReach = 1.4f;              // tiles between centers
         // A bow or crossbow shot leaves this far through the attack time (drawn, or aimed); the
@@ -307,6 +310,9 @@ export namespace LB::Engine {
 
         // Knockback (feel): the hero's critical hits throw an enemy back, a boss's blow or a
         // heavy one (HeavyHitShare) throws the hero back; a spell's own knockbackTiles too
+        static constexpr float SpellCritChance = 0.05f;       // a damaging spell's natural 20 (design-spells-system.md 5.1; spells roll no hit)
+        static constexpr float SpellCritMultiplier = 1.5f;    // as a weapon's (design-combat-system.md 4.2)
+        static constexpr float CastInterruptFraction = 0.2f;  // one blow of this share of the hero's hit points breaks a cast (design-spells-system.md 4.3)
         static constexpr float CritKnockbackTiles = 0.8f;
 
         /// <summary>

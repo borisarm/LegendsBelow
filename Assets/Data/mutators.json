@@ -1,0 +1,40 @@
+[
+  {
+    "id": "mutator_ironclad",
+    "name": "Ironclad",
+    "description": "Enemies wear heavier armour",
+    "enemyArmorClass": 3
+  },
+  {
+    "id": "mutator_bloodthirsty",
+    "name": "Bloodthirsty",
+    "description": "Enemies' blows heal them",
+    "enemyLifeSteal": 0.25
+  },
+  {
+    "id": "mutator_teeming",
+    "name": "Teeming",
+    "description": "More enemies fill each room",
+    "extraEnemies": 1
+  },
+  {
+    "id": "mutator_brutal",
+    "name": "Brutal",
+    "description": "Enemies strike harder and truer",
+    "enemyAttackBonus": 2,
+    "enemyDamageBonus": 2
+  },
+  {
+    "id": "mutator_hardy",
+    "name": "Hardy",
+    "description": "Enemies are harder to bring down",
+    "enemyHitPoints": 0.25
+  },
+  {
+    "id": "mutator_gilded",
+    "name": "Gilded",
+    "description": "Enemies are tougher, and their purses heavier",
+    "enemyHitPoints": 0.25,
+    "goldMultiplier": 1.5
+  }
+]

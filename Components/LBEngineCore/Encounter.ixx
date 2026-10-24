@@ -33,6 +33,13 @@ export namespace LB::Engine {
         static constexpr float MinimumSpawnDistance = Waves::MinimumSpawnDistance;
         // Enemy shots fly this much past the shooter's range (a target stepping back is still hit)
         static constexpr float ShotOvershoot = 1.3f;
+        // Opportunity attacks (design-combat-system.md 3.2): one per enemy this often at most (a
+        // reaction: a hero running from a chase is not struck at every stride)
+        static constexpr float OpportunitySeconds = 3.0f;
+        // Flanking (design-combat-system.md 7.1): an attacker with another on the far side of its
+        // target (more than ~120 degrees around it) gains this to hit
+        static constexpr std::int32_t FlankAttackBonus = 2;
+        static constexpr float FlankOppositeCosine = -0.5f;
         using WaveScaling = Waves::Scaling;
 
         /// <summary>
@@ -80,10 +87,13 @@ export namespace LB::Engine {
         /// armour class, and a share more hit points (New Game+, design-loot-and-progression.md
         /// 7.3; nothing on a first descent)
         /// </summary>
-        void SetVeterans(std::int32_t attackBonus, std::int32_t armorClass, float extraHitPoints = 0.0f) noexcept {
+        void SetVeterans(std::int32_t attackBonus, std::int32_t armorClass, float extraHitPoints = 0.0f, std::int32_t damageBonus = 0,
+                         float lifeSteal = 0.0f) noexcept {
             veteranAttack_ = attackBonus;
             veteranArmorClass_ = armorClass;
             veteranHitPoints_ = extraHitPoints;
+            veteranDamage_ = damageBonus;
+            veteranLifeSteal_ = lifeSteal;
         }
 
         void Reset() {
@@ -182,7 +192,8 @@ export namespace LB::Engine {
             enemy.facingYaw = facingYaw;
             enemy.maxHitPoints = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(type.hitPoints) * scaling.hitPoints * (1.0f + veteranHitPoints_))));
             enemy.hitPoints = enemy.maxHitPoints;
-            enemy.bonusDamage = scaling.damage;
+            enemy.bonusDamage = scaling.damage + veteranDamage_;
+            enemy.bonusLifeSteal = veteranLifeSteal_;
             enemy.bonusAttack = veteranAttack_;
             enemy.bonusArmorClass = veteranArmorClass_;
             enemy.experience = static_cast<std::int32_t>(std::lround(static_cast<float>(type.experience) * scaling.experience));
@@ -200,7 +211,9 @@ export namespace LB::Engine {
         /// Returns the enemy attacks resolved this step (the engine applies their damage).
         /// </summary>
         std::vector<CombatEvent> Update(float elapsedSeconds, const PlayerTarget& player, std::span<const PlayerTarget> allies = {}) {
-            std::vector<CombatEvent> events;
+            std::vector<CombatEvent> events = std::move(opportunities_);
+            opportunities_.clear();
+            for (auto& enemy : enemies_) enemy.opportunitySeconds = std::max(0.0f, enemy.opportunitySeconds - elapsedSeconds);
             shots_.clear();
             wallHits_.clear();
             bursts_.clear();
@@ -214,11 +227,14 @@ export namespace LB::Engine {
                 const auto& target = TargetOf(enemy, player, allies);
                 switch (behavior_.Update(enemy, elapsedSeconds, target, formation != formations.end() ? formation->second : Formation{})) {
                 case EnemyAction::Strike: {
-                    events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), target.defense), false, nullptr, target.ally });
+                    auto attack = AttackOf(enemy);
+                    if (Flanking(enemy, target.position)) attack.attackBonus += FlankAttackBonus;
+                    events.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(attack, target.defense), false, nullptr, target.ally });
                     // Life drain: its blow heals it
                     const auto& dealt = events.back().result;
-                    if (enemy.definition->lifeSteal > 0.0f && dealt.hit && dealt.finalDamage > 0) {
-                        const auto healed = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(dealt.finalDamage) * enemy.definition->lifeSteal)));
+                    const float lifeSteal = enemy.definition->lifeSteal + enemy.bonusLifeSteal;
+                    if (lifeSteal > 0.0f && dealt.hit && dealt.finalDamage > 0) {
+                        const auto healed = std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(dealt.finalDamage) * lifeSteal)));
                         enemy.hitPoints = std::min(enemy.maxHitPoints, enemy.hitPoints + healed);
                     }
                     break;
@@ -324,6 +340,42 @@ export namespace LB::Engine {
             const auto id = Shoot(attack, from, direction, spell.projectileSpeed, spell.range, std::string{}, bodyRadius);
             projectiles_.Find(id)->spell = payload;
             return id;
+        }
+
+        /// <summary>
+        /// Opportunity attacks (design-combat-system.md 3.2): the hero walked from `from` to `to`,
+        /// and every awake melee enemy not swinging whose reach they left strikes once (its basic attack, at
+        /// most once every OpportunitySeconds, without breaking off what it is doing). The strikes
+        /// come out of the next Update with the other enemy attacks. Dashes and teleports do not
+        /// walk, so they leave freely.
+        /// </summary>
+        void CheckOpportunity(WorldPoint from, WorldPoint to, const Services::Combat::DefenseProfile& defense) {
+            for (auto& enemy : enemies_) {
+                // A reaction: not from one in the middle of its own swing
+                if (!Threatens(enemy) || enemy.state != EnemyState::Chasing || enemy.opportunitySeconds > 0.0f) continue;
+                const float reach = enemy.definition->attackRange + AttackReachSlack;
+                if (Distance(enemy.position, from) > reach || Distance(enemy.position, to) <= reach) continue;
+                enemy.opportunitySeconds = OpportunitySeconds;
+                opportunities_.push_back({ CombatEventKind::EnemyAttack, enemy.id, combat_.ResolveWeaponAttack(AttackOf(enemy), defense), false });
+            }
+        }
+
+        /// <summary>
+        /// Would this enemy's blow at a target be flanking it (another enemy threatening it from
+        /// its far side)? False for an enemy that is gone.
+        /// </summary>
+        [[nodiscard]] bool IsFlanking(std::uint32_t attacker, WorldPoint target) const noexcept {
+            const auto* enemy = FindEnemy(attacker);
+            return enemy && Flanking(*enemy, target);
+        }
+
+        /// <summary>
+        /// Whom an enemy would go after among the player and the allies: an ally's id, 0 for the
+        /// player (and for an enemy that is gone)
+        /// </summary>
+        [[nodiscard]] std::uint32_t TargetOf(std::uint32_t id, const PlayerTarget& player, std::span<const PlayerTarget> allies) const {
+            const auto* enemy = FindEnemy(id);
+            return enemy ? TargetOf(*enemy, player, allies).ally : 0;
         }
 
         /// <summary>
@@ -527,7 +579,9 @@ export namespace LB::Engine {
         }
 
         CombatEvent SpellHit(Enemy& enemy, const SpellPayload& payload) {
-            return Hit(enemy, Services::Combat::CombatService::ResolveSpellHit(payload.rawDamage, payload.spell->damageType, DefenseOf(enemy)), payload.spell);
+            auto result = Services::Combat::CombatService::ResolveSpellHit(payload.rawDamage, payload.spell->damageType, DefenseOf(enemy));
+            result.critical = payload.critical;
+            return Hit(enemy, result, payload.spell);
         }
 
         // The player's spell bursting: every targetable enemy whose body is within the radius
@@ -561,8 +615,42 @@ export namespace LB::Engine {
             shots_.push_back(enemy.position);
         }
 
-        // Whom an enemy goes after: the nearest of the player and their allies still standing
+        // An enemy that can strike whoever is within its reach now: awake, melee, free to act
+        static bool Threatens(const Enemy& enemy) noexcept {
+            return (enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking) && !enemy.definition->IsRanged()
+                && !enemy.statuses.PreventsActions();
+        }
+
+        // Another enemy threatens the target from its far side (design-combat-system.md 7.1)
+        [[nodiscard]] bool Flanking(const Enemy& attacker, WorldPoint target) const noexcept {
+            const float ax = attacker.position.x - target.x;
+            const float ay = attacker.position.y - target.y;
+            const float a = std::hypot(ax, ay);
+            if (a < 1e-4f) return false;
+            for (const auto& other : enemies_) {
+                if (other.id == attacker.id || !Threatens(other)) continue;
+                const float ox = other.position.x - target.x;
+                const float oy = other.position.y - target.y;
+                const float o = std::hypot(ox, oy);
+                if (o < 1e-4f || o > other.definition->attackRange + AttackReachSlack) continue;
+                if ((ax * ox + ay * oy) / (a * o) <= FlankOppositeCosine) return true;
+            }
+            return false;
+        }
+
+        // Whom an enemy goes after: the nearest of the player and their allies still standing; a
+        // shooter, the most wounded of those within its range (focus fire), else the nearest
         static const PlayerTarget& TargetOf(const Enemy& enemy, const PlayerTarget& player, std::span<const PlayerTarget> allies) {
+            if (enemy.definition->IsRanged()) {
+                const PlayerTarget* weakest = nullptr;
+                const auto consider = [&](const PlayerTarget& body) {
+                    if (!body.alive || Distance(enemy.position, body.position) > enemy.definition->attackRange) return;
+                    if (!weakest || body.health < weakest->health) weakest = &body;
+                };
+                consider(player);
+                for (const auto& ally : allies) consider(ally);
+                if (weakest) return *weakest;
+            }
             const PlayerTarget* best = &player;
             float bestDistance = player.alive ? Distance(enemy.position, player.position) : std::numeric_limits<float>::infinity();
             for (const auto& ally : allies) {
@@ -711,6 +799,8 @@ export namespace LB::Engine {
         std::int32_t veteranAttack_{0};
         std::int32_t veteranArmorClass_{0};
         float veteranHitPoints_{0.0f};
+        std::int32_t veteranDamage_{0};
+        float veteranLifeSteal_{0.0f};
         EnemyBehavior behavior_;
         ProjectileSet projectiles_;
         std::vector<WorldPoint> shots_;
@@ -724,6 +814,7 @@ export namespace LB::Engine {
         std::vector<std::uint32_t> phaseChanges_;
         const Content::ContentDatabase* content_{nullptr};
         std::vector<SpellBurst> bursts_;
+        std::vector<CombatEvent> opportunities_;   // strikes at the hero walking away, for the next Update
         const WorldMap* world_{nullptr};
         std::vector<Enemy> enemies_;
         std::uint32_t nextId_{1};

@@ -587,7 +587,22 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] ViewArea GetViewArea() const noexcept {
             const auto focus = session_->camera.GetFocus();
-            return { { focus.x, focus.y }, session_->camera.GetDistance() * ViewDistanceFactor + ViewMargin };
+            ViewArea view{ { focus.x, focus.y }, session_->camera.GetDistance() * ViewDistanceFactor + ViewMargin };
+            // The frustum's footprint: the screen's corners on the floor (all of them, or the circle alone)
+            std::int32_t width = 0;
+            std::int32_t height = 0;
+            renderingSystem_.GetScreenSize(width, height);
+            const auto camera = session_->camera.GetView();
+            const std::array<std::pair<float, float>, 4> screen{ { { 0.0f, 0.0f }, { static_cast<float>(width), 0.0f },
+                                                                   { static_cast<float>(width), static_cast<float>(height) }, { 0.0f, static_cast<float>(height) } } };
+            for (std::size_t i = 0; i < screen.size(); ++i) {
+                const auto floor = Systems::Rendering::IsometricCamera::ScreenToFloor(camera, screen[i].first, screen[i].second, static_cast<float>(width), static_cast<float>(height));
+                if (!floor) return view;
+                view.corners[i] = { floor->x, floor->z };
+            }
+            view.framed = true;
+            view.padding = ViewMargin;
+            return view;
         }
 
         /// <summary>
@@ -643,6 +658,13 @@ export namespace LB::Engine {
         /// the first floor of a new Below, one cycle stronger (the victory page's Descend Again)
         /// </summary>
         void DescendAgain();
+
+        /// <summary>
+        /// New Game+'s mutators (mutators.json, design-loot-and-progression.md 7.3): one more each
+        /// cycle, drawn from the run's seed and kept; they change the enemies and the gold on top of
+        /// the cycle's own strength. Empty on the first descent.
+        /// </summary>
+        [[nodiscard]] std::vector<const Content::MutatorDefinition*> GetMutators() const;
         [[nodiscard]] WorldPoint GetWayUp() const { return session_->world.RoomCenter(session_->world.Layout().exitRoom); }
 
         /// <summary>
@@ -690,6 +712,14 @@ export namespace LB::Engine {
         [[nodiscard]] ItemRef ForTier(ItemRef item, std::int32_t tier) const;
 
         /// <summary>
+        /// Smart loot: a weapon or armour piece the hero's class cannot use becomes, at
+        /// UsableLootChance, one it can of the same tier (armour of the same slot), of what it is
+        /// good with when there is any (no attack penalty, no heavier armour penalties); itself otherwise.
+        /// Drops and the merchant's stock go through it.
+        /// </summary>
+        ItemRef ForClass(ItemRef item);
+
+        /// <summary>
         /// A rolled item's level (the depth it dropped at); 0 for anything else
         /// </summary>
         [[nodiscard]] ItemRef BaseItem(ItemRef item) const noexcept { return session_->rolls.BaseOf(item); }   // a rolled item's weapon or armour
@@ -727,6 +757,17 @@ export namespace LB::Engine {
         /// </summary>
         bool BuyFromMerchant(std::size_t index);
         bool SellToMerchant(ItemRef item);
+
+        /// <summary>
+        /// Retraining at the merchant (game-design.md, respec options): the attribute points the
+        /// player assigned come back to spend again, for RetrainGoldPerLevel a level; forgetting
+        /// the path (the full respec) lets the hero choose another, for ForgetPathGoldPerLevel a
+        /// level. False when it cannot be done (not by the merchant, nothing to undo, too little gold).
+        /// </summary>
+        [[nodiscard]] std::int32_t RetrainCost() const;
+        [[nodiscard]] std::int32_t ForgetPathCost() const;
+        bool Retrain();
+        bool ForgetPath();
 
         /// <summary>
         /// The enemy the orders would be about: under the mouse, or picked with the d-pad while paused
@@ -905,7 +946,11 @@ export namespace LB::Engine {
         /// Wound the hero (tools and tests; not below 1 hit point)
         /// </summary>
         void DamagePlayer(std::int32_t amount) {
-            if (const auto* player = PlayerCharacter()) session_->characterService.DamageCharacter(*session_->playerId, std::min(amount, player->GetCurrentHitPoints() - 1));
+            const auto* player = PlayerCharacter();
+            if (!player) return;
+            const auto dealt = std::min(amount, player->GetCurrentHitPoints() - 1);
+            session_->characterService.DamageCharacter(*session_->playerId, dealt);
+            InterruptCast(dealt);   // a blow: a heavy one breaks a cast
         }
 
         /// <summary>
@@ -1047,6 +1092,9 @@ export namespace LB::Engine {
         void StartCast(std::size_t slot, std::optional<std::uint32_t> target = std::nullopt);
         void ReleaseCast();
         void CancelCast();
+        void InterruptCast(std::int32_t damage);
+        void ChooseMutators();
+        [[nodiscard]] static std::string MutatorNames(const std::vector<const Content::MutatorDefinition*>& mutators, std::string_view separator);
         void UpdatePlayerStatuses(float elapsedSeconds);
         void ApplySpellStatusesToPlayer(const Content::SpellDefinition& spell);
         const Content::ClassDefinition* PlayerClassDefinition() const;
@@ -1296,6 +1344,7 @@ export namespace LB::Engine {
             float seconds{0.0f};
             std::optional<std::uint32_t> target;
             float releaseSeconds{0.0f};                       // the release pose still playing
+            float castSeconds{0.0f};                          // the spell's cast time, slowed by armour (design-armour-system.md 4.3)
         };
 
         struct Session {
@@ -1357,6 +1406,7 @@ export namespace LB::Engine {
             RunStats stats;
             bool onWayUp{false};                     // standing in the way up (the victory page opens on stepping in)
             std::int32_t cycle{0};                   // New Game+ cycles (0: the first descent)
+            std::vector<std::string> mutators;       // one mutators.json key a cycle (GetMutators)
             bool playing{false};                     // a run being played (not the one behind the title screen)
             float savedNoticeSeconds{0.0f};
             Fanfare fanfare;                         // a level or a path, across the screen

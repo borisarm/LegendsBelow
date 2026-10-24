@@ -43,6 +43,7 @@ TEST(PathTests, FindPath_GoesThroughTheCorridor) {
 TEST(PathTests, AnOrderToAnotherRoom_WalksAroundTheWalls) {
     GameEngine engine;
     InitializeDungeon(engine);
+    engine.GrantExperience(1600);   // level 5: the rooms on the way rise, and a new hero walking past them can fall
     engine.Tick(OneSixtieth);
     const auto& layout = engine.GetWorld().Layout();
     const auto goal = engine.GetWorld().RoomCenter(layout.exitRoom);

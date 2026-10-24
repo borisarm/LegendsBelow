@@ -94,6 +94,8 @@ export namespace LB::Engine {
         float lungeSeconds{0.0f};           // > 0: rushing at the player
         float lungeCooldown{0.0f};
         WorldPoint lungeDirection{};
+        float opportunitySeconds{0.0f};     // until it can strike one walking away again (design-combat-system.md 3.2)
+        float bonusLifeSteal{0.0f};         // a New Game+ mutator's, on top of its kind's lifeSteal
 
         [[nodiscard]] bool IsDead() const noexcept { return state == EnemyState::Dead; }
 
@@ -142,6 +144,7 @@ export namespace LB::Engine {
         Services::Combat::DefenseProfile defense{};
         float radius{0.375f};               // the body projectiles hit (tiles)
         std::uint32_t ally{0};              // an ally's id (0: the player)
+        float health{1.0f};                 // the share of its hit points left: shooters pick the most wounded
     };
 
     /// <summary>

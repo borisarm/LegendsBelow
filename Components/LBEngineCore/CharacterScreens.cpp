@@ -294,7 +294,9 @@ namespace LB::Engine {
             session_->pathChoice.Open();
             break;
         case ScreenAction::Buy:
-        case ScreenAction::Sell: break;
+        case ScreenAction::Sell:
+        case ScreenAction::Retrain:
+        case ScreenAction::ForgetPath: break;
         case ScreenAction::None: break;
         }
         session_->characterScreen.SetRows(BuildScreenRows());

@@ -1,5 +1,6 @@
 // NewGamePlusTests.cpp - LB.Engine tests: New Game+ (design-loot-and-progression.md 7.3): the same
-// hero down a new Below after a victory, its enemies stronger and its finds richer by the cycle
+// hero down a new Below after a victory, its enemies stronger and its finds richer by the cycle,
+// and a mutator more each cycle
 #include "pch.h"
 #include "EngineTestHelpers.h"
 
@@ -23,6 +24,26 @@ namespace {
         EXPECT_EQ(engine.GetMenu().Selected()->value, "New Game+1");
         TapKey(engine, Keys::Enter);
         RunSteps(engine, 2);
+    }
+
+    // A cycle's mutators by key (each engine has its own content)
+    std::vector<std::string> MutatorKeys(const GameEngine& engine) {
+        std::vector<std::string> keys;
+        for (const auto* mutator : engine.GetMutators()) keys.push_back(mutator->key);
+        return keys;
+    }
+
+    // What a cycle's mutators add up to
+    LB::Content::MutatorDefinition Sum(const GameEngine& engine) {
+        LB::Content::MutatorDefinition sum{};
+        for (const auto* mutator : engine.GetMutators()) {
+            sum.enemyAttackBonus += mutator->enemyAttackBonus;
+            sum.enemyArmorClass += mutator->enemyArmorClass;
+            sum.enemyDamageBonus += mutator->enemyDamageBonus;
+            sum.enemyLifeSteal += mutator->enemyLifeSteal;
+            sum.extraEnemies += mutator->extraEnemies;
+        }
+        return sum;
     }
 
     // The first enemy raised on walking into the floor's first combat room
@@ -61,8 +82,10 @@ TEST(NewGamePlusTests, Enemies_AreStrongerInACycle) {
     EXPECT_GT(strong->maxHitPoints, weak->maxHitPoints * 2);
     EXPECT_GT(strong->bonusDamage, weak->bonusDamage);
     EXPECT_EQ(weak->bonusAttack, 0);   // veterans: they hit truer and are harder to hit
-    EXPECT_EQ(strong->bonusAttack, GameEngine::NewGamePlusAttackBonus);
-    EXPECT_EQ(strong->bonusArmorClass, GameEngine::NewGamePlusArmorClass);
+    const auto mutators = Sum(second);   // and the cycle's mutator on top
+    EXPECT_EQ(strong->bonusAttack, GameEngine::NewGamePlusAttackBonus + mutators.enemyAttackBonus);
+    EXPECT_EQ(strong->bonusArmorClass, GameEngine::NewGamePlusArmorClass + mutators.enemyArmorClass);
+    EXPECT_FLOAT_EQ(strong->bonusLifeSteal, mutators.enemyLifeSteal);
 }
 
 TEST(NewGamePlusTests, Finds_AreDeeperInACycle) {
@@ -100,7 +123,11 @@ TEST(NewGamePlusTests, DescendAgain_TheSameHeroDownANewBelow) {
     EXPECT_NE(engine.GetWorld().Layout().cells, fresh.GetWorld().Layout().cells);   // other floors
     ASSERT_NE(engine.GetFanfare().Current(), nullptr);
     EXPECT_EQ(engine.GetFanfare().Current()->title, "THE BELOW STIRS");
-    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [](const auto& t) { return t.text == "DEPTH 1 - NEW GAME+1"; }));
+    ASSERT_EQ(engine.GetMutators().size(), 1u);
+    auto name = engine.GetMutators()[0]->name;
+    std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    EXPECT_TRUE(std::ranges::any_of(engine.GetRendering().GetQueuedText(), [&](const auto& t) { return t.text == "DEPTH 1 - NEW GAME+1: " + name; }));
+    EXPECT_TRUE(std::ranges::any_of(engine.GetFanfare().Current()->lines, [&](const std::string& line) { return line.starts_with(engine.GetMutators()[0]->name); }));
 }
 
 TEST(NewGamePlusTests, TheCycle_IsSavedAndLoaded) {
@@ -120,4 +147,46 @@ TEST(NewGamePlusTests, TheCycle_IsSavedAndLoaded) {
     EXPECT_EQ(loaded.GetDepth(), 2);
     EXPECT_EQ(loaded.ChallengeDepth(), 2 + GameEngine::FinalDepth);
     EXPECT_EQ(loaded.GetWorld().Layout().cells, cells);
+    EXPECT_EQ(MutatorKeys(loaded), MutatorKeys(engine));   // the cycle's mutator too
+}
+
+// A mutator more each cycle, never the same twice, drawn from the run's seed
+TEST(NewGamePlusTests, Mutators_OneMoreEachCycle) {
+    GameEngine first, second, third, again;
+    ASSERT_TRUE(first.Initialize(nullptr, 800, 600, DungeonOptions(1)));
+    ASSERT_TRUE(second.Initialize(nullptr, 800, 600, DungeonOptions(1, 1)));
+    ASSERT_TRUE(third.Initialize(nullptr, 800, 600, DungeonOptions(1, 2)));
+    ASSERT_TRUE(again.Initialize(nullptr, 800, 600, DungeonOptions(1, 2)));
+
+    EXPECT_TRUE(first.GetMutators().empty());
+    ASSERT_EQ(second.GetMutators().size(), 1u);
+    ASSERT_EQ(third.GetMutators().size(), 2u);
+    EXPECT_NE(third.GetMutators()[0], third.GetMutators()[1]);
+    EXPECT_EQ(MutatorKeys(third), MutatorKeys(again));
+}
+
+// Teeming: more of a room's light enemies
+TEST(NewGamePlusTests, Teeming_FillsTheRoomsFuller) {
+    const auto teeming = [](std::uint32_t seed) {
+        GameEngine engine;
+        EngineOptions options = DungeonOptions(2, 1);
+        options.randomSeed = seed;
+        if (!engine.Initialize(nullptr, 800, 600, options)) return false;
+        return !engine.GetMutators().empty() && engine.GetMutators()[0]->extraEnemies > 0;
+    };
+    std::uint32_t seed = 1;
+    while (seed < 200 && !teeming(seed)) ++seed;
+    ASSERT_LT(seed, 200u) << "no seed draws a mutator with extra enemies";
+
+    GameEngine plain, full;
+    EngineOptions options = DungeonOptions(2, 1);
+    options.randomSeed = seed;
+    ASSERT_TRUE(full.Initialize(nullptr, 800, 600, options));
+    ASSERT_NE(FirstOfACombatRoom(full), nullptr);
+    const auto many = full.GetEncounter().GetEnemies().size();
+    options.startCycle = 0;
+    ASSERT_TRUE(plain.Initialize(nullptr, 800, 600, options));
+    ASSERT_NE(FirstOfACombatRoom(plain), nullptr);
+    const auto few = plain.GetEncounter().GetEnemies().size();
+    EXPECT_EQ(many, few + static_cast<std::size_t>(Sum(full).extraEnemies));
 }

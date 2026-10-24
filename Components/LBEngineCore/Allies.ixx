@@ -344,7 +344,10 @@ export namespace LB::Engine {
         /// </summary>
         [[nodiscard]] std::vector<PlayerTarget> Targets() const {
             std::vector<PlayerTarget> targets;
-            for (const auto& ally : allies_) targets.push_back({ ally.position, !ally.IsDown(), ally.Defense(), Radius, ally.id });
+            for (const auto& ally : allies_) {
+                targets.push_back({ ally.position, !ally.IsDown(), ally.Defense(), Radius, ally.id,
+                                    static_cast<float>(ally.hitPoints) / static_cast<float>(std::max(1, ally.maxHitPoints)) });
+            }
             return targets;
         }
 

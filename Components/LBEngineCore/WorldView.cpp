@@ -463,8 +463,8 @@ namespace LB::Engine {
                 }
                 if (session_->casting.active) {
                     hud.castName = session_->casting.spell->name;
-                    hud.castFraction = session_->casting.spell->castTimeSeconds > 0.0f
-                        ? std::clamp(session_->casting.seconds / session_->casting.spell->castTimeSeconds, 0.0f, 1.0f) : 1.0f;
+                    hud.castFraction = session_->casting.castSeconds > 0.0f
+                        ? std::clamp(session_->casting.seconds / session_->casting.castSeconds, 0.0f, 1.0f) : 1.0f;
                 }
             }
         }
@@ -521,7 +521,11 @@ namespace LB::Engine {
         if (session_->depth > 0) {
             hud.banner = session_->restFloor ? std::format("DEPTH {} - RESTING PLACE", session_->depth)
                        : IsFinalFloor() ? std::format("DEPTH {} - {}", session_->depth, FinalFloorName) : std::format("DEPTH {}", session_->depth);
-            if (session_->cycle > 0) hud.banner += std::format(" - NEW GAME+{}", session_->cycle);
+            if (session_->cycle > 0) {
+                auto names = MutatorNames(GetMutators(), ", ");
+                std::ranges::transform(names, names.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+                hud.banner += std::format(" - NEW GAME+{}{}", session_->cycle, names.empty() ? std::string{} : ": " + names);
+            }
         }
         else if (session_->encounter.GetWave() > 0) hud.banner = std::format("WAVE {}", session_->encounter.GetWave());
 

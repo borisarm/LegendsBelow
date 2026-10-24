@@ -104,3 +104,61 @@ TEST(TacticsTests, Slam_MissesWhoeverStepsOut) {
 
     EXPECT_EQ(PlayerHitPoints(engine), before);
 }
+
+// Opportunity attacks (design-combat-system.md 3.2): walking out of an awake melee enemy's reach
+// draws one blow, at most once a second; stepping about within it, or away from one asleep, does not
+TEST(TacticsTests, WalkingAway_DrawsAnOpportunityAttack) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto id = encounter.Spawn(*content.warrior, { 1.0f, 0.0f }, FacingWest, false);
+    const auto attacks = [&](const std::vector<CombatEvent>& events) {
+        return std::ranges::count_if(events, [&](const CombatEvent& event) { return event.kind == CombatEventKind::EnemyAttack && event.enemyId == id; });
+    };
+    // The hero ends each step out of its reach (it chases, not swings); the walks checked start inside it
+    const auto player = PlayerAt(-1.5f, 0.0f);
+    const WorldPoint inside{ 0.2f, 0.0f };
+    encounter.CheckOpportunity(inside, player.position, player.defense);
+    EXPECT_EQ(attacks(encounter.Update(1.0f / 60.0f, player)), 0);   // it had not noticed the hero
+    ASSERT_EQ(encounter.FindEnemy(id)->state, EnemyState::Chasing);
+
+    encounter.CheckOpportunity(inside, { 0.4f, 0.3f }, player.defense);   // still in reach: nothing
+    encounter.CheckOpportunity(inside, player.position, player.defense);  // out of it: one blow
+    EXPECT_EQ(attacks(encounter.Update(1.0f / 60.0f, player)), 1);
+
+    encounter.CheckOpportunity(inside, player.position, player.defense);  // too soon again
+    EXPECT_EQ(attacks(encounter.Update(1.0f / 60.0f, player)), 0);
+}
+
+// Flanking (design-combat-system.md 7.1): a second enemy on the far side of the target
+TEST(TacticsTests, EnemiesOnBothSides_FlankTheirTarget) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto east = encounter.Spawn(*content.warrior, { 1.0f, 0.0f }, FacingWest, false);
+    const auto west = encounter.Spawn(*content.warrior, { -1.0f, 0.1f }, FacingWest, false);
+    const auto north = encounter.Spawn(*content.warrior, { 0.0f, -1.0f }, FacingWest, false);
+    encounter.Update(1.0f / 60.0f, PlayerAt(0.0f, 0.0f));   // they notice the hero
+
+    EXPECT_TRUE(encounter.IsFlanking(east, { 0.0f, 0.0f }));
+    EXPECT_TRUE(encounter.IsFlanking(west, { 0.0f, 0.0f }));
+    // North has nobody to the south; east and west stand beside it, not opposite
+    EXPECT_FALSE(encounter.IsFlanking(north, { 0.0f, 0.0f }));
+    EXPECT_FALSE(encounter.IsFlanking(east, { 5.0f, 5.0f }));   // nobody threatens that spot
+}
+
+// Focus fire: a shooter aims at the most wounded within its range; a fighter at the nearest
+TEST(TacticsTests, Shooters_FocusTheMostWounded) {
+    EncounterContent content;
+    auto encounter = MakeEncounter(content);
+    const auto shooter = encounter.Spawn(*content.crossbowman, { 4.0f, 0.0f }, FacingWest, false);
+    const auto fighter = encounter.Spawn(*content.warrior, { 1.0f, 0.0f }, FacingWest, false);
+    auto player = PlayerAt(0.0f, 0.0f);
+    PlayerTarget ally = PlayerAt(0.0f, 1.0f);
+    ally.ally = 7;
+    ally.health = 0.3f;
+    const std::array allies{ ally };
+
+    EXPECT_EQ(encounter.TargetOf(shooter, player, allies), 7u);   // the wounded ally
+    EXPECT_EQ(encounter.TargetOf(fighter, player, allies), 0u);   // the nearer hero
+    player.health = 0.2f;
+    EXPECT_EQ(encounter.TargetOf(shooter, player, allies), 0u);
+}

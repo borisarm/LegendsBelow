@@ -145,7 +145,7 @@ TEST(GameEngineDungeonTests, Walls_FollowTheFloor) {
     }
     EXPECT_EQ(segments, edges);
     EXPECT_EQ(DrawsOf(engine, "wall").size(), inView);   // those the camera can see are drawn
-    EXPECT_GT(DrawsOf(engine, "pillar").size(), 4u);
+    EXPECT_FALSE(DrawsOf(engine, "pillar").empty());   // (those in view: the frustum leaves out the rest)
     EXPECT_EQ(DrawsOf(engine, "trapdoor").size(), 1u);
 }
 
@@ -161,6 +161,33 @@ TEST(GameEngineDungeonTests, Culling_DrawsOnlyWhatTheCameraCanSee) {
     for (const auto* name : { "wall", "tileBrickB_small", "tileBrickA_small" }) {
         for (const auto& draw : DrawsOf(engine, name)) EXPECT_TRUE(view.Contains({ draw.position.x, draw.position.z }, 3.0f)) << name;
     }
+}
+
+// The frustum's footprint: inside the generous circle, what is off screen past the padding is not in view
+TEST(GameEngineDungeonTests, ViewArea_FramesTheScreen) {
+    ViewArea view{ { 0.0f, 0.0f }, 100.0f };
+    view.corners = { WorldPoint{ -5.0f, -5.0f }, WorldPoint{ 5.0f, -5.0f }, WorldPoint{ 5.0f, 5.0f }, WorldPoint{ -5.0f, 5.0f } };
+    view.framed = true;
+    view.padding = 2.0f;
+    EXPECT_TRUE(view.Contains({ 0.0f, 0.0f }));
+    EXPECT_TRUE(view.Contains({ 6.5f, 0.0f }));          // within the padding
+    EXPECT_FALSE(view.Contains({ 8.0f, 0.0f }));         // past it, though in the circle
+    EXPECT_TRUE(view.Contains({ 8.0f, 0.0f }, 1.5f));    // something wide enough reaches in
+    std::ranges::reverse(view.corners);                   // either winding
+    EXPECT_FALSE(view.Contains({ 0.0f, -8.0f }));
+
+    GameEngine engine;
+    InitializeDungeon(engine);
+    engine.Tick(OneSixtieth);
+    const auto seen = engine.GetViewArea();
+    ASSERT_TRUE(seen.framed);   // the default camera's corners come down to the floor
+    EXPECT_TRUE(seen.Contains(engine.GetPlayerPosition()));
+    // Straight behind the camera, inside the circle but well below the bottom of the screen
+    const auto eye = engine.GetCamera().GetView().eye;
+    const auto focus = engine.GetCamera().GetFocus();
+    const WorldPoint back{ focus.x + (eye.x - focus.x) * 2.0f, focus.y + (eye.z - focus.y) * 2.0f };
+    ASSERT_LE(Encounter::Distance(back, seen.center), seen.radius);   // the circle alone would draw it
+    EXPECT_FALSE(seen.Contains(back));
 }
 
 TEST(GameEngineDungeonTests, Descend_NextFloorHealedAtTheEntrance) {
