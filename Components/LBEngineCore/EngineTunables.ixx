@@ -287,7 +287,8 @@ export namespace LB::Engine {
         static constexpr std::string_view WaystoneModel = "floor_tile_big_grate.gltf"; // a grate on the floor, glowing once awake
         static constexpr float LeverReach = 1.4f;              // tiles: Interact pulls a lever this close
         static constexpr float WaystoneReach = 1.3f;           // ... travels by a waystone, or (the far one) awakens it
-        static constexpr float WaystoneQuietRadius = 8.0f;     // no travel with an enemy awake this close
+        static constexpr float WaystoneQuietRadius = 8.0f;     // no travel with an enemy awake this close (nor a Portal)
+        static constexpr float PortalReach = 1.3f;             // Interact this close to the portal goes back through it
         static constexpr float GateReach = 1.6f;          // the hero this close to a gate tries it
         static constexpr float GateSinkSeconds = 0.8f;     // an opened gate sinks into the floor
         static constexpr float WallCrumbleSeconds = 0.6f;  // a broken secret wall falls in on itself

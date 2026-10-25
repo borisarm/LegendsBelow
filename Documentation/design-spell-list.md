@@ -54,13 +54,13 @@ This file lists example spells by school and level. Values are design placeholde
 
 **Level 2**
 - Blink – short-range teleport.
-- Featherfall – slow falling, reduces fall damage.
+- Featherfall – slow falling, reduces fall damage. *(In the game: floats over spike traps; nothing falls.)*
 
 **Level 3**
 - Greater Blink – longer-range teleport with brief invulnerability.
 
 **Level 4**
-- Portal – create temporary two-way portal (late-game unlock).
+- Portal – create temporary two-way portal (late-game unlock). *(In the game: to the last resting place above, and back.)*
 
 ---
 

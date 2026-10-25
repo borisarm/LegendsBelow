@@ -178,7 +178,10 @@ namespace LB::Engine {
             data["player.x"] = std::format("{}", session_->playerPosition.x);
             data["player.y"] = std::format("{}", session_->playerPosition.y);
             WriteProgress(data);
-            if (session_->dungeonMode) WriteFloor(data);
+            if (session_->dungeonMode) {
+                WriteFloor(data);
+                WritePortal(data);
+            }
         }
 
         return persistenceSystem_.SaveGame(slotIndex, metadata, data).success;
@@ -233,6 +236,7 @@ namespace LB::Engine {
         session_->gameTimeSeconds = gameTime;
         if (session_->playerId && session_->dungeonMode) {
             ReadFloor(result.data);      // the floor first: the position is on it
+            ReadPortal(result.data);     // and the way back, from a resting place
         }
         const WorldPoint saved{ static_cast<float>(playerX), static_cast<float>(playerY) };
         if (session_->playerId && hasPlayerPosition && session_->world.CircleFits(saved, PlayerRadius)) {

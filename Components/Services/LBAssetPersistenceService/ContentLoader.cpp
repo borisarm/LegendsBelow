@@ -945,6 +945,7 @@ namespace LB::Content {
             reader.ReadInt("attackBonus", status.attackBonus, false);
             reader.ReadFloat("damageTakenMultiplier", status.damageTakenMultiplier, false);
             reader.ReadFloat("damageDealtMultiplier", status.damageDealtMultiplier, false);
+            reader.ReadBool("ignoresTraps", status.ignoresTraps);
             if (status.damageDealtMultiplier < 0.0f) reader.Error("'damageDealtMultiplier' must not be negative");
 
             if (status.durationSeconds <= 0.0f) reader.Error("'durationSeconds' must be positive");

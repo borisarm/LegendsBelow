@@ -97,6 +97,10 @@ export namespace LB::Engine {
             return std::max(1, static_cast<std::int32_t>(std::lround(static_cast<float>(damage) * DamageTakenMultiplier())));
         }
 
+        [[nodiscard]] bool IgnoresTraps() const noexcept {
+            return std::ranges::any_of(active_, [](const ActiveStatus& status) { return status.definition->ignoresTraps; });
+        }
+
         [[nodiscard]] bool PreventsActions() const noexcept {
             return std::ranges::any_of(active_, [](const ActiveStatus& status) { return status.definition->preventsActions; });
         }

@@ -999,7 +999,10 @@ TEST_F(ShippedContentTests, Mage_HasASpellBarManaRegenAndAKit) {
     EXPECT_EQ(warrior->spellBar.size(), 3u);
     EXPECT_EQ(warrior->specializations.size(), 2u);
     EXPECT_EQ(warrior->startingWeapon, "weapon_sword_rusted_shortsword_t1");
-    EXPECT_EQ(content_.GetStatuses().size(), 15u);   // with the blessing, the ward, and the necromancer's three curses
+    EXPECT_EQ(content_.GetStatuses().size(), 16u);   // with the blessing, the ward, featherfall, and the necromancer's three curses
+    EXPECT_TRUE(content_.FindStatus("status_featherfall")->ignoresTraps);
+    EXPECT_TRUE(content_.FindSpell("spell_utility_featherfall_l2")->IsCastable());
+    EXPECT_TRUE(content_.FindSpell("spell_utility_portal_l4")->IsCastable());
 }
 
 TEST_F(ShippedContentTests, GolemAndNecromancer) {

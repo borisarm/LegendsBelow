@@ -177,6 +177,7 @@ namespace LB::Engine {
     void GameEngine::DescendAgain() {
         if (!session_->dungeonMode || !session_->playerId) return;
         ++session_->cycle;
+        session_->portal.reset();
         session_->baseSeed = FloorSeed(session_->baseSeed, 1000 + session_->cycle);   // a new Below: other floors
         ChooseMutators();
         session_->bounty = {};
@@ -225,6 +226,10 @@ namespace LB::Engine {
 
     void GameEngine::Descend() {
         if (!session_->dungeonMode || !session_->playerId) return;
+        if (session_->portal && session_->restFloor) {
+            ReturnThroughPortal();   // the floors between are behind the hero: the way down is the way back
+            return;
+        }
         PlaySound(GameSound::Descend);
         StartFloor(session_->depth + 1);
         session_->characterService.RestCharacter(*session_->playerId);   // a breather on the stairs down
@@ -324,13 +329,14 @@ namespace LB::Engine {
 
     // Chests open when the player steps up to them; the trapdoor of a cleared exit room leads down
     // Spikes rising (heard nearby) and striking the player on their cell: 1d6 + half the depth,
-    // piercing, through armour
+    // piercing, through armour; Featherfall floats over them (a status that ignoresTraps)
     void GameEngine::UpdateTraps() {
         std::vector<std::pair<std::uint32_t, WorldPoint>> allies;
         for (const auto& ally : session_->allies.Allies()) {
-            if (!ally.IsDown()) allies.emplace_back(ally.id, ally.position);
+            if (!ally.IsDown() && !ally.statuses.IgnoresTraps()) allies.emplace_back(ally.id, ally.position);
         }
-        const auto step = session_->decor.UpdateTraps(session_->gameTimeSeconds, session_->playerPosition, PlayerRadius, IsPlayerAlive(), allies);
+        const bool exposed = IsPlayerAlive() && !session_->playerStatuses.IgnoresTraps();
+        const auto step = session_->decor.UpdateTraps(session_->gameTimeSeconds, session_->playerPosition, PlayerRadius, exposed, allies);
         for (const auto at : step.rose) PlaySound(GameSound::Spikes, at);
         for (const auto id : step.othersStruck) {
             if (const auto* ally = session_->allies.Find(id)) {
@@ -873,6 +879,10 @@ namespace LB::Engine {
 
         // Levers, waystones, and candles: Interact acts on the nearest within reach
         if (!inputSystem_.IsActionTriggered(std::string(InteractAction))) return;
+        if (session_->portal && session_->restFloor && Encounter::Distance(session_->portal->gate, hero) <= PortalReach) {
+            ReturnThroughPortal();
+            return;
+        }
         for (std::size_t l = 0; l < features.Levers().size(); ++l) {
             const auto& lever = features.Levers()[l];
             if (lever.pulled || Encounter::Distance(lever.position, hero) > LeverReach) continue;
@@ -940,6 +950,87 @@ namespace LB::Engine {
         PlaySound(GameSound::Descend, at);
         session_->events.Publish(FeatureActivatedEvent{ FeatureKind::Waystone, at });
         return true;
+    }
+
+    std::string GameEngine::PortalBlocker() const {
+        if (!session_->dungeonMode || !session_->playerId || !IsPlayerAlive()) return "NOWHERE TO GO";
+        if (session_->restFloor) return "YOU ARE AT REST";
+        if (!RestDepthAbove(session_->depth)) return "NO RESTING PLACE ABOVE";
+        const bool threatened = std::ranges::any_of(session_->encounter.GetEnemies(), [&](const Enemy& enemy) {
+            return (enemy.state == EnemyState::Chasing || enemy.state == EnemyState::Attacking) && Encounter::Distance(enemy.position, session_->playerPosition) <= WaystoneQuietRadius;
+        });
+        return threatened ? "ENEMIES ARE NEAR" : std::string{};
+    }
+
+    bool GameEngine::OpenPortal() {
+        if (!PortalBlocker().empty()) return false;
+        Session::PortalReturn back;
+        back.depth = session_->depth;
+        WriteFloor(back.floor);
+        back.position = session_->playerPosition;
+        back.groundItems = session_->groundItems;
+        const auto from = session_->playerPosition;
+        session_->effects.Emit(ParticleEffect::LevelUp, { from.x, 0.1f, from.y }, 40, 1.0f);
+        PlaySound(GameSound::Descend, from);
+
+        StartFloor(*RestDepthAbove(session_->depth));
+        // The portal stands in the entrance, before the hero (clear of the merchant and the shrine)
+        const auto center = session_->world.RoomCenter(session_->world.Layout().entranceRoom);
+        back.gate = { center.x, center.y + 1.6f };
+        if (!session_->world.CircleFits(back.gate, 0.5f)) back.gate = { center.x, center.y + 0.8f };
+        session_->portal = std::move(back);
+        session_->combatText.Add("THE PORTAL HOLDS", { center.x, 1.6f, center.y }, { 0.75f, 0.55f, 1.0f, 1.0f }, 3.0f);
+        session_->effects.Emit(ParticleEffect::LevelUp, { center.x, 0.1f, center.y }, 40, 1.0f);
+        session_->events.Publish(FeatureActivatedEvent{ FeatureKind::Portal, session_->portal->gate });
+        AutoSave();
+        return true;
+    }
+
+    bool GameEngine::ReturnThroughPortal() {
+        if (!session_->portal || !session_->restFloor || !IsPlayerAlive()) return false;
+        auto back = std::move(*session_->portal);
+        session_->portal.reset();
+        PlaySound(GameSound::Descend, session_->playerPosition);
+        ReadFloor(back.floor);   // the floor as it was left (StartFloor, then its cleared rooms, gates, ...)
+        session_->groundItems = std::move(back.groundItems);
+        if (session_->world.CircleFits(back.position, PlayerRadius)) {
+            session_->playerPosition = back.position;
+            session_->characterService.PlaceCharacter(*session_->playerId, ToTile(back.position));
+            session_->camera.SnapTo({ back.position.x, back.position.y });
+            session_->allies.PlaceAround(session_->world, back.position, false);
+        }
+        session_->effects.Emit(ParticleEffect::LevelUp, { session_->playerPosition.x, 0.1f, session_->playerPosition.y }, 40, 1.0f);
+        session_->events.Publish(FeatureActivatedEvent{ FeatureKind::Portal, session_->playerPosition });
+        AutoSave();
+        return true;
+    }
+
+    void GameEngine::WritePortal(Systems::Persistence::SaveData& data) const {
+        if (!session_->portal) return;
+        const auto& back = *session_->portal;
+        data["portal.depth"] = std::format("{}", back.depth);
+        data["portal.x"] = std::format("{}", back.position.x);
+        data["portal.y"] = std::format("{}", back.position.y);
+        data["portal.gate.x"] = std::format("{}", back.gate.x);
+        data["portal.gate.y"] = std::format("{}", back.gate.y);
+        for (const auto& [key, value] : back.floor) data["portal." + key] = value;   // "portal.floor.seed", ...
+    }
+
+    void GameEngine::ReadPortal(const Systems::Persistence::SaveData& data) {
+        session_->portal.reset();
+        if (!session_->restFloor) return;
+        const auto number = [&](const char* key, auto& out) {
+            const auto it = data.find(key);
+            return it != data.end() && std::from_chars(it->second.data(), it->second.data() + it->second.size(), out).ec == std::errc{};
+        };
+        Session::PortalReturn back;
+        if (!number("portal.depth", back.depth) || !number("portal.x", back.position.x) || !number("portal.y", back.position.y)
+            || !number("portal.gate.x", back.gate.x) || !number("portal.gate.y", back.gate.y)) return;
+        for (const auto& [key, value] : data) {
+            if (key.starts_with("portal.floor.")) back.floor[key.substr(7)] = value;
+        }
+        if (!back.floor.contains("floor.seed")) return;
+        session_->portal = std::move(back);
     }
 
     void GameEngine::TouchCandle(std::size_t puzzleIndex, std::size_t candle) {
@@ -1018,6 +1109,24 @@ namespace LB::Engine {
             light.intensity = 0.7f;
             renderingSystem_.DrawLight(light);
             renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ light.position, 0.12f, { light.color.r, light.color.g, light.color.b, 2.0f }, true });
+        }
+        // The portal back (on a resting place): a grate glowing violet, motes rising from it
+        if (session_->portal && session_->restFloor && view.Contains(session_->portal->gate, 1.5f)) {
+            const auto gate = session_->portal->gate;
+            renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ ModelOf(WaystoneModel), { gate.x, 0.01f, gate.y }, 0.0f, ModelScale * 0.6f, tint });
+            Systems::Rendering::PointLight light{};
+            light.position = { gate.x, 0.5f, gate.y };
+            light.color = { 0.7f, 0.45f, 1.0f, 1.0f };
+            light.radius = 3.5f;
+            light.intensity = 1.1f;
+            renderingSystem_.DrawLight(light);
+            const auto t = static_cast<float>(session_->gameTimeSeconds);
+            for (int i = 0; i < 6; ++i) {
+                const float phase = std::fmod(t * 0.6f + static_cast<float>(i) / 6.0f, 1.0f);
+                const float angle = static_cast<float>(i) * 1.047f + t;
+                renderingSystem_.DrawParticle(Systems::Rendering::ParticleRenderData{ { gate.x + 0.35f * std::cos(angle), 0.1f + 1.6f * phase, gate.y + 0.35f * std::sin(angle) },
+                                                                                      0.07f, { 0.75f, 0.5f, 1.0f, 2.0f * (1.0f - phase) }, true });
+            }
         }
         // Waystones: a grate on the floor, dim asleep, glowing awake
         const bool awake = session_->features.WaystonesAwake();

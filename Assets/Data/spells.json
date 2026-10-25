@@ -327,6 +327,9 @@
   },
   {
     "id": "spell_utility_featherfall_l2",
+    "effect": "Buff",
+    "appliedStatusIds": ["status_featherfall"],
+    "radius": 6.0,
     "name": "Featherfall",
     "school": "Utility",
     "level": 2,
@@ -337,7 +340,7 @@
     "castTimeSeconds": 0.2,
     "cooldownSeconds": 10.0,
     "durationSeconds": 20.0,
-    "notes": "Reduces fall damage"
+    "notes": "Floats the hero and the companions near over the spike traps (nothing falls in the Below)"
   },
   {
     "id": "spell_utility_greater_blink_l3",
@@ -358,6 +361,7 @@
   },
   {
     "id": "spell_utility_portal_l4",
+    "effect": "Portal",
     "name": "Portal",
     "school": "Utility",
     "level": 4,
@@ -367,8 +371,7 @@
     "manaCost": 60,
     "castTimeSeconds": 3.0,
     "cooldownSeconds": 300.0,
-    "durationSeconds": 30.0,
-    "notes": "Creates temporary two-way portal"
+    "notes": "A portal to the last resting place above, and back to the very spot"
   },
   {
     "id": "spell_holy_divine_light_l1",

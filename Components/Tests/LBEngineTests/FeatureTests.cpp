@@ -363,3 +363,101 @@ TEST(FeatureTests, MageHand_PullsALeverFromAfar) {
     EXPECT_TRUE(engine.GetFeatures().Levers().front().pulled);
     EXPECT_TRUE(engine.GetFeatures().Gates()[lever.gate].open);
 }
+
+namespace {
+    // A room's enemies rise from the ground before they can be struck
+    void WaitUntilRisen(GameEngine& engine) {
+        for (int i = 0; i < 600; ++i) {
+            const auto& enemies = engine.GetEncounter().GetEnemies();
+            if (!enemies.empty() && std::ranges::none_of(enemies, [](const Enemy& e) { return e.state == EnemyState::Spawning; })) return;
+            engine.Tick(OneSixtieth);
+        }
+    }
+}
+
+// The Portal (design-spells-system.md, Portal: dungeon to town): from below a resting place it
+// carries the hero to the last one above; Interact by the portal there brings them back to the
+// very spot, the floor as they left it; kept in a save
+TEST(FeatureTests, Portal_ToTheRestingPlaceAndBack) {
+    TempSaveDir dir;
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(),
+        .randomSeed = CombatSeed, .dungeon = true, .playerClass = LB::Character::CharacterClass::Mage, .startDepth = 3, .startLevel = 14 }))
+        << engine.GetInitializationError();
+    engine.Tick(OneSixtieth);
+    EXPECT_EQ(engine.PortalBlocker(), "NO RESTING PLACE ABOVE");   // depth 3: none yet
+    EXPECT_EQ(GameEngine::RestDepthAbove(9), 7);
+    EXPECT_EQ(GameEngine::RestDepthAbove(5), 4);
+    EXPECT_FALSE(GameEngine::RestDepthAbove(4).has_value());
+
+    engine.EnterFloor(8);
+    engine.Tick(OneSixtieth);
+    // Somewhere off the entrance, a room cleared, gold on the ground
+    const auto& layout = engine.GetWorld().Layout();
+    const auto room = layout.rooms[static_cast<std::size_t>(layout.entranceRoom)].connections.front();
+    engine.EnterFloorPosition(engine.GetWorld().RoomCenter(room));
+    WaitUntilRisen(engine);
+    for (const auto& enemy : engine.GetEncounter().GetEnemies()) engine.DefeatEnemy(enemy.id);
+    RunSteps(engine, 2);
+    ASSERT_TRUE(engine.DropItem(ItemRef::FromKey(*engine.GetContent(), GameEngine::HealingPotion)));
+    const auto spot = engine.GetPlayerPosition();
+    const auto lying = engine.GetGroundItems().size();
+    ASSERT_GT(lying, 0u);
+
+    // Cast: three seconds, then the resting place of depth 7
+    ASSERT_TRUE(engine.SetSpell(0, "spell_utility_portal_l4"));
+    EXPECT_EQ(engine.SpellBlocker(0), "");
+    const auto mana = PlayerMana(engine);
+    TapKey(engine, Keys::FromChar('1'));
+    RunSteps(engine, 200);
+    ASSERT_EQ(engine.GetDepth(), 7);
+    EXPECT_TRUE(engine.IsRestFloor());
+    EXPECT_LT(PlayerMana(engine), mana);
+    ASSERT_TRUE(engine.GetPortal().has_value());
+    EXPECT_EQ(engine.GetPortalDepth(), 8);
+    EXPECT_EQ(engine.PortalBlocker(), "YOU ARE AT REST");
+
+    // Kept in a save made at the resting place
+    ASSERT_TRUE(engine.SaveGame(GameEngine::SaveSlots[0]));
+    GameEngine loaded;
+    ASSERT_TRUE(loaded.Initialize(nullptr, 800, 600, EngineOptions{ .saveDirectory = dir.Utf8(), .contentDirectory = ShippedContentDirectory(),
+        .randomSeed = CombatSeed, .dungeon = true, .playerClass = LB::Character::CharacterClass::Mage }));
+    ASSERT_TRUE(loaded.LoadGame(GameEngine::SaveSlots[0]));
+    EXPECT_EQ(loaded.GetDepth(), 7);
+    EXPECT_EQ(loaded.GetPortalDepth(), 8);
+
+    // Interact by the portal: back on depth 8, on the spot, the room still clear, the gold still there
+    engine.EnterFloorPosition(*engine.GetPortal());
+    RunSteps(engine, 2);
+    TapKey(engine, Keys::FromChar('F'));
+    RunSteps(engine, 2);
+    ASSERT_EQ(engine.GetDepth(), 8);
+    EXPECT_FALSE(engine.GetPortal().has_value());
+    EXPECT_LT(Encounter::Distance(engine.GetPlayerPosition(), spot), 0.2f);
+    EXPECT_TRUE(engine.GetEncounter().GetEnemies().empty());   // the cleared room did not refill
+    EXPECT_EQ(engine.GetGroundItems().size(), lying);
+
+    // From the loaded save, the way down goes back too (not to the floors between)
+    loaded.Descend();
+    EXPECT_EQ(loaded.GetDepth(), 8);
+    EXPECT_FALSE(loaded.GetPortal().has_value());
+}
+
+// Not with enemies awake nearby: the cast is refused, and one that wakes them midway costs nothing
+TEST(FeatureTests, Portal_NotWithEnemiesNear) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(),
+        .randomSeed = CombatSeed, .dungeon = true, .playerClass = LB::Character::CharacterClass::Mage, .startDepth = 5, .startLevel = 14 }));
+    engine.Tick(OneSixtieth);
+    const auto& layout = engine.GetWorld().Layout();
+    const auto room = layout.rooms[static_cast<std::size_t>(layout.entranceRoom)].connections.front();
+    engine.EnterFloorPosition(engine.GetWorld().RoomCenter(room));
+    WaitUntilRisen(engine);   // its enemies rise and come
+    RunSteps(engine, 10);
+    ASSERT_FALSE(engine.GetEncounter().GetEnemies().empty()) << "the room next to the entrance is empty on this seed";
+    ASSERT_TRUE(engine.SetSpell(0, "spell_utility_portal_l4"));
+    EXPECT_EQ(engine.PortalBlocker(), "ENEMIES ARE NEAR");
+    EXPECT_EQ(engine.SpellBlocker(0), "portal ENEMIES ARE NEAR");
+    EXPECT_FALSE(engine.OpenPortal());
+    EXPECT_EQ(engine.GetDepth(), 5);
+}

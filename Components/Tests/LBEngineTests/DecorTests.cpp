@@ -93,3 +93,25 @@ TEST(DecorTests, Spikes_HurtThePlayerStandingOnThem) {
     }
     EXPECT_TRUE(hurt);
 }
+
+// Featherfall floats the hero over the spikes (a status that ignoresTraps): a full cycle on a trap does nothing
+TEST(DecorTests, Featherfall_FloatsOverTheSpikes) {
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false,
+        .randomSeed = CombatSeed, .dungeon = true, .playerClass = LB::Character::CharacterClass::Mage, .startLevel = 6 })) << engine.GetInitializationError();
+    engine.EnterFloor(3);
+    engine.Tick(OneSixtieth);
+    ASSERT_FALSE(engine.GetDecor().Traps().empty());
+    const auto trap = engine.GetDecor().Traps().front();
+    ASSERT_TRUE(engine.SetSpell(0, "spell_utility_featherfall_l2"));
+    TapKey(engine, Keys::FromChar('1'));
+    RunSteps(engine, 30);
+    ASSERT_TRUE(engine.GetPlayerStatuses().Has("status_featherfall"));
+
+    const auto before = PlayerHitPoints(engine);
+    for (int i = 0; i < static_cast<int>(FloorDecor::TrapPeriodSeconds * 60.0f) + 10; ++i) {
+        engine.EnterFloorPosition(trap.center);
+        engine.Tick(OneSixtieth);
+    }
+    EXPECT_EQ(PlayerHitPoints(engine), before);
+}

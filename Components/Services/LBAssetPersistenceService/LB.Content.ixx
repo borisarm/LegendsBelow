@@ -86,7 +86,7 @@ export namespace LB::Content {
         /// traps shown within its radius, a lever or candle within its range worked from afar, a
         /// wall of ice across the way ahead for its duration
         /// </summary>
-        static constexpr std::array<std::string_view, 7> UtilityEffects{ "Blink", "Buff", "Cleanse", "RevealSecrets", "RemoteInteract", "IceWall", "Curse" };
+        static constexpr std::array<std::string_view, 8> UtilityEffects{ "Blink", "Buff", "Cleanse", "RevealSecrets", "RemoteInteract", "IceWall", "Curse", "Portal" };
         [[nodiscard]] bool IsCurse() const noexcept { return effect == "Curse"; }   // statuses on the enemy aimed at
         [[nodiscard]] bool IsShadowstep() const noexcept { return teleportBehindTarget && range > 0.0f; }
 
@@ -624,6 +624,7 @@ export namespace LB::Content {
         std::int32_t attackBonus{0};                  // to hit while it lasts (a blessing)
         float damageTakenMultiplier{1.0f};            // what blows do while it lasts (0.8: a fifth less)
         float damageDealtMultiplier{1.0f};            // what the holder's own blows do (0.9: a curse's tenth less)
+        bool ignoresTraps{false};                     // the holder floats over spike traps (featherfall)
     };
 
     /// <summary>

@@ -41,7 +41,8 @@ export namespace LB::Engine {
     /// </summary>
     enum class FeatureKind : std::uint8_t {
         Lever,       // pulled: its gate opens
-        Waystone     // awakened, or travelled by
+        Waystone,    // awakened, or travelled by
+        Portal       // opened (the Portal spell), or gone back through
     };
 
     /// <summary>

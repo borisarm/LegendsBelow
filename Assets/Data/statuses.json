@@ -91,6 +91,13 @@
     "damageTakenMultiplier": 0.8
   },
   {
+    "id": "status_featherfall",
+    "displayName": "Featherfall",
+    "categories": ["Buff"],
+    "durationSeconds": 20.0,
+    "ignoresTraps": true
+  },
+  {
     "id": "status_weakened",
     "displayName": "Weakened",
     "categories": ["Debuff"],

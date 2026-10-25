@@ -439,6 +439,9 @@ namespace LB::Engine {
         if (session_->spellCooldowns[slot] > 0.0f) return "cooldown";
         if (player->GetCurrentManaPoints() < spell.manaCost) return "mana";
         if (session_->playerStatuses.PreventsActions()) return "hindered";
+        if (spell.effect == "Portal") {
+            if (auto why = PortalBlocker(); !why.empty()) return "portal " + why;
+        }
         return {};
     }
 
@@ -500,6 +503,7 @@ namespace LB::Engine {
             const Systems::Rendering::Vector3 over{ session_->playerPosition.x, PlayerTop(), session_->playerPosition.y };
             if (blocker == "mana") session_->combatText.Add("NO MANA", over, { 0.35f, 0.55f, 1.0f, 1.0f }, 2.0f);
             else if (blocker.starts_with("level")) session_->combatText.Add(std::format("LEVEL {}", blocker.substr(6)), over, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+            else if (blocker.starts_with("portal ")) session_->combatText.Add(blocker.substr(7), over, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
             if (blocker != "cooldown") PlaySound(GameSound::NoMana);
             return;
         }
@@ -533,6 +537,14 @@ namespace LB::Engine {
         const auto& spell = *casting.spell;
         const auto slot = casting.slot;
         casting.active = false;
+        // A portal that can no longer open (an enemy woke during the cast) costs nothing
+        if (spell.effect == "Portal") {
+            if (const auto why = PortalBlocker(); !why.empty()) {
+                session_->combatText.Add(why, { session_->playerPosition.x, PlayerTop(), session_->playerPosition.y }, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+                PlaySound(GameSound::NoMana);
+                return;
+            }
+        }
         if (spell.manaCost > 0 && !session_->characterService.ConsumeMana(*session_->playerId, spell.manaCost)) return;
         session_->spellCooldowns[slot] = spell.cooldownSeconds;
 
@@ -717,6 +729,10 @@ namespace LB::Engine {
                 }
             }
             session_->combatText.Add("NOTHING TO REACH", over, { 0.8f, 0.8f, 0.8f, 1.0f }, 2.0f);
+            return;
+        }
+        if (spell.effect == "Portal") {
+            OpenPortal();
             return;
         }
         if (spell.effect == "Curse") {

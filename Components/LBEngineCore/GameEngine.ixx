@@ -768,6 +768,31 @@ export namespace LB::Engine {
         /// </summary>
         void PullLever(std::size_t index);
         bool TravelByWaystone(std::size_t from);
+
+        /// <summary>
+        /// The Portal spell (design-spells-system.md, Portal: dungeon to town): from a floor below a
+        /// resting place, with no enemy awake nearby, it carries the hero (and the companions) to
+        /// the last resting place above; a portal stands there by the entrance, and Interact by it
+        /// (or the way down) brings them back to the very spot, the floor as they left it (its
+        /// cleared rooms, gates, and what lies on the ground). Why it cannot be opened (empty: it
+        /// can), and the way back open (tools and tests).
+        /// </summary>
+        [[nodiscard]] std::string PortalBlocker() const;
+        bool OpenPortal();
+        bool ReturnThroughPortal();
+        [[nodiscard]] std::optional<WorldPoint> GetPortal() const noexcept {
+            return session_->portal ? std::optional<WorldPoint>(session_->portal->gate) : std::nullopt;
+        }
+        [[nodiscard]] std::optional<std::int32_t> GetPortalDepth() const noexcept {
+            return session_->portal ? std::optional<std::int32_t>(session_->portal->depth) : std::nullopt;
+        }
+        /// <summary>The resting place a Portal from a depth leads to (none above the first)</summary>
+        [[nodiscard]] static std::optional<std::int32_t> RestDepthAbove(std::int32_t depth) noexcept {
+            for (auto d = depth - 1; d > 1; --d) {
+                if (IsRestDepth(d)) return d;
+            }
+            return std::nullopt;
+        }
         [[nodiscard]] const FloorTheme& GetTheme() const noexcept { return session_->dungeonMode ? ThemeForDepth(session_->depth) : FloorThemes[0]; }
         [[nodiscard]] const CharacterScreen& GetTradeScreen() const noexcept { return session_->trade; }
 
@@ -1229,6 +1254,8 @@ export namespace LB::Engine {
         void DrawMinimap();
         void WriteFloor(Systems::Persistence::SaveData& data) const;
         void ReadFloor(const Systems::Persistence::SaveData& data);
+        void WritePortal(Systems::Persistence::SaveData& data) const;   // "portal." fields: the way back, if open
+        void ReadPortal(const Systems::Persistence::SaveData& data);
 
         // Menus (GameMenus.cpp)
         void LoadCredits(const std::string& contentDirectory);
@@ -1466,6 +1493,15 @@ export namespace LB::Engine {
             float shakeStrength{0.0f};               // tiles at its start
             RunStats stats;
             bool onWayUp{false};                     // standing in the way up (the victory page opens on stepping in)
+            /// <summary>The way back through a Portal: the floor left (as a save keeps it), where, and the portal</summary>
+            struct PortalReturn {
+                std::int32_t depth{0};
+                Systems::Persistence::SaveData floor;   // WriteFloor's fields
+                WorldPoint position{};                  // where the hero stood
+                std::vector<GroundItem> groundItems;    // what lay on the ground
+                WorldPoint gate{};                      // the portal on the resting place
+            };
+            std::optional<PortalReturn> portal;
             std::int32_t cycle{0};                   // New Game+ cycles (0: the first descent)
             std::vector<std::string> mutators;       // one mutators.json key a cycle (GetMutators)
             bool playing{false};                     // a run being played (not the one behind the title screen)
