@@ -267,7 +267,7 @@ namespace LB::Engine {
         const auto view = GetViewArea();
         for (std::int32_t cy = 0; cy < layout.height; ++cy) {
             for (std::int32_t cx = 0; cx < layout.width; ++cx) {
-                if (!layout.IsFloor(cx, cy) || session_->decor.IsTrapCell(cx, cy)) continue;
+                if (!layout.IsFloor(cx, cy) || session_->decor.IsTrapCell(cx, cy) || session_->features.IsChasmCell(cx, cy)) continue;
                 if (!view.Contains(session_->world.CellCenter(cx, cy), WorldMap::CellTiles)) continue;
                 const auto corner = session_->world.CellCorner(cx, cy);
                 for (std::int32_t dy = 0; dy < static_cast<std::int32_t>(WorldMap::CellTiles); ++dy) {
@@ -488,7 +488,7 @@ namespace LB::Engine {
         else {
             // A cracked wall, or a puzzle's candles, nearby
             for (const auto& lever : session_->features.Levers()) {
-                if (!lever.pulled && Distance(lever.position, session_->playerPosition) <= LeverReach) hud.hint = "F: pull the lever";
+                if (!lever.pulled && Distance(lever.position, session_->playerPosition) <= LeverReach) hud.hint = session_->features.IsCrank(lever) ? "F: turn the crank" : "F: pull the lever";
             }
             for (const auto& stone : session_->features.Waystones()) {
                 if (Distance(stone.position, session_->playerPosition) <= WaystoneReach && session_->features.WaystonesAwake()) hud.hint = "F: travel by the waystone";

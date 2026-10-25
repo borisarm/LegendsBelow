@@ -38,7 +38,7 @@ namespace LB::Content {
 
         constexpr EnumName<SpellCategory> SpellCategories[] = {
             {"Damage", SpellCategory::Damage}, {"Heal", SpellCategory::Heal}, {"Buff", SpellCategory::Buff},
-            {"Debuff", SpellCategory::Debuff}, {"Control", SpellCategory::Control}, {"Utility", SpellCategory::Utility},
+            {"Debuff", SpellCategory::Debuff}, {"Control", SpellCategory::Control}, {"Utility", SpellCategory::Utility}, {"Summon", SpellCategory::Summon},
         };
 
         constexpr EnumName<CharacterClass> CharacterClasses[] = {
@@ -346,6 +346,7 @@ namespace LB::Content {
             reader.ReadBool("canCrit", spell.canCrit);
             reader.ReadString("effect", spell.effect, false);
             reader.ReadFloat("blinkTiles", spell.blinkTiles, false);
+            reader.ReadString("summonAlly", spell.summonAlly, false);
             reader.ReadInt("cleansesStatuses", spell.cleansesStatuses, false);
             if (spell.dashTiles < 0.0f || spell.evadeSeconds < 0.0f || spell.cleansesStatuses < 0) reader.Error("'dashTiles', 'evadeSeconds', and 'cleansesStatuses' must not be negative");
             if (spell.teleportBehindTarget && spell.range <= 0.0f) reader.Error("'teleportBehindTarget' needs a 'range'");
@@ -354,6 +355,7 @@ namespace LB::Content {
                 reader.Error(std::format("unknown 'effect' '{}'", spell.effect));
             }
             if (spell.effect == "Blink" && spell.blinkTiles <= 0.0f) reader.Error("a Blink needs a positive 'blinkTiles'");
+            if (spell.effect == "Summon" && (spell.summonAlly.empty() || spell.durationSeconds <= 0.0f)) reader.Error("a Summon needs a 'summonAlly' and a positive 'durationSeconds'");
             if ((spell.effect == "Buff" || spell.effect == "Curse") && spell.appliedStatusIds.empty()) reader.Error(std::format("a {} needs 'appliedStatusIds'", spell.effect));
             if (spell.effect == "Curse" && spell.range <= 0.0f) reader.Error("a Curse needs a 'range'");
             if (spell.effect == "Cleanse" && spell.cleansesStatuses <= 0) reader.Error("a Cleanse needs 'cleansesStatuses'");
@@ -859,6 +861,7 @@ namespace LB::Content {
             reader.ReadString("model", ally.model, true);
             reader.ReadString("mainHandModel", ally.mainHandModel, false);
             reader.ReadFloat("modelScale", ally.modelScale, false);
+            reader.ReadBool("summoned", ally.summoned);
             if (ally.hitPoints <= 0) reader.Error("'hitPoints' must be positive");
             if (ally.attackTimeSeconds <= 0.0f) reader.Error("'attackTimeSeconds' must be positive");
             if (ally.attackRange <= 0.0f) reader.Error("'attackRange' must be positive");
@@ -1221,6 +1224,13 @@ namespace LB::Content {
 
         CheckClassRules(classes, spells, result.errors);
         CheckReferences(spells, statuses, classes, enemies, weapons, armour, consumables, result.errors);
+        // What a Summon raises must be an ally raised by spells
+        for (const auto& spell : spells) {
+            if (spell.summonAlly.empty()) continue;
+            const auto it = std::ranges::find(allies, spell.summonAlly, &AllyDefinition::key);
+            if (it == allies.end()) result.errors.push_back(std::format("spells.json: {}: unknown ally '{}'", spell.key, spell.summonAlly));
+            else if (!it->summoned) result.errors.push_back(std::format("spells.json: {}: '{}' is not a summoned ally", spell.key, spell.summonAlly));
+        }
         CheckLootRules(lootTables, enemies, weapons, armour, consumables, result.errors);
 
         if (!result.Succeeded()) {

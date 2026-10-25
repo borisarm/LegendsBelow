@@ -148,9 +148,10 @@ namespace LB::Engine {
         info("Defense", std::format("AC {}   AR {}", GetPlayerDefense().armorClass, GetPlayerDefense().physicalArmor));
 
         // The companions and their gear: choose one to give them an item from the bag
-        if (!session_->allies.Allies().empty()) {
+        if (session_->allies.Companions() > 0) {
             heading(session_->givingTo ? std::string("Allies - choose a weapon or armour below for them (Esc: cancel)") : std::string("Allies"));
             for (const auto& ally : session_->allies.Allies()) {
+                if (ally.raised) continue;   // the raised dead carry nothing
                 const auto [weapon, armour] = AllyItems(ally.id);
                 const auto carried = std::format("{} / {}", weapon.IsValid() ? ItemName(weapon) : std::string("-"), armour.IsValid() ? ItemName(armour) : std::string("-"));   // weapon / armour
                 ScreenRow row{ std::format("{} (HP {}/{})", ally.definition->name, ally.hitPoints, ally.maxHitPoints), carried, ScreenAction::GiveToAlly };

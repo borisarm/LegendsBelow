@@ -204,6 +204,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
             while (arguments >> name >> value)
             {
                 if (name == L"--depth") options.startDepth = std::max(1, _wtoi(value.c_str()));
+                else if (name == L"--seed") options.randomSeed = static_cast<std::uint32_t>(std::wcstoul(value.c_str(), nullptr, 10));   // the same floors again
                 else if (name == L"--level") options.startLevel = std::clamp(_wtoi(value.c_str()), 1, 20);
                 else if (name == L"--cycle") options.startCycle = std::max(0, _wtoi(value.c_str()));
                 else if (name == L"--class")

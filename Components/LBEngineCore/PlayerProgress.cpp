@@ -523,6 +523,7 @@ namespace LB::Engine {
         data["player.spellbar"] = bar;   // empty: the class's own
         std::string allies;
         for (const auto& ally : session_->allies.Allies()) {
+            if (ally.raised) continue;   // the raised dead are not kept
             const auto [weapon, armour] = AllyItems(ally.id);
             allies += std::format("{}:{}:{}:{};", ally.definition->key, ally.hitPoints, weapon.IsValid() ? ItemSaveKey(weapon) : std::string("-"),
                                   armour.IsValid() ? ItemSaveKey(armour) : std::string("-"));

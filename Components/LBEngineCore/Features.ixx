@@ -12,7 +12,8 @@ export namespace LB::Engine {
     enum class GateKind : std::uint8_t {
         Locked,   // iron bars: a key opens them
         Secret,   // a cracked wall: a blow breaks it
-        Lever     // iron bars: a lever in another room opens them (design-dungeon-and-world.md 6.3)
+        Lever,    // iron bars: a lever in another room opens them (design-dungeon-and-world.md 6.3)
+        Chasm     // the corridor's floor gone: a crank in another room swings a bridge across (6.3, cranks)
     };
 
     /// <summary>
@@ -84,6 +85,7 @@ export namespace LB::Engine {
         static constexpr std::int32_t LockedFromDepth = 2;
         static constexpr std::int32_t SecretFromDepth = 3;
         static constexpr std::int32_t LeverFromDepth = 4;      // from here a locked gate may answer a lever instead of a key
+        static constexpr std::int32_t ChasmFromDepth = 7;      // from here half of those are a chasm a crank bridges
         static constexpr std::int32_t WaystoneFromDepth = 2;
         static constexpr float CandleInset = 0.9f;   // tiles in from the room's wall
 
@@ -115,7 +117,10 @@ export namespace LB::Engine {
             if (!hidden.empty() && depth >= LockedFromDepth) {
                 // From LeverFromDepth, half the floors open it with a lever where the key would fall
                 const bool lever = depth >= LeverFromDepth && rng() % 2 == 0;
-                if (AddGate(world, hidden[0], lever ? GateKind::Lever : GateKind::Locked)) {
+                // ... and from ChasmFromDepth half of those a chasm and a crank (by the seed, not
+                // the stream: the rest of the floor is drawn as before)
+                const bool chasm = lever && depth >= ChasmFromDepth && (seed >> 5) % 2 == 0;
+                if (AddGate(world, hidden[0], chasm ? GateKind::Chasm : lever ? GateKind::Lever : GateKind::Locked)) {
                     const auto from = KeyRoomFor(layout, hidden[0]);
                     if (lever) levers_.push_back({ InsideTheWall(world, from), gates_.size() - 1, from, false });
                     else keyRoom_ = from;
@@ -179,6 +184,20 @@ export namespace LB::Engine {
         }
 
         [[nodiscard]] const std::vector<Lever>& Levers() const noexcept { return levers_; }
+
+        /// <summary>
+        /// A chasm lies in this cell (bridged or not): no floor is laid there
+        /// </summary>
+        [[nodiscard]] bool IsChasmCell(std::int32_t cx, std::int32_t cy) const noexcept {
+            return std::ranges::any_of(gates_, [&](const Gate& gate) { return gate.kind == GateKind::Chasm && gate.cellX == cx && gate.cellY == cy; });
+        }
+
+        /// <summary>
+        /// Whether a lever's gate is a chasm (the lever is a crank)
+        /// </summary>
+        [[nodiscard]] bool IsCrank(const Lever& lever) const noexcept {
+            return lever.gate < gates_.size() && gates_[lever.gate].kind == GateKind::Chasm;
+        }
 
         /// <summary>
         /// The waystones: none, or the entrance's and the far one; travel between them once the

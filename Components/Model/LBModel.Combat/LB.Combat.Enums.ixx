@@ -80,7 +80,8 @@ export namespace LB::Combat {
         Buff = 3,           // Temporary beneficial effects
         Debuff = 4,         // Temporary harmful effects
         Control = 5,        // Movement and action control
-        Utility = 6         // Non-combat utility effects
+        Utility = 6,        // Non-combat utility effects
+        Summon = 7          // Raising allies to fight for a while
     };
 
     /// <summary>

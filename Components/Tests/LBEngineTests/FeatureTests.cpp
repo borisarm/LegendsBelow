@@ -461,3 +461,38 @@ TEST(FeatureTests, Portal_NotWithEnemiesNear) {
     EXPECT_FALSE(engine.OpenPortal());
     EXPECT_EQ(engine.GetDepth(), 5);
 }
+
+// Cranks and bridges (design-dungeon-and-world.md 6.3): from depth 7 half the lever floors cut the
+// treasure room off with a chasm instead of bars; no floor is laid over it, and the crank (the
+// lever's place) swings a bridge across, opening the way; Mage Hand turns it too
+TEST(FeatureTests, Crank_BridgesTheChasm) {
+    const auto seed = FindFloor(8, [](const GameEngine& engine) { return GateOf(engine, GateKind::Chasm) != nullptr; });
+    ASSERT_NE(seed, 0u);
+    GameEngine engine;
+    ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .randomSeed = seed, .dungeon = true }));
+    engine.EnterFloor(8);
+    engine.Tick(OneSixtieth);
+    const auto* chasm = GateOf(engine, GateKind::Chasm);
+    ASSERT_NE(chasm, nullptr);
+    const auto gate = *chasm;
+    EXPECT_TRUE(engine.GetFeatures().IsChasmCell(gate.cellX, gate.cellY));
+    EXPECT_TRUE(engine.GetWorld().IsBlocked(gate.cellX, gate.cellY));
+    ASSERT_EQ(engine.GetFeatures().Levers().size(), 1u);
+    EXPECT_TRUE(engine.GetFeatures().IsCrank(engine.GetFeatures().Levers().front()));
+    EXPECT_EQ(GateOf(engine, GateKind::Lever), nullptr);   // the crank's gate is the chasm
+
+    engine.PullLever(0);
+    EXPECT_TRUE(engine.GetFeatures().Gates()[engine.GetFeatures().Levers().front().gate].open);
+    EXPECT_FALSE(engine.GetWorld().IsBlocked(gate.cellX, gate.cellY));   // across the bridge
+    EXPECT_TRUE(engine.GetFeatures().IsChasmCell(gate.cellX, gate.cellY));   // still no floor there: planks
+}
+
+// Before depth 7 there are no chasms, only bars
+TEST(FeatureTests, Chasms_OnlyFromTheRuins) {
+    for (std::uint32_t seed = 1; seed <= 12; ++seed) {
+        GameEngine engine;
+        ASSERT_TRUE(engine.Initialize(nullptr, 800, 600, EngineOptions{ .contentDirectory = ShippedContentDirectory(), .spawnEnemies = false, .randomSeed = seed, .dungeon = true }));
+        engine.EnterFloor(5);
+        EXPECT_EQ(GateOf(engine, GateKind::Chasm), nullptr) << seed;
+    }
+}

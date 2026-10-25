@@ -239,3 +239,24 @@ TEST(NecromancerTests, Frailty_RaisesTheDamageTaken) {
     ASSERT_TRUE(a && b);
     EXPECT_EQ(b->result.finalDamage, static_cast<std::int32_t>(std::lround(a->result.finalDamage * 1.2f)));
 }
+
+// Raise Dead: a skeleton rises before the Necromancer, fights at the hero's side, and crumbles
+// after half a minute; it is not kept in a save
+TEST(NecromancerTests, RaiseDead_ASkeletonForHalfAMinute) {
+    GameEngine engine;
+    InitializeNecromancer(engine);
+    engine.GrantExperience(900);   // level 4
+    engine.Tick(OneSixtieth);
+    ASSERT_TRUE(engine.SetSpell(1, "spell_shadow_raise_dead_l2"));
+    TapKey(engine, Keys::FromChar('2'));
+    RunSteps(engine, 90);
+    ASSERT_EQ(engine.GetAllies().Allies().size(), 1u);
+    const auto& raised = engine.GetAllies().Allies().front();
+    EXPECT_TRUE(raised.raised);
+    EXPECT_EQ(raised.definition->key, "ally_raised_skeleton");
+    EXPECT_EQ(raised.level, engine.GetCharacters().GetCharacter(*engine.GetPlayerId())->get().GetLevel());
+    EXPECT_EQ(engine.GetAllies().Companions(), 0u);
+
+    RunSteps(engine, 30 * 60);
+    EXPECT_TRUE(engine.GetAllies().Allies().empty());   // back to dust
+}

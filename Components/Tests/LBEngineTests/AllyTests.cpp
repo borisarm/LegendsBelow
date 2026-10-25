@@ -272,3 +272,30 @@ TEST(AllyPartyTests, Statuses_SlowThemAndClearWhenDown) {
     party.Damage(id, 100);
     EXPECT_FLOAT_EQ(party.Find(id)->statuses.MovementMultiplier(), 1.0f);
 }
+
+// The raised dead (AllyParty::Raise) stand apart from the companions: two at most, the oldest
+// crumbling to make room, and the companions' places left free
+TEST(AllyPartyTests, Raised_ApartFromTheCompanions) {
+    LB::Content::AllyDefinition skeleton{};
+    skeleton.key = "ally_test_skeleton";
+    skeleton.hitPoints = 10;
+    skeleton.summoned = true;
+    LB::Content::AllyDefinition first{};
+    first.key = "ally_test_first";
+    LB::Content::AllyDefinition second{};
+    second.key = "ally_test_second";
+    AllyParty party;
+    const auto a = party.Raise(skeleton, { 0.0f, 0.0f }, 1, 10.0f);
+    party.Raise(skeleton, { 1.0f, 0.0f }, 1, 20.0f);   // more than one of each
+    EXPECT_EQ(party.Allies().size(), 2u);
+    EXPECT_EQ(party.Companions(), 0u);
+    ASSERT_TRUE(party.Add(first, { 0.0f, 0.0f }, 1).has_value());
+    ASSERT_TRUE(party.Add(second, { 0.0f, 0.0f }, 1).has_value());   // the raised take no companion's place
+    EXPECT_EQ(party.Companions(), AllyParty::MaxAllies);
+
+    party.Raise(skeleton, { 2.0f, 0.0f }, 1, 30.0f);   // a third: the oldest (least time left) gives way
+    EXPECT_EQ(party.Allies().size(), 4u);
+    EXPECT_EQ(party.Find(a), nullptr);
+    EXPECT_EQ(party.TakeCrumbled().size(), 1u);
+    EXPECT_TRUE(party.TakeCrumbled().empty());
+}

@@ -89,6 +89,8 @@ export namespace LB::Engine {
         std::vector<WorldPoint> route;
         std::size_t routeNext{0};
         std::pair<std::int32_t, std::int32_t> routeGoal{ -1, -1 };
+        bool raised{false};                     // by a spell (AllyParty::Raise): it crumbles when its time is up or it falls
+        float lifeSeconds{0.0f};                // raised: what is left of its time
 
         [[nodiscard]] bool IsDown() const noexcept { return state == AllyState::Down; }
 
@@ -118,7 +120,8 @@ export namespace LB::Engine {
     /// </summary>
     class AllyParty {
     public:
-        static constexpr std::size_t MaxAllies = 2;
+        static constexpr std::size_t MaxAllies = 2;       // companions (the raised are apart)
+        static constexpr std::size_t MaxRaised = 2;       // raised dead at once: another replaces the oldest
         static constexpr float HealBelow = 0.6f;          // a healer mends those below this share of their health
         static constexpr float FollowDistance = 1.8f;     // they keep about this close to the hero
         static constexpr float GuardRadius = 7.0f;        // they go after awake enemies this near the hero
@@ -134,8 +137,8 @@ export namespace LB::Engine {
         /// A new ally at a point, at the hero's level, at full health; none past MaxAllies
         /// </summary>
         std::optional<std::uint32_t> Add(const Content::AllyDefinition& definition, WorldPoint at, std::int32_t level) {
-            if (allies_.size() >= MaxAllies) return std::nullopt;
-            if (std::ranges::any_of(allies_, [&](const Ally& ally) { return ally.definition == &definition; })) return std::nullopt;   // one of each
+            if (Companions() >= MaxAllies) return std::nullopt;
+            if (std::ranges::any_of(allies_, [&](const Ally& ally) { return !ally.raised && ally.definition == &definition; })) return std::nullopt;   // one of each
             Ally ally;
             ally.id = nextId_++;
             ally.definition = &definition;
@@ -147,6 +150,41 @@ export namespace LB::Engine {
             allies_.push_back(std::move(ally));
             return allies_.back().id;
         }
+
+        /// <summary>
+        /// One raised by a spell (the Necromancer's Raise Dead) for `seconds`, fighting as a
+        /// companion does; past MaxRaised the oldest crumbles to make room
+        /// </summary>
+        std::uint32_t Raise(const Content::AllyDefinition& definition, WorldPoint at, std::int32_t level, float seconds) {
+            if (static_cast<std::size_t>(std::ranges::count_if(allies_, &Ally::raised)) >= MaxRaised) {
+                auto oldest = allies_.end();
+                for (auto it = allies_.begin(); it != allies_.end(); ++it) {
+                    if (it->raised && (oldest == allies_.end() || it->lifeSeconds < oldest->lifeSeconds)) oldest = it;
+                }
+                crumbled_.push_back(oldest->position);
+                allies_.erase(oldest);
+            }
+            Ally ally;
+            ally.id = nextId_++;
+            ally.definition = &definition;
+            ally.position = at;
+            ally.level = std::max(1, level);
+            ally.maxHitPoints = MaxHitPointsAt(definition, ally.level);
+            ally.hitPoints = ally.maxHitPoints;
+            ally.raised = true;
+            ally.lifeSeconds = seconds;
+            ally.animator.Play(clips_.idle.id, true);
+            allies_.push_back(std::move(ally));
+            return allies_.back().id;
+        }
+
+        /// <summary>The companions, without the raised dead</summary>
+        [[nodiscard]] std::size_t Companions() const noexcept {
+            return static_cast<std::size_t>(std::ranges::count_if(allies_, [](const Ally& ally) { return !ally.raised; }));
+        }
+
+        /// <summary>Where the raised crumbled since the last call (their time up, felled, or replaced)</summary>
+        std::vector<WorldPoint> TakeCrumbled() { return std::exchange(crumbled_, {}); }
 
         void Clear() noexcept { allies_.clear(); }
 
@@ -273,10 +311,17 @@ export namespace LB::Engine {
                 const auto* target = encounter.FindEnemy(*focus_);
                 if (!target || !target->IsTargetable()) focus_.reset();
             }
+            // The raised crumble when their time is up or they fall (they never get up)
+            std::erase_if(allies_, [&](const Ally& ally) {
+                if (!ally.raised || (!ally.IsDown() && ally.lifeSeconds > 0.0f)) return false;
+                crumbled_.push_back(ally.position);
+                return true;
+            });
             for (auto& ally : allies_) {
                 ally.hitFlashSeconds = std::max(0.0f, ally.hitFlashSeconds - dt);
                 ally.recoverySeconds = std::max(0.0f, ally.recoverySeconds - dt);
                 ally.healCooldown = std::max(0.0f, ally.healCooldown - dt);
+                if (ally.raised) ally.lifeSeconds -= dt;
                 ally.animator.Update(dt);
 
                 // Burning and the like (a status that downs them counts as any other blow)
@@ -499,6 +544,7 @@ export namespace LB::Engine {
             ally.animator.Play(clips_.run.id, true);
         }
 
+        std::vector<WorldPoint> crumbled_;
         std::vector<Ally> allies_;
         std::vector<AllyHeal> heals_;
         AllyStance stance_{AllyStance::Follow};

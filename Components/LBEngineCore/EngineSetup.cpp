@@ -293,7 +293,7 @@ namespace LB::Engine {
 
         // Loot on the floor, weapons in the knight's hand, and dungeon props (KayKit Dungeon Pack)
         for (const auto file : { ChestModel, OpenChestModel, TrapdoorModel, TorchModel, MerchantModel, ShrineModel, CandlesModel,
-                                 GreaterChestModel, GateModel, CandleModel, LitCandleModel, LeverModel, WaystoneModel, std::string_view("key.gltf") }) {
+                                 GreaterChestModel, GateModel, CandleModel, LitCandleModel, LeverModel, WaystoneModel, BridgeModel, std::string_view("key.gltf") }) {
             if (!assets_.characterModels.contains(std::string(file))) assets_.characterModels[std::string(file)] = load(file);
         }
         for (const auto file : PropModels) {

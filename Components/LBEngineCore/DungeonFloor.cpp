@@ -598,7 +598,7 @@ namespace LB::Engine {
         }
         // Companions to hire (AllyParty::MaxAllies at once)
         for (const auto& ally : content_->GetAllies()) {
-            session_->stock.push_back(StockEntry{ ItemRef{}, 1, ally.price, false, &ally });
+            if (!ally.summoned) session_->stock.push_back(StockEntry{ ItemRef{}, 1, ally.price, false, &ally });
         }
         if (const auto* table = content_->FindLootTable(MerchantStockTable)) {
             for (std::int32_t i = 0; i < MerchantGearCount; ++i) {
@@ -679,7 +679,7 @@ namespace LB::Engine {
         for (std::size_t i = 0; i < session_->stock.size(); ++i) {
             const auto& entry = session_->stock[i];
             if (entry.ally) {
-                const bool full = session_->allies.Allies().size() >= AllyParty::MaxAllies;
+                const bool full = session_->allies.Companions() >= AllyParty::MaxAllies;
                 ScreenRow row{ std::format("Hire: {}", entry.ally->name), full ? std::string("party full") : std::format("{} gold", entry.price) };
                 row.action = ScreenAction::Buy;
                 row.index = i;
@@ -813,7 +813,7 @@ namespace LB::Engine {
         const auto& layout = session_->world.Layout();
         features.Update(1.0f / 60.0f);
         for (const auto& gate : features.Gates()) {   // a sinking gate grinds up dust
-            if (gate.kind != GateKind::Secret && gate.open && gate.openSeconds < GateSinkSeconds) {
+            if ((gate.kind == GateKind::Locked || gate.kind == GateKind::Lever) && gate.open && gate.openSeconds < GateSinkSeconds) {
                 session_->effects.Stream(ParticleEffect::RiseDust, { gate.center.x, 0.03f, gate.center.y }, 40.0f, 1.0f / 60.0f);
             }
         }
@@ -849,9 +849,10 @@ namespace LB::Engine {
                     PlaySound(GameSound::NoMana, gate.center);
                 }
             }
-            if (gate.kind == GateKind::Lever && distance <= GateReach && !gate.warned) {
+            if ((gate.kind == GateKind::Lever || gate.kind == GateKind::Chasm) && distance <= GateReach && !gate.warned) {
                 gate.warned = true;
-                session_->combatText.Add("SHUT - A LEVER OPENS IT", { gate.center.x, 1.4f, gate.center.y }, { 0.85f, 0.85f, 0.85f, 1.0f }, 2.5f);
+                session_->combatText.Add(gate.kind == GateKind::Chasm ? "A CHASM - A CRANK BRIDGES IT" : "SHUT - A LEVER OPENS IT",
+                                         { gate.center.x, 1.4f, gate.center.y }, { 0.85f, 0.85f, 0.85f, 1.0f }, 2.5f);
                 PlaySound(GameSound::NoMana, gate.center);
             }
             // A blow at a cracked wall (a swing, facing it, close enough) breaks it
@@ -912,7 +913,7 @@ namespace LB::Engine {
         const auto lever = features.Levers()[index];
         if (!features.Pull(index, session_->world)) return;
         const auto& gate = features.Gates()[lever.gate];
-        session_->combatText.Add("A GATE GRINDS OPEN", { lever.position.x, 1.4f, lever.position.y }, { 0.95f, 0.85f, 0.45f, 1.0f }, 2.5f);
+        session_->combatText.Add(gate.kind == GateKind::Chasm ? "A BRIDGE SWINGS ACROSS" : "A GATE GRINDS OPEN", { lever.position.x, 1.4f, lever.position.y }, { 0.95f, 0.85f, 0.45f, 1.0f }, 2.5f);
         PlaySound(GameSound::CandleTouched, lever.position);
         PlaySound(GameSound::GateOpens, gate.center);
         session_->events.Publish(FeatureActivatedEvent{ FeatureKind::Lever, lever.position });
@@ -1063,6 +1064,21 @@ namespace LB::Engine {
                 const float shudder = gate.open ? 0.06f * (1.0f - t) * std::sin(gate.openSeconds * 70.0f) : 0.0f;
                 renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ model,
                     { gate.center.x + shudder, -2.2f * t * t, gate.center.y + shudder }, gate.yaw, ModelScale, tint });
+                continue;
+            }
+            if (gate.kind == GateKind::Chasm) {
+                // Nothing over the drop; turned, the crank swings planks up across it, settling into place
+                if (!gate.open) continue;
+                const float t = std::min(1.0f, gate.openSeconds / BridgeSwingSeconds);
+                const float rise = 1.0f - (1.0f - t) * (1.0f - t);
+                const auto plank = ModelOf(BridgeModel);
+                const auto corner = session_->world.CellCorner(gate.cellX, gate.cellY);
+                for (std::int32_t dy = 0; dy < static_cast<std::int32_t>(WorldMap::CellTiles); ++dy) {
+                    for (std::int32_t dx = 0; dx < static_cast<std::int32_t>(WorldMap::CellTiles); ++dx) {
+                        renderingSystem_.DrawModel(Systems::Rendering::ModelRenderData{ plank,
+                            { corner.x + static_cast<float>(dx) + 0.5f, -1.5f * (1.0f - rise) - 0.05f, corner.y + static_cast<float>(dy) + 0.5f }, gate.yaw, ModelScale, tint });
+                    }
+                }
                 continue;
             }
             // A gate sinks into the floor, slowing as it goes, grinding up dust

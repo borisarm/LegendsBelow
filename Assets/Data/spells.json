@@ -645,6 +645,22 @@
     "projectileSpeed": 10.0
   },
   {
+    "id": "spell_shadow_raise_dead_l2",
+    "effect": "Summon",
+    "summonAlly": "ally_raised_skeleton",
+    "name": "Raise Dead",
+    "school": "Shadow",
+    "level": 2,
+    "categories": ["Summon"],
+    "requiredClass": "Necromancer",
+    "requiredLevel": 3,
+    "manaCost": 14,
+    "castTimeSeconds": 1.2,
+    "cooldownSeconds": 12.0,
+    "durationSeconds": 30.0,
+    "notes": "A skeleton rises to fight beside the caster for half a minute (two at most)"
+  },
+  {
     "id": "spell_shadow_curse_of_frailty_l3",
     "appliedStatusIds": ["status_frail"],
     "range": 8.0,

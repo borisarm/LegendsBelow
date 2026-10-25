@@ -735,6 +735,20 @@ namespace LB::Engine {
             OpenPortal();
             return;
         }
+        if (spell.effect == "Summon") {
+            // One of the dead rises a step ahead of the caster, at the hero's level, for a while
+            const auto* definition = content_->FindAlly(spell.summonAlly);
+            const auto* player = PlayerCharacter();
+            if (!definition || !player) return;
+            const auto forward = Forward(session_->playerFacingYaw);
+            WorldPoint spot{ at.x + forward.x * 1.2f, at.y + forward.y * 1.2f };
+            if (!session_->world.CircleFits(spot, AllyParty::Radius) || !session_->world.LineOfSight(at, spot)) spot = at;
+            session_->allies.Raise(*definition, spot, player->GetLevel(), spell.durationSeconds);
+            const auto shadow = ElementPalette(LB::Combat::DamageType::Shadow);
+            session_->effects.Emit(ParticleEffect::SpellBurst, { spot.x, 0.3f, spot.y }, 24, 0.9f, &shadow);
+            session_->combatText.Add("THE DEAD RISE", { spot.x, 1.8f, spot.y }, { 0.75f, 0.45f, 0.95f, 1.0f }, 2.0f);
+            return;
+        }
         if (spell.effect == "Curse") {
             // The statuses on the enemy aimed at (StartCast found it)
             const auto* target = session_->casting.target ? session_->encounter.FindEnemy(*session_->casting.target) : nullptr;
@@ -1164,7 +1178,12 @@ namespace LB::Engine {
     void GameEngine::UpdateAllies(float elapsedSeconds) {
         const auto* player = PlayerCharacter();
         const float health = player ? static_cast<float>(player->GetCurrentHitPoints()) / static_cast<float>(std::max(1, player->GetMaxHitPoints())) : 1.0f;
-        for (const auto& event : session_->allies.Update(elapsedSeconds, session_->world, session_->encounter, session_->playerPosition, IsPlayerAlive(), health)) {
+        const auto allyEvents = session_->allies.Update(elapsedSeconds, session_->world, session_->encounter, session_->playerPosition, IsPlayerAlive(), health);
+        for (const auto at : session_->allies.TakeCrumbled()) {
+            const auto dust = ElementPalette(LB::Combat::DamageType::Shadow);
+            session_->effects.Emit(ParticleEffect::SpellBurst, { at.x, 0.3f, at.y }, 16, 0.7f, &dust);   // back to dust
+        }
+        for (const auto& event : allyEvents) {
             session_->combatEvents.push_back(event);
             if (event.killed) {
                 if (const auto* enemy = session_->encounter.FindEnemy(event.enemyId)) OnEnemyKilled(*enemy);

@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(ShippedContentTests, LoadsAllEntries) {
-    EXPECT_EQ(content_.GetSpells().size(), 56u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells, the bone shard
+    EXPECT_EQ(content_.GetSpells().size(), 57u);   // 45, the rogue's four abilities, the warrior's three, the healing circle, two enemies' spells, the bone shard, raise dead
     EXPECT_EQ(content_.GetWeapons().size(), 40u);   // 12, tier 2 and 3 of each kind (17), and tier 4 (11)
     EXPECT_EQ(content_.GetArmour().size(), 55u);   // 15, tier 2 and 3 of each kind (26), and tier 4 (14)
 }
@@ -158,7 +158,7 @@ TEST_F(ShippedContentTests, SpellRepository_OverShippedContent) {
     auto shared = std::make_shared<const ContentDatabase>(content_);
     LB::Repositories::SpellRepository repo = MakeContentSpellRepository(shared);
 
-    EXPECT_EQ(repo->GetAllSpellIds().size(), 56u);
+    EXPECT_EQ(repo->GetAllSpellIds().size(), 57u);
 
     const auto* bolt = content_.FindSpell("spell_evocation_arcane_bolt_l1");
     auto spell = repo->GetSpell(bolt->id);

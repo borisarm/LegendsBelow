@@ -65,6 +65,7 @@ export namespace LB::Content {
         bool canCrit{true};                           // its damage may be critical (design-spells-system.md 5.1)
         String effect;                                // a utility spell's doing (UtilityEffects); empty: by its shape (a missile, a burst, ...)
         float blinkTiles{0.0f};                       // Blink: how far ahead the caster appears
+        String summonAlly;                            // Summon: the allies.json entry raised (a "summoned" one), for durationSeconds
 
         /// <summary>
         /// How it is cast: a missile (projectileSpeed, flying `range` tiles; with a radius it bursts
@@ -86,7 +87,7 @@ export namespace LB::Content {
         /// traps shown within its radius, a lever or candle within its range worked from afar, a
         /// wall of ice across the way ahead for its duration
         /// </summary>
-        static constexpr std::array<std::string_view, 8> UtilityEffects{ "Blink", "Buff", "Cleanse", "RevealSecrets", "RemoteInteract", "IceWall", "Curse", "Portal" };
+        static constexpr std::array<std::string_view, 9> UtilityEffects{ "Blink", "Buff", "Cleanse", "RevealSecrets", "RemoteInteract", "IceWall", "Curse", "Portal", "Summon" };
         [[nodiscard]] bool IsCurse() const noexcept { return effect == "Curse"; }   // statuses on the enemy aimed at
         [[nodiscard]] bool IsShadowstep() const noexcept { return teleportBehindTarget && range > 0.0f; }
 
@@ -491,6 +492,7 @@ export namespace LB::Content {
         String model;                                 // a KayKit Adventurers body (Rig_Medium)
         String mainHandModel;
         float modelScale{0.5f};
+        bool summoned{false};                         // raised by a spell for a while (never hired, geared, or saved)
 
         [[nodiscard]] bool IsRanged() const noexcept { return projectileSpeed > 0.0f; }
     };

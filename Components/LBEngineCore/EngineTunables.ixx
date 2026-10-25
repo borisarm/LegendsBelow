@@ -285,6 +285,8 @@ export namespace LB::Engine {
         static constexpr std::string_view LitCandleModel = "candle_lit.gltf";
         static constexpr std::string_view LeverModel = "pillar_decorated.gltf";      // a post, lit red until pulled (placeholder: no lever in the pack)
         static constexpr std::string_view WaystoneModel = "floor_tile_big_grate.gltf"; // a grate on the floor, glowing once awake
+        static constexpr std::string_view BridgeModel = "floor_wood_small.gltf";       // the planks a crank swings across a chasm
+        static constexpr float BridgeSwingSeconds = 1.0f;      // they rise into place
         static constexpr float LeverReach = 1.4f;              // tiles: Interact pulls a lever this close
         static constexpr float WaystoneReach = 1.3f;           // ... travels by a waystone, or (the far one) awakens it
         static constexpr float WaystoneQuietRadius = 8.0f;     // no travel with an enemy awake this close (nor a Portal)
